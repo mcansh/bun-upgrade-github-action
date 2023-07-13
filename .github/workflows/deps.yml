@@ -18,7 +18,4 @@ jobs:
         run: bun install
 
       - name: Check for updates
-        run: bun run ./src/index.ts
-        env:
-          INPUT_GH_TOKEN: ${{ github.token }}
-          INPUT_GITHUB_REPOSITORY: ${{ github.repository }}
+        uses: ./
