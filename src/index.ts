@@ -25,7 +25,7 @@ async function run(): Promise<void> {
   }
 
   if (packageJsonInput.endsWith("package.json")) {
-    packageJsonInput = packageJsonInput.slice(0, "package.json".length + 1);
+    packageJsonInput = path.dirname(packageJsonInput);
   }
 
   core.debug(`Ignoring dependencies: ${deps.join(", ")}`);

@@ -22668,7 +22668,7 @@ async function run() {
     packageJsonInput = "./";
   }
   if (packageJsonInput.endsWith("package.json")) {
-    packageJsonInput = packageJsonInput.slice(0, "package.json".length + 1);
+    packageJsonInput = external_node_path_namespaceObject.dirname(packageJsonInput);
   }
   core.debug(`Ignoring dependencies: ${deps.join(", ")}`);
   let json = await package_json.default.load(external_node_path_namespaceObject.resolve(packageJsonInput));
