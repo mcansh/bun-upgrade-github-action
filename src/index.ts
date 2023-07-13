@@ -6,15 +6,17 @@ import { getOctokit } from "@actions/github";
 import NPMCliPackageJson from "@npmcli/package-json";
 
 async function run(): Promise<void> {
-  let octokit = getOctokit(process.env.GITHUB_TOKEN!);
+  let token = core.getInput("GH_TOKEN", { required: true });
+  let octokit = getOctokit(token);
   let { createOrUpdateTextFile } = ogCreateOrUpdateTextFile(octokit);
 
-  let [owner, repo] = process.env.GITHUB_REPOSITORY!.split("/");
+  let GITHUB_REPOSITORY = core.getInput("GITHUB_REPOSITORY");
+  let [owner, repo] = GITHUB_REPOSITORY.split("/");
 
-  let ignored = core.getInput("ignored-dependencies", { trimWhitespace: true });
+  let ignored = core.getInput("IGNORED_DEPENDENCIES", { trimWhitespace: true });
   let deps = ignored.split(",").map((d) => d.trim());
 
-  let packageJsonInput = core.getInput("package-json-path", {
+  let packageJsonInput = core.getInput("PACKAGE_JSON_PATH", {
     trimWhitespace: true,
   });
 

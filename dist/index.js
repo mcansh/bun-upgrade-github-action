@@ -22654,12 +22654,14 @@ var package_json = __toESM(require_lib15(), 1);
 
 
 async function run() {
-  let octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+  let token = core.getInput("GH_TOKEN", { required: true });
+  let octokit = github.getOctokit(token);
   let { createOrUpdateTextFile } = plugin_create_or_update_text_file.createOrUpdateTextFile(octokit);
-  let [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
-  let ignored = core.getInput("ignored-dependencies", { trimWhitespace: true });
+  let GITHUB_REPOSITORY = core.getInput("GITHUB_REPOSITORY");
+  let [owner, repo] = GITHUB_REPOSITORY.split("/");
+  let ignored = core.getInput("IGNORED_DEPENDENCIES", { trimWhitespace: true });
   let deps = ignored.split(",").map((d) => d.trim());
-  let packageJsonInput = core.getInput("package-json-path", {
+  let packageJsonInput = core.getInput("PACKAGE_JSON_PATH", {
     trimWhitespace: true
   });
   if (!packageJsonInput) {

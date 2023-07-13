@@ -1,12 +1,20 @@
 name: "Bun Upgrade GitHub Action"
 description: "automatically update your dependencies using bun"
 inputs:
-  ignored-dependencies:
+  IGNORED_DEPENDENCIES:
     description: "dependencies to ignore"
     required: false
-  package-json-path:
+  PACKAGE_JSON_PATH:
     description: "path to package.json if not in root directory"
     required: false
+  GITHUB_REPOSITORY:
+    description: "The GitHub repository - needed for creating and logging urls"
+    required: false
+    default: ${{ github.repository }}
+  GH_TOKEN:
+    description: "The GitHub token to use for interacting with the GitHub API - needed for gh commands"
+    required: false
+    default: ${{ github.token }}
 runs:
   using: "node16"
   main: "./dist/index.js"
