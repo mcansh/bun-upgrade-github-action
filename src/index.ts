@@ -48,7 +48,7 @@ async function run(): Promise<void> {
 
     if (dependencies[dep] === updatedDependencies[dep]) {
       core.debug(`${dep} is up to date`);
-      return;
+      continue;
     }
 
     let branch = `bun-dependabot/${dep}`;
@@ -162,14 +162,10 @@ async function run(): Promise<void> {
 function getAllDependencies(packageJson: NPMCliPackageJson) {
   let dependencies = packageJson.content.dependencies;
   let devDependencies = packageJson.content.devDependencies;
-  let peerDependencies = packageJson.content.peerDependencies;
-  let optionalDependencies = packageJson.content.optionalDependencies;
 
   return {
     ...dependencies,
     ...devDependencies,
-    ...peerDependencies,
-    ...optionalDependencies,
   };
 }
 
