@@ -119,7 +119,7 @@ async function run(): Promise<void> {
       await octokit.rest.git.updateRef({
         owner,
         repo,
-        ref: `refs/heads/${branch}`,
+        ref: `heads/${branch}`,
         sha: commit.data.sha,
         force: true,
       });

@@ -31414,7 +31414,7 @@ async function run() {
             await octokit.rest.git.updateRef({
                 owner,
                 repo,
-                ref: `refs/heads/${branch}`,
+                ref: `heads/${branch}`,
                 sha: commit.data.sha,
                 force: true,
             });
