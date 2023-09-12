@@ -1,3 +1,5 @@
+name: Attempt to update dependencies
+
 on:
   schedule:
     - cron: "*/15 * * * *" # every 15 minutes
