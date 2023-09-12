@@ -108,22 +108,26 @@ async function run(): Promise<void> {
       },
     });
 
-    let existingRef = await octokit.rest.git.getRef({
-      owner,
-      repo,
-      ref: `heads/${branch}`,
-    });
-
-    if (existingRef.status === 200) {
-      console.log(`📦 Updating branch ${branch}`);
-      await octokit.rest.git.updateRef({
+    try {
+      let existingRef = await octokit.rest.git.getRef({
         owner,
         repo,
         ref: `heads/${branch}`,
-        sha: commit.data.sha,
-        force: true,
       });
-    } else {
+
+      if (existingRef.status === 200) {
+        console.log(`📦 Updating branch ${branch}`);
+        await octokit.rest.git.updateRef({
+          owner,
+          repo,
+          ref: `heads/${branch}`,
+          sha: commit.data.sha,
+          force: true,
+        });
+      }
+
+      console.error(`?? existing ref ${existingRef.status}`, existingRef);
+    } catch (error) {
       console.log(`📦 Creating branch ${branch}`);
       await octokit.rest.git.createRef({
         owner,
