@@ -1,8 +1,12 @@
 /** @type {import('eslint').Linter.Config} */
 module.exports = {
-  extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+  extends: [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "prettier",
+  ],
   parser: "@typescript-eslint/parser",
-  plugins: ["@typescript-eslint", "prefer-let"],
+  plugins: ["@typescript-eslint", "prefer-let", "prettier"],
   root: true,
   env: {
     node: true,
@@ -16,5 +20,6 @@ module.exports = {
   rules: {
     "prefer-const": "off",
     "prefer-let/prefer-let": "error",
+    "prettier/prettier": "error",
   },
 };
