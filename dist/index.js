@@ -11995,7 +11995,7 @@ var require_cjs2 = __commonJS((exports) => {
   var AC = globalThis.AbortController;
   var AS = globalThis.AbortSignal;
   if (typeof AC === "undefined") {
-    AS = class AbortSignal {
+    AS = class AbortSignal2 {
       onabort;
       _onabort = [];
       reason;
@@ -12004,7 +12004,7 @@ var require_cjs2 = __commonJS((exports) => {
         this._onabort.push(fn);
       }
     };
-    AC = class AbortController {
+    AC = class AbortController2 {
       constructor() {
         warnACPolyfill();
       }
@@ -17904,54 +17904,83 @@ var require_validate_npm_package_license = __commonJS((exports, module) => {
   };
 });
 
-// node_modules/hosted-git-info/node_modules/lru-cache/dist/cjs/index.js
-var require_cjs6 = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.LRUCache = undefined;
+// node_modules/hosted-git-info/node_modules/lru-cache/index.js
+var require_lru_cache2 = __commonJS((exports, module) => {
   var perf = typeof performance === "object" && performance && typeof performance.now === "function" ? performance : Date;
-  var warned = new Set;
-  var PROCESS = typeof process === "object" && !!process ? process : {};
-  var emitWarning = (msg, type, code, fn) => {
-    typeof PROCESS.emitWarning === "function" ? PROCESS.emitWarning(msg, type, code, fn) : console.error(`[${code}] ${type}: ${msg}`);
+  var hasAbortController = typeof AbortController === "function";
+  var AC = hasAbortController ? AbortController : class AbortController2 {
+    constructor() {
+      this.signal = new AS;
+    }
+    abort(reason = new Error("This operation was aborted")) {
+      this.signal.reason = this.signal.reason || reason;
+      this.signal.aborted = true;
+      this.signal.dispatchEvent({
+        type: "abort",
+        target: this.signal
+      });
+    }
   };
-  var AC = globalThis.AbortController;
-  var AS = globalThis.AbortSignal;
-  if (typeof AC === "undefined") {
-    AS = class AbortSignal {
-      onabort;
-      _onabort = [];
-      reason;
-      aborted = false;
-      addEventListener(_, fn) {
-        this._onabort.push(fn);
+  var hasAbortSignal = typeof AbortSignal === "function";
+  var hasACAbortSignal = typeof AC.AbortSignal === "function";
+  var AS = hasAbortSignal ? AbortSignal : hasACAbortSignal ? AC.AbortController : class AbortSignal2 {
+    constructor() {
+      this.reason = undefined;
+      this.aborted = false;
+      this._listeners = [];
+    }
+    dispatchEvent(e) {
+      if (e.type === "abort") {
+        this.aborted = true;
+        this.onabort(e);
+        this._listeners.forEach((f) => f(e), this);
       }
-    };
-    AC = class AbortController {
-      constructor() {
-        warnACPolyfill();
+    }
+    onabort() {
+    }
+    addEventListener(ev, fn) {
+      if (ev === "abort") {
+        this._listeners.push(fn);
       }
-      signal = new AS;
-      abort(reason) {
-        if (this.signal.aborted)
-          return;
-        this.signal.reason = reason;
-        this.signal.aborted = true;
-        for (const fn of this.signal._onabort) {
-          fn(reason);
-        }
-        this.signal.onabort?.(reason);
+    }
+    removeEventListener(ev, fn) {
+      if (ev === "abort") {
+        this._listeners = this._listeners.filter((f) => f !== fn);
       }
-    };
-    let printACPolyfillWarning = PROCESS.env?.LRU_CACHE_IGNORE_AC_WARNING !== "1";
-    const warnACPolyfill = () => {
-      if (!printACPolyfillWarning)
-        return;
-      printACPolyfillWarning = false;
-      emitWarning("AbortController is not defined. If using lru-cache in node 14, load an AbortController polyfill from the `node-abort-controller` package. A minimal polyfill is provided for use by LRUCache.fetch(), but it should not be relied upon in other contexts (eg, passing it to other APIs that use AbortController/AbortSignal might have undesirable effects). You may disable this with LRU_CACHE_IGNORE_AC_WARNING=1 in the env.", "NO_ABORT_CONTROLLER", "ENOTSUP", warnACPolyfill);
-    };
-  }
+    }
+  };
+  var warned = new Set;
+  var deprecatedOption = (opt, instead) => {
+    const code = `LRU_CACHE_OPTION_${opt}`;
+    if (shouldWarn(code)) {
+      warn(code, `${opt} option`, `options.${instead}`, LRUCache);
+    }
+  };
+  var deprecatedMethod = (method, instead) => {
+    const code = `LRU_CACHE_METHOD_${method}`;
+    if (shouldWarn(code)) {
+      const { prototype } = LRUCache;
+      const { get } = Object.getOwnPropertyDescriptor(prototype, method);
+      warn(code, `${method} method`, `cache.${instead}()`, get);
+    }
+  };
+  var deprecatedProperty = (field, instead) => {
+    const code = `LRU_CACHE_PROPERTY_${field}`;
+    if (shouldWarn(code)) {
+      const { prototype } = LRUCache;
+      const { get } = Object.getOwnPropertyDescriptor(prototype, field);
+      warn(code, `${field} property`, `cache.${instead}`, get);
+    }
+  };
+  var emitWarning = (...a) => {
+    typeof process === "object" && process && typeof process.emitWarning === "function" ? process.emitWarning(...a) : console.error(...a);
+  };
   var shouldWarn = (code) => !warned.has(code);
-  var TYPE = Symbol("type");
+  var warn = (code, what, instead, fn) => {
+    warned.add(code);
+    const msg = `The ${what} is deprecated. Please use ${instead} instead.`;
+    emitWarning(msg, "DeprecationWarning", code, fn);
+  };
   var isPosInt = (n) => n && n === Math.floor(n) && n > 0 && isFinite(n);
   var getUintArray = (max) => !isPosInt(max) ? null : max <= Math.pow(2, 8) ? Uint8Array : max <= Math.pow(2, 16) ? Uint16Array : max <= Math.pow(2, 32) ? Uint32Array : max <= Number.MAX_SAFE_INTEGER ? ZeroArray : null;
 
@@ -17963,23 +17992,12 @@ var require_cjs6 = __commonJS((exports) => {
   }
 
   class Stack {
-    heap;
-    length;
-    static #constructing = false;
-    static create(max) {
-      const HeapCls = getUintArray(max);
-      if (!HeapCls)
+    constructor(max) {
+      if (max === 0) {
         return [];
-      Stack.#constructing = true;
-      const s = new Stack(max, HeapCls);
-      Stack.#constructing = false;
-      return s;
-    }
-    constructor(max, HeapCls) {
-      if (!Stack.#constructing) {
-        throw new TypeError("instantiate Stack using Stack.create(n)");
       }
-      this.heap = new HeapCls(max);
+      const UintArray = getUintArray(max);
+      this.heap = new UintArray(max);
       this.length = 0;
     }
     push(n) {
@@ -17991,91 +18009,31 @@ var require_cjs6 = __commonJS((exports) => {
   }
 
   class LRUCache {
-    #max;
-    #maxSize;
-    #dispose;
-    #disposeAfter;
-    #fetchMethod;
-    ttl;
-    ttlResolution;
-    ttlAutopurge;
-    updateAgeOnGet;
-    updateAgeOnHas;
-    allowStale;
-    noDisposeOnSet;
-    noUpdateTTL;
-    maxEntrySize;
-    sizeCalculation;
-    noDeleteOnFetchRejection;
-    noDeleteOnStaleGet;
-    allowStaleOnFetchAbort;
-    allowStaleOnFetchRejection;
-    ignoreFetchAbort;
-    #size;
-    #calculatedSize;
-    #keyMap;
-    #keyList;
-    #valList;
-    #next;
-    #prev;
-    #head;
-    #tail;
-    #free;
-    #disposed;
-    #sizes;
-    #starts;
-    #ttls;
-    #hasDispose;
-    #hasFetchMethod;
-    #hasDisposeAfter;
-    static unsafeExposeInternals(c) {
-      return {
-        starts: c.#starts,
-        ttls: c.#ttls,
-        sizes: c.#sizes,
-        keyMap: c.#keyMap,
-        keyList: c.#keyList,
-        valList: c.#valList,
-        next: c.#next,
-        prev: c.#prev,
-        get head() {
-          return c.#head;
-        },
-        get tail() {
-          return c.#tail;
-        },
-        free: c.#free,
-        isBackgroundFetch: (p) => c.#isBackgroundFetch(p),
-        backgroundFetch: (k, index, options, context) => c.#backgroundFetch(k, index, options, context),
-        moveToTail: (index) => c.#moveToTail(index),
-        indexes: (options) => c.#indexes(options),
-        rindexes: (options) => c.#rindexes(options),
-        isStale: (index) => c.#isStale(index)
-      };
-    }
-    get max() {
-      return this.#max;
-    }
-    get maxSize() {
-      return this.#maxSize;
-    }
-    get calculatedSize() {
-      return this.#calculatedSize;
-    }
-    get size() {
-      return this.#size;
-    }
-    get fetchMethod() {
-      return this.#fetchMethod;
-    }
-    get dispose() {
-      return this.#dispose;
-    }
-    get disposeAfter() {
-      return this.#disposeAfter;
-    }
-    constructor(options) {
-      const { max = 0, ttl, ttlResolution = 1, ttlAutopurge, updateAgeOnGet, updateAgeOnHas, allowStale, dispose, disposeAfter, noDisposeOnSet, noUpdateTTL, maxSize = 0, maxEntrySize = 0, sizeCalculation, fetchMethod, noDeleteOnFetchRejection, noDeleteOnStaleGet, allowStaleOnFetchRejection, allowStaleOnFetchAbort, ignoreFetchAbort } = options;
+    constructor(options = {}) {
+      const {
+        max = 0,
+        ttl,
+        ttlResolution = 1,
+        ttlAutopurge,
+        updateAgeOnGet,
+        updateAgeOnHas,
+        allowStale,
+        dispose,
+        disposeAfter,
+        noDisposeOnSet,
+        noUpdateTTL,
+        maxSize = 0,
+        maxEntrySize = 0,
+        sizeCalculation,
+        fetchMethod,
+        fetchContext,
+        noDeleteOnFetchRejection,
+        noDeleteOnStaleGet,
+        allowStaleOnFetchRejection,
+        allowStaleOnFetchAbort,
+        ignoreFetchAbort
+      } = options;
+      const { length, maxAge, stale } = options instanceof LRUCache ? {} : options;
       if (max !== 0 && !isPosInt(max)) {
         throw new TypeError("max option must be a nonnegative integer");
       }
@@ -18083,45 +18041,46 @@ var require_cjs6 = __commonJS((exports) => {
       if (!UintArray) {
         throw new Error("invalid max value: " + max);
       }
-      this.#max = max;
-      this.#maxSize = maxSize;
-      this.maxEntrySize = maxEntrySize || this.#maxSize;
-      this.sizeCalculation = sizeCalculation;
+      this.max = max;
+      this.maxSize = maxSize;
+      this.maxEntrySize = maxEntrySize || this.maxSize;
+      this.sizeCalculation = sizeCalculation || length;
       if (this.sizeCalculation) {
-        if (!this.#maxSize && !this.maxEntrySize) {
+        if (!this.maxSize && !this.maxEntrySize) {
           throw new TypeError("cannot set sizeCalculation without setting maxSize or maxEntrySize");
         }
         if (typeof this.sizeCalculation !== "function") {
           throw new TypeError("sizeCalculation set to non-function");
         }
       }
-      if (fetchMethod !== undefined && typeof fetchMethod !== "function") {
+      this.fetchMethod = fetchMethod || null;
+      if (this.fetchMethod && typeof this.fetchMethod !== "function") {
         throw new TypeError("fetchMethod must be a function if specified");
       }
-      this.#fetchMethod = fetchMethod;
-      this.#hasFetchMethod = !!fetchMethod;
-      this.#keyMap = new Map;
-      this.#keyList = new Array(max).fill(undefined);
-      this.#valList = new Array(max).fill(undefined);
-      this.#next = new UintArray(max);
-      this.#prev = new UintArray(max);
-      this.#head = 0;
-      this.#tail = 0;
-      this.#free = Stack.create(max);
-      this.#size = 0;
-      this.#calculatedSize = 0;
+      this.fetchContext = fetchContext;
+      if (!this.fetchMethod && fetchContext !== undefined) {
+        throw new TypeError("cannot set fetchContext without fetchMethod");
+      }
+      this.keyMap = new Map;
+      this.keyList = new Array(max).fill(null);
+      this.valList = new Array(max).fill(null);
+      this.next = new UintArray(max);
+      this.prev = new UintArray(max);
+      this.head = 0;
+      this.tail = 0;
+      this.free = new Stack(max);
+      this.initialFill = 1;
+      this.size = 0;
       if (typeof dispose === "function") {
-        this.#dispose = dispose;
+        this.dispose = dispose;
       }
       if (typeof disposeAfter === "function") {
-        this.#disposeAfter = disposeAfter;
-        this.#disposed = [];
+        this.disposeAfter = disposeAfter;
+        this.disposed = [];
       } else {
-        this.#disposeAfter = undefined;
-        this.#disposed = undefined;
+        this.disposeAfter = null;
+        this.disposed = null;
       }
-      this.#hasDispose = !!this.#dispose;
-      this.#hasDisposeAfter = !!this.#disposeAfter;
       this.noDisposeOnSet = !!noDisposeOnSet;
       this.noUpdateTTL = !!noUpdateTTL;
       this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection;
@@ -18129,33 +18088,33 @@ var require_cjs6 = __commonJS((exports) => {
       this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort;
       this.ignoreFetchAbort = !!ignoreFetchAbort;
       if (this.maxEntrySize !== 0) {
-        if (this.#maxSize !== 0) {
-          if (!isPosInt(this.#maxSize)) {
+        if (this.maxSize !== 0) {
+          if (!isPosInt(this.maxSize)) {
             throw new TypeError("maxSize must be a positive integer if specified");
           }
         }
         if (!isPosInt(this.maxEntrySize)) {
           throw new TypeError("maxEntrySize must be a positive integer if specified");
         }
-        this.#initializeSizeTracking();
+        this.initializeSizeTracking();
       }
-      this.allowStale = !!allowStale;
+      this.allowStale = !!allowStale || !!stale;
       this.noDeleteOnStaleGet = !!noDeleteOnStaleGet;
       this.updateAgeOnGet = !!updateAgeOnGet;
       this.updateAgeOnHas = !!updateAgeOnHas;
       this.ttlResolution = isPosInt(ttlResolution) || ttlResolution === 0 ? ttlResolution : 1;
       this.ttlAutopurge = !!ttlAutopurge;
-      this.ttl = ttl || 0;
+      this.ttl = ttl || maxAge || 0;
       if (this.ttl) {
         if (!isPosInt(this.ttl)) {
           throw new TypeError("ttl must be a positive integer if specified");
         }
-        this.#initializeTTLTracking();
+        this.initializeTTLTracking();
       }
-      if (this.#max === 0 && this.ttl === 0 && this.#maxSize === 0) {
+      if (this.max === 0 && this.ttl === 0 && this.maxSize === 0) {
         throw new TypeError("At least one of max, maxSize, or ttl is required");
       }
-      if (!this.ttlAutopurge && !this.#max && !this.#maxSize) {
+      if (!this.ttlAutopurge && !this.max && !this.maxSize) {
         const code = "LRU_CACHE_UNBOUNDED";
         if (shouldWarn(code)) {
           warned.add(code);
@@ -18163,22 +18122,29 @@ var require_cjs6 = __commonJS((exports) => {
           emitWarning(msg, "UnboundedCacheWarning", code, LRUCache);
         }
       }
+      if (stale) {
+        deprecatedOption("stale", "allowStale");
+      }
+      if (maxAge) {
+        deprecatedOption("maxAge", "ttl");
+      }
+      if (length) {
+        deprecatedOption("length", "sizeCalculation");
+      }
     }
     getRemainingTTL(key) {
-      return this.#keyMap.has(key) ? Infinity : 0;
+      return this.has(key, { updateAgeOnHas: false }) ? Infinity : 0;
     }
-    #initializeTTLTracking() {
-      const ttls = new ZeroArray(this.#max);
-      const starts = new ZeroArray(this.#max);
-      this.#ttls = ttls;
-      this.#starts = starts;
-      this.#setItemTTL = (index, ttl, start = perf.now()) => {
-        starts[index] = ttl !== 0 ? start : 0;
-        ttls[index] = ttl;
+    initializeTTLTracking() {
+      this.ttls = new ZeroArray(this.max);
+      this.starts = new ZeroArray(this.max);
+      this.setItemTTL = (index, ttl, start = perf.now()) => {
+        this.starts[index] = ttl !== 0 ? start : 0;
+        this.ttls[index] = ttl;
         if (ttl !== 0 && this.ttlAutopurge) {
           const t = setTimeout(() => {
-            if (this.#isStale(index)) {
-              this.delete(this.#keyList[index]);
+            if (this.isStale(index)) {
+              this.delete(this.keyList[index]);
             }
           }, ttl + 1);
           if (t.unref) {
@@ -18186,18 +18152,15 @@ var require_cjs6 = __commonJS((exports) => {
           }
         }
       };
-      this.#updateItemAge = (index) => {
-        starts[index] = ttls[index] !== 0 ? perf.now() : 0;
+      this.updateItemAge = (index) => {
+        this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0;
       };
-      this.#statusTTL = (status, index) => {
-        if (ttls[index]) {
-          const ttl = ttls[index];
-          const start = starts[index];
-          status.ttl = ttl;
-          status.start = start;
+      this.statusTTL = (status, index) => {
+        if (status) {
+          status.ttl = this.ttls[index];
+          status.start = this.starts[index];
           status.now = cachedNow || getNow();
-          const age = status.now - start;
-          status.remainingTTL = ttl - age;
+          status.remainingTTL = status.now + status.ttl - status.start;
         }
       };
       let cachedNow = 0;
@@ -18213,39 +18176,34 @@ var require_cjs6 = __commonJS((exports) => {
         return n;
       };
       this.getRemainingTTL = (key) => {
-        const index = this.#keyMap.get(key);
+        const index = this.keyMap.get(key);
         if (index === undefined) {
           return 0;
         }
-        const ttl = ttls[index];
-        const start = starts[index];
-        if (ttl === 0 || start === 0) {
-          return Infinity;
-        }
-        const age = (cachedNow || getNow()) - start;
-        return ttl - age;
+        return this.ttls[index] === 0 || this.starts[index] === 0 ? Infinity : this.starts[index] + this.ttls[index] - (cachedNow || getNow());
       };
-      this.#isStale = (index) => {
-        return ttls[index] !== 0 && starts[index] !== 0 && (cachedNow || getNow()) - starts[index] > ttls[index];
+      this.isStale = (index) => {
+        return this.ttls[index] !== 0 && this.starts[index] !== 0 && (cachedNow || getNow()) - this.starts[index] > this.ttls[index];
       };
     }
-    #updateItemAge = () => {
-    };
-    #statusTTL = () => {
-    };
-    #setItemTTL = () => {
-    };
-    #isStale = () => false;
-    #initializeSizeTracking() {
-      const sizes = new ZeroArray(this.#max);
-      this.#calculatedSize = 0;
-      this.#sizes = sizes;
-      this.#removeItemSize = (index) => {
-        this.#calculatedSize -= sizes[index];
-        sizes[index] = 0;
+    updateItemAge(_index) {
+    }
+    statusTTL(_status, _index) {
+    }
+    setItemTTL(_index, _ttl, _start) {
+    }
+    isStale(_index) {
+      return false;
+    }
+    initializeSizeTracking() {
+      this.calculatedSize = 0;
+      this.sizes = new ZeroArray(this.max);
+      this.removeItemSize = (index) => {
+        this.calculatedSize -= this.sizes[index];
+        this.sizes[index] = 0;
       };
-      this.#requireSize = (k, v, size, sizeCalculation) => {
-        if (this.#isBackgroundFetch(v)) {
+      this.requireSize = (k, v, size, sizeCalculation) => {
+        if (this.isBackgroundFetch(v)) {
           return 0;
         }
         if (!isPosInt(size)) {
@@ -18263,151 +18221,150 @@ var require_cjs6 = __commonJS((exports) => {
         }
         return size;
       };
-      this.#addItemSize = (index, size, status) => {
-        sizes[index] = size;
-        if (this.#maxSize) {
-          const maxSize = this.#maxSize - sizes[index];
-          while (this.#calculatedSize > maxSize) {
-            this.#evict(true);
+      this.addItemSize = (index, size, status) => {
+        this.sizes[index] = size;
+        if (this.maxSize) {
+          const maxSize = this.maxSize - this.sizes[index];
+          while (this.calculatedSize > maxSize) {
+            this.evict(true);
           }
         }
-        this.#calculatedSize += sizes[index];
+        this.calculatedSize += this.sizes[index];
         if (status) {
           status.entrySize = size;
-          status.totalCalculatedSize = this.#calculatedSize;
+          status.totalCalculatedSize = this.calculatedSize;
         }
       };
     }
-    #removeItemSize = (_i) => {
-    };
-    #addItemSize = (_i, _s, _st) => {
-    };
-    #requireSize = (_k, _v, size, sizeCalculation) => {
+    removeItemSize(_index) {
+    }
+    addItemSize(_index, _size) {
+    }
+    requireSize(_k, _v, size, sizeCalculation) {
       if (size || sizeCalculation) {
         throw new TypeError("cannot set size without setting maxSize or maxEntrySize on cache");
       }
-      return 0;
-    };
-    *#indexes({ allowStale = this.allowStale } = {}) {
-      if (this.#size) {
-        for (let i = this.#tail;; ) {
-          if (!this.#isValidIndex(i)) {
+    }
+    *indexes({ allowStale = this.allowStale } = {}) {
+      if (this.size) {
+        for (let i = this.tail;; ) {
+          if (!this.isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.#isStale(i)) {
+          if (allowStale || !this.isStale(i)) {
             yield i;
           }
-          if (i === this.#head) {
+          if (i === this.head) {
             break;
           } else {
-            i = this.#prev[i];
+            i = this.prev[i];
           }
         }
       }
     }
-    *#rindexes({ allowStale = this.allowStale } = {}) {
-      if (this.#size) {
-        for (let i = this.#head;; ) {
-          if (!this.#isValidIndex(i)) {
+    *rindexes({ allowStale = this.allowStale } = {}) {
+      if (this.size) {
+        for (let i = this.head;; ) {
+          if (!this.isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.#isStale(i)) {
+          if (allowStale || !this.isStale(i)) {
             yield i;
           }
-          if (i === this.#tail) {
+          if (i === this.tail) {
             break;
           } else {
-            i = this.#next[i];
+            i = this.next[i];
           }
         }
       }
     }
-    #isValidIndex(index) {
-      return index !== undefined && this.#keyMap.get(this.#keyList[index]) === index;
+    isValidIndex(index) {
+      return index !== undefined && this.keyMap.get(this.keyList[index]) === index;
     }
     *entries() {
-      for (const i of this.#indexes()) {
-        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield [this.#keyList[i], this.#valList[i]];
+      for (const i of this.indexes()) {
+        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield [this.keyList[i], this.valList[i]];
         }
       }
     }
     *rentries() {
-      for (const i of this.#rindexes()) {
-        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield [this.#keyList[i], this.#valList[i]];
+      for (const i of this.rindexes()) {
+        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield [this.keyList[i], this.valList[i]];
         }
       }
     }
     *keys() {
-      for (const i of this.#indexes()) {
-        const k = this.#keyList[i];
-        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield k;
+      for (const i of this.indexes()) {
+        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.keyList[i];
         }
       }
     }
     *rkeys() {
-      for (const i of this.#rindexes()) {
-        const k = this.#keyList[i];
-        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield k;
+      for (const i of this.rindexes()) {
+        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.keyList[i];
         }
       }
     }
     *values() {
-      for (const i of this.#indexes()) {
-        const v = this.#valList[i];
-        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield this.#valList[i];
+      for (const i of this.indexes()) {
+        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.valList[i];
         }
       }
     }
     *rvalues() {
-      for (const i of this.#rindexes()) {
-        const v = this.#valList[i];
-        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield this.#valList[i];
+      for (const i of this.rindexes()) {
+        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.valList[i];
         }
       }
     }
     [Symbol.iterator]() {
       return this.entries();
     }
-    find(fn, getOptions = {}) {
-      for (const i of this.#indexes()) {
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    find(fn, getOptions) {
+      for (const i of this.indexes()) {
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        if (fn(value, this.#keyList[i], this)) {
-          return this.get(this.#keyList[i], getOptions);
+        if (fn(value, this.keyList[i], this)) {
+          return this.get(this.keyList[i], getOptions);
         }
       }
     }
     forEach(fn, thisp = this) {
-      for (const i of this.#indexes()) {
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.indexes()) {
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.#keyList[i], this);
+        fn.call(thisp, value, this.keyList[i], this);
       }
     }
     rforEach(fn, thisp = this) {
-      for (const i of this.#rindexes()) {
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.rindexes()) {
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.#keyList[i], this);
+        fn.call(thisp, value, this.keyList[i], this);
       }
+    }
+    get prune() {
+      deprecatedMethod("prune", "purgeStale");
+      return this.purgeStale;
     }
     purgeStale() {
       let deleted = false;
-      for (const i of this.#rindexes({ allowStale: true })) {
-        if (this.#isStale(i)) {
-          this.delete(this.#keyList[i]);
+      for (const i of this.rindexes({ allowStale: true })) {
+        if (this.isStale(i)) {
+          this.delete(this.keyList[i]);
           deleted = true;
         }
       }
@@ -18415,20 +18372,20 @@ var require_cjs6 = __commonJS((exports) => {
     }
     dump() {
       const arr = [];
-      for (const i of this.#indexes({ allowStale: true })) {
-        const key = this.#keyList[i];
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
-        if (value === undefined || key === undefined)
+      for (const i of this.indexes({ allowStale: true })) {
+        const key = this.keyList[i];
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+        if (value === undefined)
           continue;
         const entry = { value };
-        if (this.#ttls && this.#starts) {
-          entry.ttl = this.#ttls[i];
-          const age = perf.now() - this.#starts[i];
+        if (this.ttls) {
+          entry.ttl = this.ttls[i];
+          const age = perf.now() - this.starts[i];
           entry.start = Math.floor(Date.now() - age);
         }
-        if (this.#sizes) {
-          entry.size = this.#sizes[i];
+        if (this.sizes) {
+          entry.size = this.sizes[i];
         }
         arr.unshift([key, entry]);
       }
@@ -18444,14 +18401,18 @@ var require_cjs6 = __commonJS((exports) => {
         this.set(key, entry.value, entry);
       }
     }
-    set(k, v, setOptions = {}) {
-      if (v === undefined) {
-        this.delete(k);
-        return this;
-      }
-      const { ttl = this.ttl, start, noDisposeOnSet = this.noDisposeOnSet, sizeCalculation = this.sizeCalculation, status } = setOptions;
-      let { noUpdateTTL = this.noUpdateTTL } = setOptions;
-      const size = this.#requireSize(k, v, setOptions.size || 0, sizeCalculation);
+    dispose(_v, _k, _reason) {
+    }
+    set(k, v, {
+      ttl = this.ttl,
+      start,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      status
+    } = {}) {
+      size = this.requireSize(k, v, size, sizeCalculation);
       if (this.maxEntrySize && size > this.maxEntrySize) {
         if (status) {
           status.set = "miss";
@@ -18460,49 +18421,41 @@ var require_cjs6 = __commonJS((exports) => {
         this.delete(k);
         return this;
       }
-      let index = this.#size === 0 ? undefined : this.#keyMap.get(k);
+      let index = this.size === 0 ? undefined : this.keyMap.get(k);
       if (index === undefined) {
-        index = this.#size === 0 ? this.#tail : this.#free.length !== 0 ? this.#free.pop() : this.#size === this.#max ? this.#evict(false) : this.#size;
-        this.#keyList[index] = k;
-        this.#valList[index] = v;
-        this.#keyMap.set(k, index);
-        this.#next[this.#tail] = index;
-        this.#prev[index] = this.#tail;
-        this.#tail = index;
-        this.#size++;
-        this.#addItemSize(index, size, status);
-        if (status)
+        index = this.newIndex();
+        this.keyList[index] = k;
+        this.valList[index] = v;
+        this.keyMap.set(k, index);
+        this.next[this.tail] = index;
+        this.prev[index] = this.tail;
+        this.tail = index;
+        this.size++;
+        this.addItemSize(index, size, status);
+        if (status) {
           status.set = "add";
+        }
         noUpdateTTL = false;
       } else {
-        this.#moveToTail(index);
-        const oldVal = this.#valList[index];
+        this.moveToTail(index);
+        const oldVal = this.valList[index];
         if (v !== oldVal) {
-          if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
+          if (this.isBackgroundFetch(oldVal)) {
             oldVal.__abortController.abort(new Error("replaced"));
-            const { __staleWhileFetching: s } = oldVal;
-            if (s !== undefined && !noDisposeOnSet) {
-              if (this.#hasDispose) {
-                this.#dispose?.(s, k, "set");
+          } else {
+            if (!noDisposeOnSet) {
+              this.dispose(oldVal, k, "set");
+              if (this.disposeAfter) {
+                this.disposed.push([oldVal, k, "set"]);
               }
-              if (this.#hasDisposeAfter) {
-                this.#disposed?.push([s, k, "set"]);
-              }
-            }
-          } else if (!noDisposeOnSet) {
-            if (this.#hasDispose) {
-              this.#dispose?.(oldVal, k, "set");
-            }
-            if (this.#hasDisposeAfter) {
-              this.#disposed?.push([oldVal, k, "set"]);
             }
           }
-          this.#removeItemSize(index);
-          this.#addItemSize(index, size, status);
-          this.#valList[index] = v;
+          this.removeItemSize(index);
+          this.valList[index] = v;
+          this.addItemSize(index, size, status);
           if (status) {
             status.set = "replace";
-            const oldValue = oldVal && this.#isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
+            const oldValue = oldVal && this.isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
             if (oldValue !== undefined)
               status.oldValue = oldValue;
           }
@@ -18510,122 +18463,98 @@ var require_cjs6 = __commonJS((exports) => {
           status.set = "update";
         }
       }
-      if (ttl !== 0 && !this.#ttls) {
-        this.#initializeTTLTracking();
+      if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
+        this.initializeTTLTracking();
       }
-      if (this.#ttls) {
-        if (!noUpdateTTL) {
-          this.#setItemTTL(index, ttl, start);
-        }
-        if (status)
-          this.#statusTTL(status, index);
+      if (!noUpdateTTL) {
+        this.setItemTTL(index, ttl, start);
       }
-      if (!noDisposeOnSet && this.#hasDisposeAfter && this.#disposed) {
-        const dt = this.#disposed;
-        let task;
-        while (task = dt?.shift()) {
-          this.#disposeAfter?.(...task);
+      this.statusTTL(status, index);
+      if (this.disposeAfter) {
+        while (this.disposed.length) {
+          this.disposeAfter(...this.disposed.shift());
         }
       }
       return this;
     }
+    newIndex() {
+      if (this.size === 0) {
+        return this.tail;
+      }
+      if (this.size === this.max && this.max !== 0) {
+        return this.evict(false);
+      }
+      if (this.free.length !== 0) {
+        return this.free.pop();
+      }
+      return this.initialFill++;
+    }
     pop() {
-      try {
-        while (this.#size) {
-          const val = this.#valList[this.#head];
-          this.#evict(true);
-          if (this.#isBackgroundFetch(val)) {
-            if (val.__staleWhileFetching) {
-              return val.__staleWhileFetching;
-            }
-          } else if (val !== undefined) {
-            return val;
-          }
-        }
-      } finally {
-        if (this.#hasDisposeAfter && this.#disposed) {
-          const dt = this.#disposed;
-          let task;
-          while (task = dt?.shift()) {
-            this.#disposeAfter?.(...task);
-          }
-        }
+      if (this.size) {
+        const val = this.valList[this.head];
+        this.evict(true);
+        return val;
       }
     }
-    #evict(free) {
-      const head = this.#head;
-      const k = this.#keyList[head];
-      const v = this.#valList[head];
-      if (this.#hasFetchMethod && this.#isBackgroundFetch(v)) {
+    evict(free) {
+      const head = this.head;
+      const k = this.keyList[head];
+      const v = this.valList[head];
+      if (this.isBackgroundFetch(v)) {
         v.__abortController.abort(new Error("evicted"));
-      } else if (this.#hasDispose || this.#hasDisposeAfter) {
-        if (this.#hasDispose) {
-          this.#dispose?.(v, k, "evict");
-        }
-        if (this.#hasDisposeAfter) {
-          this.#disposed?.push([v, k, "evict"]);
-        }
-      }
-      this.#removeItemSize(head);
-      if (free) {
-        this.#keyList[head] = undefined;
-        this.#valList[head] = undefined;
-        this.#free.push(head);
-      }
-      if (this.#size === 1) {
-        this.#head = this.#tail = 0;
-        this.#free.length = 0;
       } else {
-        this.#head = this.#next[head];
+        this.dispose(v, k, "evict");
+        if (this.disposeAfter) {
+          this.disposed.push([v, k, "evict"]);
+        }
       }
-      this.#keyMap.delete(k);
-      this.#size--;
+      this.removeItemSize(head);
+      if (free) {
+        this.keyList[head] = null;
+        this.valList[head] = null;
+        this.free.push(head);
+      }
+      this.head = this.next[head];
+      this.keyMap.delete(k);
+      this.size--;
       return head;
     }
-    has(k, hasOptions = {}) {
-      const { updateAgeOnHas = this.updateAgeOnHas, status } = hasOptions;
-      const index = this.#keyMap.get(k);
+    has(k, { updateAgeOnHas = this.updateAgeOnHas, status } = {}) {
+      const index = this.keyMap.get(k);
       if (index !== undefined) {
-        const v = this.#valList[index];
-        if (this.#isBackgroundFetch(v) && v.__staleWhileFetching === undefined) {
-          return false;
-        }
-        if (!this.#isStale(index)) {
+        if (!this.isStale(index)) {
           if (updateAgeOnHas) {
-            this.#updateItemAge(index);
+            this.updateItemAge(index);
           }
-          if (status) {
+          if (status)
             status.has = "hit";
-            this.#statusTTL(status, index);
-          }
+          this.statusTTL(status, index);
           return true;
         } else if (status) {
           status.has = "stale";
-          this.#statusTTL(status, index);
+          this.statusTTL(status, index);
         }
       } else if (status) {
         status.has = "miss";
       }
       return false;
     }
-    peek(k, peekOptions = {}) {
-      const { allowStale = this.allowStale } = peekOptions;
-      const index = this.#keyMap.get(k);
-      if (index !== undefined && (allowStale || !this.#isStale(index))) {
-        const v = this.#valList[index];
-        return this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    peek(k, { allowStale = this.allowStale } = {}) {
+      const index = this.keyMap.get(k);
+      if (index !== undefined && (allowStale || !this.isStale(index))) {
+        const v = this.valList[index];
+        return this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
       }
     }
-    #backgroundFetch(k, index, options, context) {
-      const v = index === undefined ? undefined : this.#valList[index];
-      if (this.#isBackgroundFetch(v)) {
+    backgroundFetch(k, index, options, context) {
+      const v = index === undefined ? undefined : this.valList[index];
+      if (this.isBackgroundFetch(v)) {
         return v;
       }
       const ac = new AC;
-      const { signal } = options;
-      signal?.addEventListener("abort", () => ac.abort(signal.reason), {
-        signal: ac.signal
-      });
+      if (options.signal) {
+        options.signal.addEventListener("abort", () => ac.abort(options.signal.reason));
+      }
       const fetchOpts = {
         signal: ac.signal,
         options,
@@ -18647,11 +18576,10 @@ var require_cjs6 = __commonJS((exports) => {
         if (aborted && !ignoreAbort && !updateCache) {
           return fetchFail(ac.signal.reason);
         }
-        const bf2 = p;
-        if (this.#valList[index] === p) {
+        if (this.valList[index] === p) {
           if (v2 === undefined) {
-            if (bf2.__staleWhileFetching) {
-              this.#valList[index] = bf2.__staleWhileFetching;
+            if (p.__staleWhileFetching) {
+              this.valList[index] = p.__staleWhileFetching;
             } else {
               this.delete(k);
             }
@@ -18675,32 +18603,28 @@ var require_cjs6 = __commonJS((exports) => {
         const allowStaleAborted = aborted && options.allowStaleOnFetchAbort;
         const allowStale = allowStaleAborted || options.allowStaleOnFetchRejection;
         const noDelete = allowStale || options.noDeleteOnFetchRejection;
-        const bf2 = p;
-        if (this.#valList[index] === p) {
-          const del = !noDelete || bf2.__staleWhileFetching === undefined;
+        if (this.valList[index] === p) {
+          const del = !noDelete || p.__staleWhileFetching === undefined;
           if (del) {
             this.delete(k);
           } else if (!allowStaleAborted) {
-            this.#valList[index] = bf2.__staleWhileFetching;
+            this.valList[index] = p.__staleWhileFetching;
           }
         }
         if (allowStale) {
-          if (options.status && bf2.__staleWhileFetching !== undefined) {
+          if (options.status && p.__staleWhileFetching !== undefined) {
             options.status.returnedStale = true;
           }
-          return bf2.__staleWhileFetching;
-        } else if (bf2.__returned === bf2) {
+          return p.__staleWhileFetching;
+        } else if (p.__returned === p) {
           throw er;
         }
       };
       const pcall = (res, rej) => {
-        const fmp = this.#fetchMethod?.(k, v, fetchOpts);
-        if (fmp && fmp instanceof Promise) {
-          fmp.then((v2) => res(v2 === undefined ? undefined : v2), rej);
-        }
+        this.fetchMethod(k, v, fetchOpts).then((v2) => res(v2), rej);
         ac.signal.addEventListener("abort", () => {
           if (!options.ignoreFetchAbort || options.allowStaleOnFetchAbort) {
-            res(undefined);
+            res();
             if (options.allowStaleOnFetchAbort) {
               res = (v2) => cb(v2, true);
             }
@@ -18710,45 +18634,39 @@ var require_cjs6 = __commonJS((exports) => {
       if (options.status)
         options.status.fetchDispatched = true;
       const p = new Promise(pcall).then(cb, eb);
-      const bf = Object.assign(p, {
-        __abortController: ac,
-        __staleWhileFetching: v,
-        __returned: undefined
-      });
+      p.__abortController = ac;
+      p.__staleWhileFetching = v;
+      p.__returned = null;
       if (index === undefined) {
-        this.set(k, bf, { ...fetchOpts.options, status: undefined });
-        index = this.#keyMap.get(k);
+        this.set(k, p, { ...fetchOpts.options, status: undefined });
+        index = this.keyMap.get(k);
       } else {
-        this.#valList[index] = bf;
+        this.valList[index] = p;
       }
-      return bf;
+      return p;
     }
-    #isBackgroundFetch(p) {
-      if (!this.#hasFetchMethod)
-        return false;
-      const b = p;
-      return !!b && b instanceof Promise && b.hasOwnProperty("__staleWhileFetching") && b.__abortController instanceof AC;
+    isBackgroundFetch(p) {
+      return p && typeof p === "object" && typeof p.then === "function" && Object.prototype.hasOwnProperty.call(p, "__staleWhileFetching") && Object.prototype.hasOwnProperty.call(p, "__returned") && (p.__returned === p || p.__returned === null);
     }
-    async fetch(k, fetchOptions = {}) {
-      const {
-        allowStale = this.allowStale,
-        updateAgeOnGet = this.updateAgeOnGet,
-        noDeleteOnStaleGet = this.noDeleteOnStaleGet,
-        ttl = this.ttl,
-        noDisposeOnSet = this.noDisposeOnSet,
-        size = 0,
-        sizeCalculation = this.sizeCalculation,
-        noUpdateTTL = this.noUpdateTTL,
-        noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
-        allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
-        ignoreFetchAbort = this.ignoreFetchAbort,
-        allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
-        context,
-        forceRefresh = false,
-        status,
-        signal
-      } = fetchOptions;
-      if (!this.#hasFetchMethod) {
+    async fetch(k, {
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      ttl = this.ttl,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
+      ignoreFetchAbort = this.ignoreFetchAbort,
+      allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
+      fetchContext = this.fetchContext,
+      forceRefresh = false,
+      status,
+      signal
+    } = {}) {
+      if (!this.fetchMethod) {
         if (status)
           status.fetch = "get";
         return this.get(k, {
@@ -18774,15 +18692,15 @@ var require_cjs6 = __commonJS((exports) => {
         status,
         signal
       };
-      let index = this.#keyMap.get(k);
+      let index = this.keyMap.get(k);
       if (index === undefined) {
         if (status)
           status.fetch = "miss";
-        const p = this.#backgroundFetch(k, index, options, context);
+        const p = this.backgroundFetch(k, index, options, fetchContext);
         return p.__returned = p;
       } else {
-        const v = this.#valList[index];
-        if (this.#isBackgroundFetch(v)) {
+        const v = this.valList[index];
+        if (this.isBackgroundFetch(v)) {
           const stale = allowStale && v.__staleWhileFetching !== undefined;
           if (status) {
             status.fetch = "inflight";
@@ -18791,50 +18709,52 @@ var require_cjs6 = __commonJS((exports) => {
           }
           return stale ? v.__staleWhileFetching : v.__returned = v;
         }
-        const isStale = this.#isStale(index);
+        const isStale = this.isStale(index);
         if (!forceRefresh && !isStale) {
           if (status)
             status.fetch = "hit";
-          this.#moveToTail(index);
+          this.moveToTail(index);
           if (updateAgeOnGet) {
-            this.#updateItemAge(index);
+            this.updateItemAge(index);
           }
-          if (status)
-            this.#statusTTL(status, index);
+          this.statusTTL(status, index);
           return v;
         }
-        const p = this.#backgroundFetch(k, index, options, context);
+        const p = this.backgroundFetch(k, index, options, fetchContext);
         const hasStale = p.__staleWhileFetching !== undefined;
         const staleVal = hasStale && allowStale;
         if (status) {
-          status.fetch = isStale ? "stale" : "refresh";
+          status.fetch = hasStale && isStale ? "stale" : "refresh";
           if (staleVal && isStale)
             status.returnedStale = true;
         }
         return staleVal ? p.__staleWhileFetching : p.__returned = p;
       }
     }
-    get(k, getOptions = {}) {
-      const { allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, status } = getOptions;
-      const index = this.#keyMap.get(k);
+    get(k, {
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      status
+    } = {}) {
+      const index = this.keyMap.get(k);
       if (index !== undefined) {
-        const value = this.#valList[index];
-        const fetching = this.#isBackgroundFetch(value);
-        if (status)
-          this.#statusTTL(status, index);
-        if (this.#isStale(index)) {
+        const value = this.valList[index];
+        const fetching = this.isBackgroundFetch(value);
+        this.statusTTL(status, index);
+        if (this.isStale(index)) {
           if (status)
             status.get = "stale";
           if (!fetching) {
             if (!noDeleteOnStaleGet) {
               this.delete(k);
             }
-            if (status && allowStale)
-              status.returnedStale = true;
+            if (status)
+              status.returnedStale = allowStale;
             return allowStale ? value : undefined;
           } else {
-            if (status && allowStale && value.__staleWhileFetching !== undefined) {
-              status.returnedStale = true;
+            if (status) {
+              status.returnedStale = allowStale && value.__staleWhileFetching !== undefined;
             }
             return allowStale ? value.__staleWhileFetching : undefined;
           }
@@ -18844,9 +18764,9 @@ var require_cjs6 = __commonJS((exports) => {
           if (fetching) {
             return value.__staleWhileFetching;
           }
-          this.#moveToTail(index);
+          this.moveToTail(index);
           if (updateAgeOnGet) {
-            this.#updateItemAge(index);
+            this.updateItemAge(index);
           }
           return value;
         }
@@ -18854,107 +18774,118 @@ var require_cjs6 = __commonJS((exports) => {
         status.get = "miss";
       }
     }
-    #connect(p, n) {
-      this.#prev[n] = p;
-      this.#next[p] = n;
+    connect(p, n) {
+      this.prev[n] = p;
+      this.next[p] = n;
     }
-    #moveToTail(index) {
-      if (index !== this.#tail) {
-        if (index === this.#head) {
-          this.#head = this.#next[index];
+    moveToTail(index) {
+      if (index !== this.tail) {
+        if (index === this.head) {
+          this.head = this.next[index];
         } else {
-          this.#connect(this.#prev[index], this.#next[index]);
+          this.connect(this.prev[index], this.next[index]);
         }
-        this.#connect(this.#tail, index);
-        this.#tail = index;
+        this.connect(this.tail, index);
+        this.tail = index;
       }
+    }
+    get del() {
+      deprecatedMethod("del", "delete");
+      return this.delete;
     }
     delete(k) {
       let deleted = false;
-      if (this.#size !== 0) {
-        const index = this.#keyMap.get(k);
+      if (this.size !== 0) {
+        const index = this.keyMap.get(k);
         if (index !== undefined) {
           deleted = true;
-          if (this.#size === 1) {
+          if (this.size === 1) {
             this.clear();
           } else {
-            this.#removeItemSize(index);
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v)) {
+            this.removeItemSize(index);
+            const v = this.valList[index];
+            if (this.isBackgroundFetch(v)) {
               v.__abortController.abort(new Error("deleted"));
-            } else if (this.#hasDispose || this.#hasDisposeAfter) {
-              if (this.#hasDispose) {
-                this.#dispose?.(v, k, "delete");
-              }
-              if (this.#hasDisposeAfter) {
-                this.#disposed?.push([v, k, "delete"]);
-              }
-            }
-            this.#keyMap.delete(k);
-            this.#keyList[index] = undefined;
-            this.#valList[index] = undefined;
-            if (index === this.#tail) {
-              this.#tail = this.#prev[index];
-            } else if (index === this.#head) {
-              this.#head = this.#next[index];
             } else {
-              this.#next[this.#prev[index]] = this.#next[index];
-              this.#prev[this.#next[index]] = this.#prev[index];
+              this.dispose(v, k, "delete");
+              if (this.disposeAfter) {
+                this.disposed.push([v, k, "delete"]);
+              }
             }
-            this.#size--;
-            this.#free.push(index);
+            this.keyMap.delete(k);
+            this.keyList[index] = null;
+            this.valList[index] = null;
+            if (index === this.tail) {
+              this.tail = this.prev[index];
+            } else if (index === this.head) {
+              this.head = this.next[index];
+            } else {
+              this.next[this.prev[index]] = this.next[index];
+              this.prev[this.next[index]] = this.prev[index];
+            }
+            this.size--;
+            this.free.push(index);
           }
         }
       }
-      if (this.#hasDisposeAfter && this.#disposed?.length) {
-        const dt = this.#disposed;
-        let task;
-        while (task = dt?.shift()) {
-          this.#disposeAfter?.(...task);
+      if (this.disposed) {
+        while (this.disposed.length) {
+          this.disposeAfter(...this.disposed.shift());
         }
       }
       return deleted;
     }
     clear() {
-      for (const index of this.#rindexes({ allowStale: true })) {
-        const v = this.#valList[index];
-        if (this.#isBackgroundFetch(v)) {
+      for (const index of this.rindexes({ allowStale: true })) {
+        const v = this.valList[index];
+        if (this.isBackgroundFetch(v)) {
           v.__abortController.abort(new Error("deleted"));
         } else {
-          const k = this.#keyList[index];
-          if (this.#hasDispose) {
-            this.#dispose?.(v, k, "delete");
-          }
-          if (this.#hasDisposeAfter) {
-            this.#disposed?.push([v, k, "delete"]);
+          const k = this.keyList[index];
+          this.dispose(v, k, "delete");
+          if (this.disposeAfter) {
+            this.disposed.push([v, k, "delete"]);
           }
         }
       }
-      this.#keyMap.clear();
-      this.#valList.fill(undefined);
-      this.#keyList.fill(undefined);
-      if (this.#ttls && this.#starts) {
-        this.#ttls.fill(0);
-        this.#starts.fill(0);
+      this.keyMap.clear();
+      this.valList.fill(null);
+      this.keyList.fill(null);
+      if (this.ttls) {
+        this.ttls.fill(0);
+        this.starts.fill(0);
       }
-      if (this.#sizes) {
-        this.#sizes.fill(0);
+      if (this.sizes) {
+        this.sizes.fill(0);
       }
-      this.#head = 0;
-      this.#tail = 0;
-      this.#free.length = 0;
-      this.#calculatedSize = 0;
-      this.#size = 0;
-      if (this.#hasDisposeAfter && this.#disposed) {
-        const dt = this.#disposed;
-        let task;
-        while (task = dt?.shift()) {
-          this.#disposeAfter?.(...task);
+      this.head = 0;
+      this.tail = 0;
+      this.initialFill = 1;
+      this.free.length = 0;
+      this.calculatedSize = 0;
+      this.size = 0;
+      if (this.disposed) {
+        while (this.disposed.length) {
+          this.disposeAfter(...this.disposed.shift());
         }
       }
     }
+    get reset() {
+      deprecatedMethod("reset", "clear");
+      return this.clear;
+    }
+    get length() {
+      deprecatedProperty("length", "size");
+      return this.size;
+    }
+    static get AbortController() {
+      return AC;
+    }
+    static get AbortSignal() {
+      return AS;
+    }
   }
-  exports.LRUCache = LRUCache;
+  module.exports = LRUCache;
 });
 
 // node_modules/hosted-git-info/lib/hosts.js
@@ -19262,11 +19193,11 @@ var require_from_url = __commonJS((exports, module) => {
 
 // node_modules/hosted-git-info/lib/index.js
 var require_lib5 = __commonJS((exports, module) => {
-  var { LRUCache } = require_cjs6();
+  var LRU = require_lru_cache2();
   var hosts = require_hosts();
   var fromUrl = require_from_url();
   var parseUrl = require_parse_url();
-  var cache = new LRUCache({ max: 1000 });
+  var cache = new LRU({ max: 1000 });
 
   class GitHost {
     constructor(type, user, auth, project, committish, defaultRepresentation, opts = {}) {
@@ -20272,164 +20203,131 @@ var require_inflight = __commonJS((exports, module) => {
   inflight.active = active;
 });
 
-// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/posix.js
-var require_posix = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.sync = exports.isexe = undefined;
-  var fs_1 = __require("fs");
-  var promises_1 = __require("fs/promises");
-  var isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat(await (0, promises_1.stat)(path), options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.isexe = isexe;
-  var sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat((0, fs_1.statSync)(path), options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.sync = sync;
-  var checkStat = (stat, options) => stat.isFile() && checkMode(stat, options);
-  var checkMode = (stat, options) => {
-    const myUid = options.uid ?? process.getuid?.();
-    const myGroups = options.groups ?? process.getgroups?.() ?? [];
-    const myGid = options.gid ?? process.getgid?.() ?? myGroups[0];
-    if (myUid === undefined || myGid === undefined) {
-      throw new Error("cannot get uid or gid");
-    }
-    const groups = new Set([myGid, ...myGroups]);
-    const mod = stat.mode;
-    const uid = stat.uid;
-    const gid = stat.gid;
-    const u = parseInt("100", 8);
-    const g = parseInt("010", 8);
-    const o = parseInt("001", 8);
-    const ug = u | g;
-    return !!(mod & o || mod & g && groups.has(gid) || mod & u && uid === myUid || mod & ug && myUid === 0);
-  };
-});
-
-// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/win32.js
-var require_win32 = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.sync = exports.isexe = undefined;
-  var fs_1 = __require("fs");
-  var promises_1 = __require("fs/promises");
-  var isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat(await (0, promises_1.stat)(path), path, options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.isexe = isexe;
-  var sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat((0, fs_1.statSync)(path), path, options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.sync = sync;
-  var checkPathExt = (path, options) => {
-    const { pathExt = process.env.PATHEXT || "" } = options;
-    const peSplit = pathExt.split(";");
-    if (peSplit.indexOf("") !== -1) {
+// node_modules/isexe/windows.js
+var require_windows = __commonJS((exports, module) => {
+  var checkPathExt = function(path, options) {
+    var pathext = options.pathExt !== undefined ? options.pathExt : process.env.PATHEXT;
+    if (!pathext) {
       return true;
     }
-    for (let i = 0;i < peSplit.length; i++) {
-      const p = peSplit[i].toLowerCase();
-      const ext = path.substring(path.length - p.length).toLowerCase();
-      if (p && ext === p) {
+    pathext = pathext.split(";");
+    if (pathext.indexOf("") !== -1) {
+      return true;
+    }
+    for (var i = 0;i < pathext.length; i++) {
+      var p = pathext[i].toLowerCase();
+      if (p && path.substr(-p.length).toLowerCase() === p) {
         return true;
       }
     }
     return false;
   };
-  var checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, options);
+  var checkStat = function(stat, path, options) {
+    if (!stat.isSymbolicLink() && !stat.isFile()) {
+      return false;
+    }
+    return checkPathExt(path, options);
+  };
+  var isexe = function(path, options, cb) {
+    fs.stat(path, function(er, stat) {
+      cb(er, er ? false : checkStat(stat, path, options));
+    });
+  };
+  var sync = function(path, options) {
+    return checkStat(fs.statSync(path), path, options);
+  };
+  module.exports = isexe;
+  isexe.sync = sync;
+  var fs = __require("fs");
 });
 
-// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/options.js
-var require_options = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
+// node_modules/isexe/mode.js
+var require_mode = __commonJS((exports, module) => {
+  var isexe = function(path, options, cb) {
+    fs.stat(path, function(er, stat) {
+      cb(er, er ? false : checkStat(stat, options));
+    });
+  };
+  var sync = function(path, options) {
+    return checkStat(fs.statSync(path), options);
+  };
+  var checkStat = function(stat, options) {
+    return stat.isFile() && checkMode(stat, options);
+  };
+  var checkMode = function(stat, options) {
+    var mod = stat.mode;
+    var uid = stat.uid;
+    var gid = stat.gid;
+    var myUid = options.uid !== undefined ? options.uid : process.getuid && process.getuid();
+    var myGid = options.gid !== undefined ? options.gid : process.getgid && process.getgid();
+    var u = parseInt("100", 8);
+    var g = parseInt("010", 8);
+    var o = parseInt("001", 8);
+    var ug = u | g;
+    var ret = mod & o || mod & g && gid === myGid || mod & u && uid === myUid || mod & ug && myUid === 0;
+    return ret;
+  };
+  module.exports = isexe;
+  isexe.sync = sync;
+  var fs = __require("fs");
 });
 
-// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/index.js
-var require_cjs7 = __commonJS((exports) => {
-  var __createBinding = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
-    if (k2 === undefined)
-      k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() {
-        return m[k];
-      } };
+// node_modules/isexe/index.js
+var require_isexe = __commonJS((exports, module) => {
+  var isexe = function(path, options, cb) {
+    if (typeof options === "function") {
+      cb = options;
+      options = {};
     }
-    Object.defineProperty(o, k2, desc);
-  } : function(o, m, k, k2) {
-    if (k2 === undefined)
-      k2 = k;
-    o[k2] = m[k];
-  });
-  var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-  } : function(o, v) {
-    o["default"] = v;
-  });
-  var __importStar = exports && exports.__importStar || function(mod) {
-    if (mod && mod.__esModule)
-      return mod;
-    var result = {};
-    if (mod != null) {
-      for (var k in mod)
-        if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k))
-          __createBinding(result, mod, k);
+    if (!cb) {
+      if (typeof Promise !== "function") {
+        throw new TypeError("callback not provided");
+      }
+      return new Promise(function(resolve, reject) {
+        isexe(path, options || {}, function(er, is) {
+          if (er) {
+            reject(er);
+          } else {
+            resolve(is);
+          }
+        });
+      });
     }
-    __setModuleDefault(result, mod);
-    return result;
+    core(path, options || {}, function(er, is) {
+      if (er) {
+        if (er.code === "EACCES" || options && options.ignoreErrors) {
+          er = null;
+          is = false;
+        }
+      }
+      cb(er, is);
+    });
   };
-  var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-    for (var p in m)
-      if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p))
-        __createBinding(exports2, m, p);
+  var sync = function(path, options) {
+    try {
+      return core.sync(path, options || {});
+    } catch (er) {
+      if (options && options.ignoreErrors || er.code === "EACCES") {
+        return false;
+      } else {
+        throw er;
+      }
+    }
   };
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.sync = exports.isexe = exports.posix = exports.win32 = undefined;
-  var posix = __importStar(require_posix());
-  exports.posix = posix;
-  var win32 = __importStar(require_win32());
-  exports.win32 = win32;
-  __exportStar(require_options(), exports);
-  var platform = process.env._ISEXE_TEST_PLATFORM_ || process.platform;
-  var impl = platform === "win32" ? win32 : posix;
-  exports.isexe = impl.isexe;
-  exports.sync = impl.sync;
+  var fs = __require("fs");
+  var core;
+  if (process.platform === "win32" || global.TESTING_WINDOWS) {
+    core = require_windows();
+  } else {
+    core = require_mode();
+  }
+  module.exports = isexe;
+  isexe.sync = sync;
 });
 
 // node_modules/@npmcli/promise-spawn/node_modules/which/lib/index.js
 var require_lib7 = __commonJS((exports, module) => {
-  var { isexe, sync: isexeSync } = require_cjs7();
+  var isexe = require_isexe();
   var { join, delimiter, sep, posix } = __require("path");
   var isWindows = process.platform === "win32";
   var rSlash = new RegExp(`[${posix.sep}${sep === posix.sep ? "" : sep}]`.replace(/(\\)/g, "\\$1"));
@@ -20446,7 +20344,11 @@ var require_lib7 = __commonJS((exports, module) => {
     ];
     if (isWindows) {
       const pathExtExe = optPathExt || [".EXE", ".CMD", ".BAT", ".COM"].join(optDelimiter);
-      const pathExt = pathExtExe.split(optDelimiter).flatMap((item) => [item, item.toLowerCase()]);
+      const pathExt = pathExtExe.split(optDelimiter).reduce((acc, item) => {
+        acc.push(item);
+        acc.push(item.toLowerCase());
+        return acc;
+      }, []);
       if (cmd.includes(".") && pathExt[0] !== "") {
         pathExt.unshift("");
       }
@@ -20490,7 +20392,7 @@ var require_lib7 = __commonJS((exports, module) => {
       const p = getPathPart(pathEnvPart, cmd);
       for (const ext of pathExt) {
         const withExt = p + ext;
-        const is = isexeSync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
+        const is = isexe.sync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
         if (is) {
           if (!opt.all) {
             return withExt;
@@ -21076,164 +20978,9 @@ var require_make_error = __commonJS((exports, module) => {
   module.exports = makeError;
 });
 
-// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/posix.js
-var require_posix2 = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.sync = exports.isexe = undefined;
-  var fs_1 = __require("fs");
-  var promises_1 = __require("fs/promises");
-  var isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat(await (0, promises_1.stat)(path), options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.isexe = isexe;
-  var sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat((0, fs_1.statSync)(path), options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.sync = sync;
-  var checkStat = (stat, options) => stat.isFile() && checkMode(stat, options);
-  var checkMode = (stat, options) => {
-    const myUid = options.uid ?? process.getuid?.();
-    const myGroups = options.groups ?? process.getgroups?.() ?? [];
-    const myGid = options.gid ?? process.getgid?.() ?? myGroups[0];
-    if (myUid === undefined || myGid === undefined) {
-      throw new Error("cannot get uid or gid");
-    }
-    const groups = new Set([myGid, ...myGroups]);
-    const mod = stat.mode;
-    const uid = stat.uid;
-    const gid = stat.gid;
-    const u = parseInt("100", 8);
-    const g = parseInt("010", 8);
-    const o = parseInt("001", 8);
-    const ug = u | g;
-    return !!(mod & o || mod & g && groups.has(gid) || mod & u && uid === myUid || mod & ug && myUid === 0);
-  };
-});
-
-// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/win32.js
-var require_win322 = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.sync = exports.isexe = undefined;
-  var fs_1 = __require("fs");
-  var promises_1 = __require("fs/promises");
-  var isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat(await (0, promises_1.stat)(path), path, options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.isexe = isexe;
-  var sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-      return checkStat((0, fs_1.statSync)(path), path, options);
-    } catch (e) {
-      const er = e;
-      if (ignoreErrors || er.code === "EACCES")
-        return false;
-      throw er;
-    }
-  };
-  exports.sync = sync;
-  var checkPathExt = (path, options) => {
-    const { pathExt = process.env.PATHEXT || "" } = options;
-    const peSplit = pathExt.split(";");
-    if (peSplit.indexOf("") !== -1) {
-      return true;
-    }
-    for (let i = 0;i < peSplit.length; i++) {
-      const p = peSplit[i].toLowerCase();
-      const ext = path.substring(path.length - p.length).toLowerCase();
-      if (p && ext === p) {
-        return true;
-      }
-    }
-    return false;
-  };
-  var checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, options);
-});
-
-// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/options.js
-var require_options2 = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-});
-
-// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/index.js
-var require_cjs8 = __commonJS((exports) => {
-  var __createBinding = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
-    if (k2 === undefined)
-      k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() {
-        return m[k];
-      } };
-    }
-    Object.defineProperty(o, k2, desc);
-  } : function(o, m, k, k2) {
-    if (k2 === undefined)
-      k2 = k;
-    o[k2] = m[k];
-  });
-  var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-  } : function(o, v) {
-    o["default"] = v;
-  });
-  var __importStar = exports && exports.__importStar || function(mod) {
-    if (mod && mod.__esModule)
-      return mod;
-    var result = {};
-    if (mod != null) {
-      for (var k in mod)
-        if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k))
-          __createBinding(result, mod, k);
-    }
-    __setModuleDefault(result, mod);
-    return result;
-  };
-  var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-    for (var p in m)
-      if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p))
-        __createBinding(exports2, m, p);
-  };
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.sync = exports.isexe = exports.posix = exports.win32 = undefined;
-  var posix = __importStar(require_posix2());
-  exports.posix = posix;
-  var win32 = __importStar(require_win322());
-  exports.win32 = win32;
-  __exportStar(require_options2(), exports);
-  var platform = process.env._ISEXE_TEST_PLATFORM_ || process.platform;
-  var impl = platform === "win32" ? win32 : posix;
-  exports.isexe = impl.isexe;
-  exports.sync = impl.sync;
-});
-
 // node_modules/@npmcli/git/node_modules/which/lib/index.js
 var require_lib9 = __commonJS((exports, module) => {
-  var { isexe, sync: isexeSync } = require_cjs8();
+  var isexe = require_isexe();
   var { join, delimiter, sep, posix } = __require("path");
   var isWindows = process.platform === "win32";
   var rSlash = new RegExp(`[${posix.sep}${sep === posix.sep ? "" : sep}]`.replace(/(\\)/g, "\\$1"));
@@ -21250,7 +20997,11 @@ var require_lib9 = __commonJS((exports, module) => {
     ];
     if (isWindows) {
       const pathExtExe = optPathExt || [".EXE", ".CMD", ".BAT", ".COM"].join(optDelimiter);
-      const pathExt = pathExtExe.split(optDelimiter).flatMap((item) => [item, item.toLowerCase()]);
+      const pathExt = pathExtExe.split(optDelimiter).reduce((acc, item) => {
+        acc.push(item);
+        acc.push(item.toLowerCase());
+        return acc;
+      }, []);
       if (cmd.includes(".") && pathExt[0] !== "") {
         pathExt.unshift("");
       }
@@ -21294,7 +21045,7 @@ var require_lib9 = __commonJS((exports, module) => {
       const p = getPathPart(pathEnvPart, cmd);
       for (const ext of pathExt) {
         const withExt = p + ext;
-        const is = isexeSync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
+        const is = isexe.sync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
         if (is) {
           if (!opt.all) {
             return withExt;
@@ -21386,54 +21137,83 @@ var require_spawn = __commonJS((exports, module) => {
   };
 });
 
-// node_modules/@npmcli/git/node_modules/lru-cache/dist/cjs/index.js
-var require_cjs9 = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.LRUCache = undefined;
+// node_modules/@npmcli/git/node_modules/lru-cache/index.js
+var require_lru_cache3 = __commonJS((exports, module) => {
   var perf = typeof performance === "object" && performance && typeof performance.now === "function" ? performance : Date;
-  var warned = new Set;
-  var PROCESS = typeof process === "object" && !!process ? process : {};
-  var emitWarning = (msg, type, code, fn) => {
-    typeof PROCESS.emitWarning === "function" ? PROCESS.emitWarning(msg, type, code, fn) : console.error(`[${code}] ${type}: ${msg}`);
+  var hasAbortController = typeof AbortController === "function";
+  var AC = hasAbortController ? AbortController : class AbortController2 {
+    constructor() {
+      this.signal = new AS;
+    }
+    abort(reason = new Error("This operation was aborted")) {
+      this.signal.reason = this.signal.reason || reason;
+      this.signal.aborted = true;
+      this.signal.dispatchEvent({
+        type: "abort",
+        target: this.signal
+      });
+    }
   };
-  var AC = globalThis.AbortController;
-  var AS = globalThis.AbortSignal;
-  if (typeof AC === "undefined") {
-    AS = class AbortSignal {
-      onabort;
-      _onabort = [];
-      reason;
-      aborted = false;
-      addEventListener(_, fn) {
-        this._onabort.push(fn);
+  var hasAbortSignal = typeof AbortSignal === "function";
+  var hasACAbortSignal = typeof AC.AbortSignal === "function";
+  var AS = hasAbortSignal ? AbortSignal : hasACAbortSignal ? AC.AbortController : class AbortSignal2 {
+    constructor() {
+      this.reason = undefined;
+      this.aborted = false;
+      this._listeners = [];
+    }
+    dispatchEvent(e) {
+      if (e.type === "abort") {
+        this.aborted = true;
+        this.onabort(e);
+        this._listeners.forEach((f) => f(e), this);
       }
-    };
-    AC = class AbortController {
-      constructor() {
-        warnACPolyfill();
+    }
+    onabort() {
+    }
+    addEventListener(ev, fn) {
+      if (ev === "abort") {
+        this._listeners.push(fn);
       }
-      signal = new AS;
-      abort(reason) {
-        if (this.signal.aborted)
-          return;
-        this.signal.reason = reason;
-        this.signal.aborted = true;
-        for (const fn of this.signal._onabort) {
-          fn(reason);
-        }
-        this.signal.onabort?.(reason);
+    }
+    removeEventListener(ev, fn) {
+      if (ev === "abort") {
+        this._listeners = this._listeners.filter((f) => f !== fn);
       }
-    };
-    let printACPolyfillWarning = PROCESS.env?.LRU_CACHE_IGNORE_AC_WARNING !== "1";
-    const warnACPolyfill = () => {
-      if (!printACPolyfillWarning)
-        return;
-      printACPolyfillWarning = false;
-      emitWarning("AbortController is not defined. If using lru-cache in node 14, load an AbortController polyfill from the `node-abort-controller` package. A minimal polyfill is provided for use by LRUCache.fetch(), but it should not be relied upon in other contexts (eg, passing it to other APIs that use AbortController/AbortSignal might have undesirable effects). You may disable this with LRU_CACHE_IGNORE_AC_WARNING=1 in the env.", "NO_ABORT_CONTROLLER", "ENOTSUP", warnACPolyfill);
-    };
-  }
+    }
+  };
+  var warned = new Set;
+  var deprecatedOption = (opt, instead) => {
+    const code = `LRU_CACHE_OPTION_${opt}`;
+    if (shouldWarn(code)) {
+      warn(code, `${opt} option`, `options.${instead}`, LRUCache);
+    }
+  };
+  var deprecatedMethod = (method, instead) => {
+    const code = `LRU_CACHE_METHOD_${method}`;
+    if (shouldWarn(code)) {
+      const { prototype } = LRUCache;
+      const { get } = Object.getOwnPropertyDescriptor(prototype, method);
+      warn(code, `${method} method`, `cache.${instead}()`, get);
+    }
+  };
+  var deprecatedProperty = (field, instead) => {
+    const code = `LRU_CACHE_PROPERTY_${field}`;
+    if (shouldWarn(code)) {
+      const { prototype } = LRUCache;
+      const { get } = Object.getOwnPropertyDescriptor(prototype, field);
+      warn(code, `${field} property`, `cache.${instead}`, get);
+    }
+  };
+  var emitWarning = (...a) => {
+    typeof process === "object" && process && typeof process.emitWarning === "function" ? process.emitWarning(...a) : console.error(...a);
+  };
   var shouldWarn = (code) => !warned.has(code);
-  var TYPE = Symbol("type");
+  var warn = (code, what, instead, fn) => {
+    warned.add(code);
+    const msg = `The ${what} is deprecated. Please use ${instead} instead.`;
+    emitWarning(msg, "DeprecationWarning", code, fn);
+  };
   var isPosInt = (n) => n && n === Math.floor(n) && n > 0 && isFinite(n);
   var getUintArray = (max) => !isPosInt(max) ? null : max <= Math.pow(2, 8) ? Uint8Array : max <= Math.pow(2, 16) ? Uint16Array : max <= Math.pow(2, 32) ? Uint32Array : max <= Number.MAX_SAFE_INTEGER ? ZeroArray : null;
 
@@ -21445,23 +21225,12 @@ var require_cjs9 = __commonJS((exports) => {
   }
 
   class Stack {
-    heap;
-    length;
-    static #constructing = false;
-    static create(max) {
-      const HeapCls = getUintArray(max);
-      if (!HeapCls)
+    constructor(max) {
+      if (max === 0) {
         return [];
-      Stack.#constructing = true;
-      const s = new Stack(max, HeapCls);
-      Stack.#constructing = false;
-      return s;
-    }
-    constructor(max, HeapCls) {
-      if (!Stack.#constructing) {
-        throw new TypeError("instantiate Stack using Stack.create(n)");
       }
-      this.heap = new HeapCls(max);
+      const UintArray = getUintArray(max);
+      this.heap = new UintArray(max);
       this.length = 0;
     }
     push(n) {
@@ -21473,91 +21242,31 @@ var require_cjs9 = __commonJS((exports) => {
   }
 
   class LRUCache {
-    #max;
-    #maxSize;
-    #dispose;
-    #disposeAfter;
-    #fetchMethod;
-    ttl;
-    ttlResolution;
-    ttlAutopurge;
-    updateAgeOnGet;
-    updateAgeOnHas;
-    allowStale;
-    noDisposeOnSet;
-    noUpdateTTL;
-    maxEntrySize;
-    sizeCalculation;
-    noDeleteOnFetchRejection;
-    noDeleteOnStaleGet;
-    allowStaleOnFetchAbort;
-    allowStaleOnFetchRejection;
-    ignoreFetchAbort;
-    #size;
-    #calculatedSize;
-    #keyMap;
-    #keyList;
-    #valList;
-    #next;
-    #prev;
-    #head;
-    #tail;
-    #free;
-    #disposed;
-    #sizes;
-    #starts;
-    #ttls;
-    #hasDispose;
-    #hasFetchMethod;
-    #hasDisposeAfter;
-    static unsafeExposeInternals(c) {
-      return {
-        starts: c.#starts,
-        ttls: c.#ttls,
-        sizes: c.#sizes,
-        keyMap: c.#keyMap,
-        keyList: c.#keyList,
-        valList: c.#valList,
-        next: c.#next,
-        prev: c.#prev,
-        get head() {
-          return c.#head;
-        },
-        get tail() {
-          return c.#tail;
-        },
-        free: c.#free,
-        isBackgroundFetch: (p) => c.#isBackgroundFetch(p),
-        backgroundFetch: (k, index, options, context) => c.#backgroundFetch(k, index, options, context),
-        moveToTail: (index) => c.#moveToTail(index),
-        indexes: (options) => c.#indexes(options),
-        rindexes: (options) => c.#rindexes(options),
-        isStale: (index) => c.#isStale(index)
-      };
-    }
-    get max() {
-      return this.#max;
-    }
-    get maxSize() {
-      return this.#maxSize;
-    }
-    get calculatedSize() {
-      return this.#calculatedSize;
-    }
-    get size() {
-      return this.#size;
-    }
-    get fetchMethod() {
-      return this.#fetchMethod;
-    }
-    get dispose() {
-      return this.#dispose;
-    }
-    get disposeAfter() {
-      return this.#disposeAfter;
-    }
-    constructor(options) {
-      const { max = 0, ttl, ttlResolution = 1, ttlAutopurge, updateAgeOnGet, updateAgeOnHas, allowStale, dispose, disposeAfter, noDisposeOnSet, noUpdateTTL, maxSize = 0, maxEntrySize = 0, sizeCalculation, fetchMethod, noDeleteOnFetchRejection, noDeleteOnStaleGet, allowStaleOnFetchRejection, allowStaleOnFetchAbort, ignoreFetchAbort } = options;
+    constructor(options = {}) {
+      const {
+        max = 0,
+        ttl,
+        ttlResolution = 1,
+        ttlAutopurge,
+        updateAgeOnGet,
+        updateAgeOnHas,
+        allowStale,
+        dispose,
+        disposeAfter,
+        noDisposeOnSet,
+        noUpdateTTL,
+        maxSize = 0,
+        maxEntrySize = 0,
+        sizeCalculation,
+        fetchMethod,
+        fetchContext,
+        noDeleteOnFetchRejection,
+        noDeleteOnStaleGet,
+        allowStaleOnFetchRejection,
+        allowStaleOnFetchAbort,
+        ignoreFetchAbort
+      } = options;
+      const { length, maxAge, stale } = options instanceof LRUCache ? {} : options;
       if (max !== 0 && !isPosInt(max)) {
         throw new TypeError("max option must be a nonnegative integer");
       }
@@ -21565,45 +21274,46 @@ var require_cjs9 = __commonJS((exports) => {
       if (!UintArray) {
         throw new Error("invalid max value: " + max);
       }
-      this.#max = max;
-      this.#maxSize = maxSize;
-      this.maxEntrySize = maxEntrySize || this.#maxSize;
-      this.sizeCalculation = sizeCalculation;
+      this.max = max;
+      this.maxSize = maxSize;
+      this.maxEntrySize = maxEntrySize || this.maxSize;
+      this.sizeCalculation = sizeCalculation || length;
       if (this.sizeCalculation) {
-        if (!this.#maxSize && !this.maxEntrySize) {
+        if (!this.maxSize && !this.maxEntrySize) {
           throw new TypeError("cannot set sizeCalculation without setting maxSize or maxEntrySize");
         }
         if (typeof this.sizeCalculation !== "function") {
           throw new TypeError("sizeCalculation set to non-function");
         }
       }
-      if (fetchMethod !== undefined && typeof fetchMethod !== "function") {
+      this.fetchMethod = fetchMethod || null;
+      if (this.fetchMethod && typeof this.fetchMethod !== "function") {
         throw new TypeError("fetchMethod must be a function if specified");
       }
-      this.#fetchMethod = fetchMethod;
-      this.#hasFetchMethod = !!fetchMethod;
-      this.#keyMap = new Map;
-      this.#keyList = new Array(max).fill(undefined);
-      this.#valList = new Array(max).fill(undefined);
-      this.#next = new UintArray(max);
-      this.#prev = new UintArray(max);
-      this.#head = 0;
-      this.#tail = 0;
-      this.#free = Stack.create(max);
-      this.#size = 0;
-      this.#calculatedSize = 0;
+      this.fetchContext = fetchContext;
+      if (!this.fetchMethod && fetchContext !== undefined) {
+        throw new TypeError("cannot set fetchContext without fetchMethod");
+      }
+      this.keyMap = new Map;
+      this.keyList = new Array(max).fill(null);
+      this.valList = new Array(max).fill(null);
+      this.next = new UintArray(max);
+      this.prev = new UintArray(max);
+      this.head = 0;
+      this.tail = 0;
+      this.free = new Stack(max);
+      this.initialFill = 1;
+      this.size = 0;
       if (typeof dispose === "function") {
-        this.#dispose = dispose;
+        this.dispose = dispose;
       }
       if (typeof disposeAfter === "function") {
-        this.#disposeAfter = disposeAfter;
-        this.#disposed = [];
+        this.disposeAfter = disposeAfter;
+        this.disposed = [];
       } else {
-        this.#disposeAfter = undefined;
-        this.#disposed = undefined;
+        this.disposeAfter = null;
+        this.disposed = null;
       }
-      this.#hasDispose = !!this.#dispose;
-      this.#hasDisposeAfter = !!this.#disposeAfter;
       this.noDisposeOnSet = !!noDisposeOnSet;
       this.noUpdateTTL = !!noUpdateTTL;
       this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection;
@@ -21611,33 +21321,33 @@ var require_cjs9 = __commonJS((exports) => {
       this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort;
       this.ignoreFetchAbort = !!ignoreFetchAbort;
       if (this.maxEntrySize !== 0) {
-        if (this.#maxSize !== 0) {
-          if (!isPosInt(this.#maxSize)) {
+        if (this.maxSize !== 0) {
+          if (!isPosInt(this.maxSize)) {
             throw new TypeError("maxSize must be a positive integer if specified");
           }
         }
         if (!isPosInt(this.maxEntrySize)) {
           throw new TypeError("maxEntrySize must be a positive integer if specified");
         }
-        this.#initializeSizeTracking();
+        this.initializeSizeTracking();
       }
-      this.allowStale = !!allowStale;
+      this.allowStale = !!allowStale || !!stale;
       this.noDeleteOnStaleGet = !!noDeleteOnStaleGet;
       this.updateAgeOnGet = !!updateAgeOnGet;
       this.updateAgeOnHas = !!updateAgeOnHas;
       this.ttlResolution = isPosInt(ttlResolution) || ttlResolution === 0 ? ttlResolution : 1;
       this.ttlAutopurge = !!ttlAutopurge;
-      this.ttl = ttl || 0;
+      this.ttl = ttl || maxAge || 0;
       if (this.ttl) {
         if (!isPosInt(this.ttl)) {
           throw new TypeError("ttl must be a positive integer if specified");
         }
-        this.#initializeTTLTracking();
+        this.initializeTTLTracking();
       }
-      if (this.#max === 0 && this.ttl === 0 && this.#maxSize === 0) {
+      if (this.max === 0 && this.ttl === 0 && this.maxSize === 0) {
         throw new TypeError("At least one of max, maxSize, or ttl is required");
       }
-      if (!this.ttlAutopurge && !this.#max && !this.#maxSize) {
+      if (!this.ttlAutopurge && !this.max && !this.maxSize) {
         const code = "LRU_CACHE_UNBOUNDED";
         if (shouldWarn(code)) {
           warned.add(code);
@@ -21645,22 +21355,29 @@ var require_cjs9 = __commonJS((exports) => {
           emitWarning(msg, "UnboundedCacheWarning", code, LRUCache);
         }
       }
+      if (stale) {
+        deprecatedOption("stale", "allowStale");
+      }
+      if (maxAge) {
+        deprecatedOption("maxAge", "ttl");
+      }
+      if (length) {
+        deprecatedOption("length", "sizeCalculation");
+      }
     }
     getRemainingTTL(key) {
-      return this.#keyMap.has(key) ? Infinity : 0;
+      return this.has(key, { updateAgeOnHas: false }) ? Infinity : 0;
     }
-    #initializeTTLTracking() {
-      const ttls = new ZeroArray(this.#max);
-      const starts = new ZeroArray(this.#max);
-      this.#ttls = ttls;
-      this.#starts = starts;
-      this.#setItemTTL = (index, ttl, start = perf.now()) => {
-        starts[index] = ttl !== 0 ? start : 0;
-        ttls[index] = ttl;
+    initializeTTLTracking() {
+      this.ttls = new ZeroArray(this.max);
+      this.starts = new ZeroArray(this.max);
+      this.setItemTTL = (index, ttl, start = perf.now()) => {
+        this.starts[index] = ttl !== 0 ? start : 0;
+        this.ttls[index] = ttl;
         if (ttl !== 0 && this.ttlAutopurge) {
           const t = setTimeout(() => {
-            if (this.#isStale(index)) {
-              this.delete(this.#keyList[index]);
+            if (this.isStale(index)) {
+              this.delete(this.keyList[index]);
             }
           }, ttl + 1);
           if (t.unref) {
@@ -21668,18 +21385,15 @@ var require_cjs9 = __commonJS((exports) => {
           }
         }
       };
-      this.#updateItemAge = (index) => {
-        starts[index] = ttls[index] !== 0 ? perf.now() : 0;
+      this.updateItemAge = (index) => {
+        this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0;
       };
-      this.#statusTTL = (status, index) => {
-        if (ttls[index]) {
-          const ttl = ttls[index];
-          const start = starts[index];
-          status.ttl = ttl;
-          status.start = start;
+      this.statusTTL = (status, index) => {
+        if (status) {
+          status.ttl = this.ttls[index];
+          status.start = this.starts[index];
           status.now = cachedNow || getNow();
-          const age = status.now - start;
-          status.remainingTTL = ttl - age;
+          status.remainingTTL = status.now + status.ttl - status.start;
         }
       };
       let cachedNow = 0;
@@ -21695,39 +21409,34 @@ var require_cjs9 = __commonJS((exports) => {
         return n;
       };
       this.getRemainingTTL = (key) => {
-        const index = this.#keyMap.get(key);
+        const index = this.keyMap.get(key);
         if (index === undefined) {
           return 0;
         }
-        const ttl = ttls[index];
-        const start = starts[index];
-        if (ttl === 0 || start === 0) {
-          return Infinity;
-        }
-        const age = (cachedNow || getNow()) - start;
-        return ttl - age;
+        return this.ttls[index] === 0 || this.starts[index] === 0 ? Infinity : this.starts[index] + this.ttls[index] - (cachedNow || getNow());
       };
-      this.#isStale = (index) => {
-        return ttls[index] !== 0 && starts[index] !== 0 && (cachedNow || getNow()) - starts[index] > ttls[index];
+      this.isStale = (index) => {
+        return this.ttls[index] !== 0 && this.starts[index] !== 0 && (cachedNow || getNow()) - this.starts[index] > this.ttls[index];
       };
     }
-    #updateItemAge = () => {
-    };
-    #statusTTL = () => {
-    };
-    #setItemTTL = () => {
-    };
-    #isStale = () => false;
-    #initializeSizeTracking() {
-      const sizes = new ZeroArray(this.#max);
-      this.#calculatedSize = 0;
-      this.#sizes = sizes;
-      this.#removeItemSize = (index) => {
-        this.#calculatedSize -= sizes[index];
-        sizes[index] = 0;
+    updateItemAge(_index) {
+    }
+    statusTTL(_status, _index) {
+    }
+    setItemTTL(_index, _ttl, _start) {
+    }
+    isStale(_index) {
+      return false;
+    }
+    initializeSizeTracking() {
+      this.calculatedSize = 0;
+      this.sizes = new ZeroArray(this.max);
+      this.removeItemSize = (index) => {
+        this.calculatedSize -= this.sizes[index];
+        this.sizes[index] = 0;
       };
-      this.#requireSize = (k, v, size, sizeCalculation) => {
-        if (this.#isBackgroundFetch(v)) {
+      this.requireSize = (k, v, size, sizeCalculation) => {
+        if (this.isBackgroundFetch(v)) {
           return 0;
         }
         if (!isPosInt(size)) {
@@ -21745,151 +21454,150 @@ var require_cjs9 = __commonJS((exports) => {
         }
         return size;
       };
-      this.#addItemSize = (index, size, status) => {
-        sizes[index] = size;
-        if (this.#maxSize) {
-          const maxSize = this.#maxSize - sizes[index];
-          while (this.#calculatedSize > maxSize) {
-            this.#evict(true);
+      this.addItemSize = (index, size, status) => {
+        this.sizes[index] = size;
+        if (this.maxSize) {
+          const maxSize = this.maxSize - this.sizes[index];
+          while (this.calculatedSize > maxSize) {
+            this.evict(true);
           }
         }
-        this.#calculatedSize += sizes[index];
+        this.calculatedSize += this.sizes[index];
         if (status) {
           status.entrySize = size;
-          status.totalCalculatedSize = this.#calculatedSize;
+          status.totalCalculatedSize = this.calculatedSize;
         }
       };
     }
-    #removeItemSize = (_i) => {
-    };
-    #addItemSize = (_i, _s, _st) => {
-    };
-    #requireSize = (_k, _v, size, sizeCalculation) => {
+    removeItemSize(_index) {
+    }
+    addItemSize(_index, _size) {
+    }
+    requireSize(_k, _v, size, sizeCalculation) {
       if (size || sizeCalculation) {
         throw new TypeError("cannot set size without setting maxSize or maxEntrySize on cache");
       }
-      return 0;
-    };
-    *#indexes({ allowStale = this.allowStale } = {}) {
-      if (this.#size) {
-        for (let i = this.#tail;; ) {
-          if (!this.#isValidIndex(i)) {
+    }
+    *indexes({ allowStale = this.allowStale } = {}) {
+      if (this.size) {
+        for (let i = this.tail;; ) {
+          if (!this.isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.#isStale(i)) {
+          if (allowStale || !this.isStale(i)) {
             yield i;
           }
-          if (i === this.#head) {
+          if (i === this.head) {
             break;
           } else {
-            i = this.#prev[i];
+            i = this.prev[i];
           }
         }
       }
     }
-    *#rindexes({ allowStale = this.allowStale } = {}) {
-      if (this.#size) {
-        for (let i = this.#head;; ) {
-          if (!this.#isValidIndex(i)) {
+    *rindexes({ allowStale = this.allowStale } = {}) {
+      if (this.size) {
+        for (let i = this.head;; ) {
+          if (!this.isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.#isStale(i)) {
+          if (allowStale || !this.isStale(i)) {
             yield i;
           }
-          if (i === this.#tail) {
+          if (i === this.tail) {
             break;
           } else {
-            i = this.#next[i];
+            i = this.next[i];
           }
         }
       }
     }
-    #isValidIndex(index) {
-      return index !== undefined && this.#keyMap.get(this.#keyList[index]) === index;
+    isValidIndex(index) {
+      return index !== undefined && this.keyMap.get(this.keyList[index]) === index;
     }
     *entries() {
-      for (const i of this.#indexes()) {
-        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield [this.#keyList[i], this.#valList[i]];
+      for (const i of this.indexes()) {
+        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield [this.keyList[i], this.valList[i]];
         }
       }
     }
     *rentries() {
-      for (const i of this.#rindexes()) {
-        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield [this.#keyList[i], this.#valList[i]];
+      for (const i of this.rindexes()) {
+        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield [this.keyList[i], this.valList[i]];
         }
       }
     }
     *keys() {
-      for (const i of this.#indexes()) {
-        const k = this.#keyList[i];
-        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield k;
+      for (const i of this.indexes()) {
+        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.keyList[i];
         }
       }
     }
     *rkeys() {
-      for (const i of this.#rindexes()) {
-        const k = this.#keyList[i];
-        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield k;
+      for (const i of this.rindexes()) {
+        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.keyList[i];
         }
       }
     }
     *values() {
-      for (const i of this.#indexes()) {
-        const v = this.#valList[i];
-        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield this.#valList[i];
+      for (const i of this.indexes()) {
+        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.valList[i];
         }
       }
     }
     *rvalues() {
-      for (const i of this.#rindexes()) {
-        const v = this.#valList[i];
-        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
-          yield this.#valList[i];
+      for (const i of this.rindexes()) {
+        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
+          yield this.valList[i];
         }
       }
     }
     [Symbol.iterator]() {
       return this.entries();
     }
-    find(fn, getOptions = {}) {
-      for (const i of this.#indexes()) {
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    find(fn, getOptions) {
+      for (const i of this.indexes()) {
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        if (fn(value, this.#keyList[i], this)) {
-          return this.get(this.#keyList[i], getOptions);
+        if (fn(value, this.keyList[i], this)) {
+          return this.get(this.keyList[i], getOptions);
         }
       }
     }
     forEach(fn, thisp = this) {
-      for (const i of this.#indexes()) {
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.indexes()) {
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.#keyList[i], this);
+        fn.call(thisp, value, this.keyList[i], this);
       }
     }
     rforEach(fn, thisp = this) {
-      for (const i of this.#rindexes()) {
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.rindexes()) {
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.#keyList[i], this);
+        fn.call(thisp, value, this.keyList[i], this);
       }
+    }
+    get prune() {
+      deprecatedMethod("prune", "purgeStale");
+      return this.purgeStale;
     }
     purgeStale() {
       let deleted = false;
-      for (const i of this.#rindexes({ allowStale: true })) {
-        if (this.#isStale(i)) {
-          this.delete(this.#keyList[i]);
+      for (const i of this.rindexes({ allowStale: true })) {
+        if (this.isStale(i)) {
+          this.delete(this.keyList[i]);
           deleted = true;
         }
       }
@@ -21897,20 +21605,20 @@ var require_cjs9 = __commonJS((exports) => {
     }
     dump() {
       const arr = [];
-      for (const i of this.#indexes({ allowStale: true })) {
-        const key = this.#keyList[i];
-        const v = this.#valList[i];
-        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
-        if (value === undefined || key === undefined)
+      for (const i of this.indexes({ allowStale: true })) {
+        const key = this.keyList[i];
+        const v = this.valList[i];
+        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+        if (value === undefined)
           continue;
         const entry = { value };
-        if (this.#ttls && this.#starts) {
-          entry.ttl = this.#ttls[i];
-          const age = perf.now() - this.#starts[i];
+        if (this.ttls) {
+          entry.ttl = this.ttls[i];
+          const age = perf.now() - this.starts[i];
           entry.start = Math.floor(Date.now() - age);
         }
-        if (this.#sizes) {
-          entry.size = this.#sizes[i];
+        if (this.sizes) {
+          entry.size = this.sizes[i];
         }
         arr.unshift([key, entry]);
       }
@@ -21926,14 +21634,18 @@ var require_cjs9 = __commonJS((exports) => {
         this.set(key, entry.value, entry);
       }
     }
-    set(k, v, setOptions = {}) {
-      if (v === undefined) {
-        this.delete(k);
-        return this;
-      }
-      const { ttl = this.ttl, start, noDisposeOnSet = this.noDisposeOnSet, sizeCalculation = this.sizeCalculation, status } = setOptions;
-      let { noUpdateTTL = this.noUpdateTTL } = setOptions;
-      const size = this.#requireSize(k, v, setOptions.size || 0, sizeCalculation);
+    dispose(_v, _k, _reason) {
+    }
+    set(k, v, {
+      ttl = this.ttl,
+      start,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      status
+    } = {}) {
+      size = this.requireSize(k, v, size, sizeCalculation);
       if (this.maxEntrySize && size > this.maxEntrySize) {
         if (status) {
           status.set = "miss";
@@ -21942,49 +21654,41 @@ var require_cjs9 = __commonJS((exports) => {
         this.delete(k);
         return this;
       }
-      let index = this.#size === 0 ? undefined : this.#keyMap.get(k);
+      let index = this.size === 0 ? undefined : this.keyMap.get(k);
       if (index === undefined) {
-        index = this.#size === 0 ? this.#tail : this.#free.length !== 0 ? this.#free.pop() : this.#size === this.#max ? this.#evict(false) : this.#size;
-        this.#keyList[index] = k;
-        this.#valList[index] = v;
-        this.#keyMap.set(k, index);
-        this.#next[this.#tail] = index;
-        this.#prev[index] = this.#tail;
-        this.#tail = index;
-        this.#size++;
-        this.#addItemSize(index, size, status);
-        if (status)
+        index = this.newIndex();
+        this.keyList[index] = k;
+        this.valList[index] = v;
+        this.keyMap.set(k, index);
+        this.next[this.tail] = index;
+        this.prev[index] = this.tail;
+        this.tail = index;
+        this.size++;
+        this.addItemSize(index, size, status);
+        if (status) {
           status.set = "add";
+        }
         noUpdateTTL = false;
       } else {
-        this.#moveToTail(index);
-        const oldVal = this.#valList[index];
+        this.moveToTail(index);
+        const oldVal = this.valList[index];
         if (v !== oldVal) {
-          if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
+          if (this.isBackgroundFetch(oldVal)) {
             oldVal.__abortController.abort(new Error("replaced"));
-            const { __staleWhileFetching: s } = oldVal;
-            if (s !== undefined && !noDisposeOnSet) {
-              if (this.#hasDispose) {
-                this.#dispose?.(s, k, "set");
+          } else {
+            if (!noDisposeOnSet) {
+              this.dispose(oldVal, k, "set");
+              if (this.disposeAfter) {
+                this.disposed.push([oldVal, k, "set"]);
               }
-              if (this.#hasDisposeAfter) {
-                this.#disposed?.push([s, k, "set"]);
-              }
-            }
-          } else if (!noDisposeOnSet) {
-            if (this.#hasDispose) {
-              this.#dispose?.(oldVal, k, "set");
-            }
-            if (this.#hasDisposeAfter) {
-              this.#disposed?.push([oldVal, k, "set"]);
             }
           }
-          this.#removeItemSize(index);
-          this.#addItemSize(index, size, status);
-          this.#valList[index] = v;
+          this.removeItemSize(index);
+          this.valList[index] = v;
+          this.addItemSize(index, size, status);
           if (status) {
             status.set = "replace";
-            const oldValue = oldVal && this.#isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
+            const oldValue = oldVal && this.isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
             if (oldValue !== undefined)
               status.oldValue = oldValue;
           }
@@ -21992,122 +21696,98 @@ var require_cjs9 = __commonJS((exports) => {
           status.set = "update";
         }
       }
-      if (ttl !== 0 && !this.#ttls) {
-        this.#initializeTTLTracking();
+      if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
+        this.initializeTTLTracking();
       }
-      if (this.#ttls) {
-        if (!noUpdateTTL) {
-          this.#setItemTTL(index, ttl, start);
-        }
-        if (status)
-          this.#statusTTL(status, index);
+      if (!noUpdateTTL) {
+        this.setItemTTL(index, ttl, start);
       }
-      if (!noDisposeOnSet && this.#hasDisposeAfter && this.#disposed) {
-        const dt = this.#disposed;
-        let task;
-        while (task = dt?.shift()) {
-          this.#disposeAfter?.(...task);
+      this.statusTTL(status, index);
+      if (this.disposeAfter) {
+        while (this.disposed.length) {
+          this.disposeAfter(...this.disposed.shift());
         }
       }
       return this;
     }
+    newIndex() {
+      if (this.size === 0) {
+        return this.tail;
+      }
+      if (this.size === this.max && this.max !== 0) {
+        return this.evict(false);
+      }
+      if (this.free.length !== 0) {
+        return this.free.pop();
+      }
+      return this.initialFill++;
+    }
     pop() {
-      try {
-        while (this.#size) {
-          const val = this.#valList[this.#head];
-          this.#evict(true);
-          if (this.#isBackgroundFetch(val)) {
-            if (val.__staleWhileFetching) {
-              return val.__staleWhileFetching;
-            }
-          } else if (val !== undefined) {
-            return val;
-          }
-        }
-      } finally {
-        if (this.#hasDisposeAfter && this.#disposed) {
-          const dt = this.#disposed;
-          let task;
-          while (task = dt?.shift()) {
-            this.#disposeAfter?.(...task);
-          }
-        }
+      if (this.size) {
+        const val = this.valList[this.head];
+        this.evict(true);
+        return val;
       }
     }
-    #evict(free) {
-      const head = this.#head;
-      const k = this.#keyList[head];
-      const v = this.#valList[head];
-      if (this.#hasFetchMethod && this.#isBackgroundFetch(v)) {
+    evict(free) {
+      const head = this.head;
+      const k = this.keyList[head];
+      const v = this.valList[head];
+      if (this.isBackgroundFetch(v)) {
         v.__abortController.abort(new Error("evicted"));
-      } else if (this.#hasDispose || this.#hasDisposeAfter) {
-        if (this.#hasDispose) {
-          this.#dispose?.(v, k, "evict");
-        }
-        if (this.#hasDisposeAfter) {
-          this.#disposed?.push([v, k, "evict"]);
-        }
-      }
-      this.#removeItemSize(head);
-      if (free) {
-        this.#keyList[head] = undefined;
-        this.#valList[head] = undefined;
-        this.#free.push(head);
-      }
-      if (this.#size === 1) {
-        this.#head = this.#tail = 0;
-        this.#free.length = 0;
       } else {
-        this.#head = this.#next[head];
+        this.dispose(v, k, "evict");
+        if (this.disposeAfter) {
+          this.disposed.push([v, k, "evict"]);
+        }
       }
-      this.#keyMap.delete(k);
-      this.#size--;
+      this.removeItemSize(head);
+      if (free) {
+        this.keyList[head] = null;
+        this.valList[head] = null;
+        this.free.push(head);
+      }
+      this.head = this.next[head];
+      this.keyMap.delete(k);
+      this.size--;
       return head;
     }
-    has(k, hasOptions = {}) {
-      const { updateAgeOnHas = this.updateAgeOnHas, status } = hasOptions;
-      const index = this.#keyMap.get(k);
+    has(k, { updateAgeOnHas = this.updateAgeOnHas, status } = {}) {
+      const index = this.keyMap.get(k);
       if (index !== undefined) {
-        const v = this.#valList[index];
-        if (this.#isBackgroundFetch(v) && v.__staleWhileFetching === undefined) {
-          return false;
-        }
-        if (!this.#isStale(index)) {
+        if (!this.isStale(index)) {
           if (updateAgeOnHas) {
-            this.#updateItemAge(index);
+            this.updateItemAge(index);
           }
-          if (status) {
+          if (status)
             status.has = "hit";
-            this.#statusTTL(status, index);
-          }
+          this.statusTTL(status, index);
           return true;
         } else if (status) {
           status.has = "stale";
-          this.#statusTTL(status, index);
+          this.statusTTL(status, index);
         }
       } else if (status) {
         status.has = "miss";
       }
       return false;
     }
-    peek(k, peekOptions = {}) {
-      const { allowStale = this.allowStale } = peekOptions;
-      const index = this.#keyMap.get(k);
-      if (index !== undefined && (allowStale || !this.#isStale(index))) {
-        const v = this.#valList[index];
-        return this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    peek(k, { allowStale = this.allowStale } = {}) {
+      const index = this.keyMap.get(k);
+      if (index !== undefined && (allowStale || !this.isStale(index))) {
+        const v = this.valList[index];
+        return this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
       }
     }
-    #backgroundFetch(k, index, options, context) {
-      const v = index === undefined ? undefined : this.#valList[index];
-      if (this.#isBackgroundFetch(v)) {
+    backgroundFetch(k, index, options, context) {
+      const v = index === undefined ? undefined : this.valList[index];
+      if (this.isBackgroundFetch(v)) {
         return v;
       }
       const ac = new AC;
-      const { signal } = options;
-      signal?.addEventListener("abort", () => ac.abort(signal.reason), {
-        signal: ac.signal
-      });
+      if (options.signal) {
+        options.signal.addEventListener("abort", () => ac.abort(options.signal.reason));
+      }
       const fetchOpts = {
         signal: ac.signal,
         options,
@@ -22129,11 +21809,10 @@ var require_cjs9 = __commonJS((exports) => {
         if (aborted && !ignoreAbort && !updateCache) {
           return fetchFail(ac.signal.reason);
         }
-        const bf2 = p;
-        if (this.#valList[index] === p) {
+        if (this.valList[index] === p) {
           if (v2 === undefined) {
-            if (bf2.__staleWhileFetching) {
-              this.#valList[index] = bf2.__staleWhileFetching;
+            if (p.__staleWhileFetching) {
+              this.valList[index] = p.__staleWhileFetching;
             } else {
               this.delete(k);
             }
@@ -22157,32 +21836,28 @@ var require_cjs9 = __commonJS((exports) => {
         const allowStaleAborted = aborted && options.allowStaleOnFetchAbort;
         const allowStale = allowStaleAborted || options.allowStaleOnFetchRejection;
         const noDelete = allowStale || options.noDeleteOnFetchRejection;
-        const bf2 = p;
-        if (this.#valList[index] === p) {
-          const del = !noDelete || bf2.__staleWhileFetching === undefined;
+        if (this.valList[index] === p) {
+          const del = !noDelete || p.__staleWhileFetching === undefined;
           if (del) {
             this.delete(k);
           } else if (!allowStaleAborted) {
-            this.#valList[index] = bf2.__staleWhileFetching;
+            this.valList[index] = p.__staleWhileFetching;
           }
         }
         if (allowStale) {
-          if (options.status && bf2.__staleWhileFetching !== undefined) {
+          if (options.status && p.__staleWhileFetching !== undefined) {
             options.status.returnedStale = true;
           }
-          return bf2.__staleWhileFetching;
-        } else if (bf2.__returned === bf2) {
+          return p.__staleWhileFetching;
+        } else if (p.__returned === p) {
           throw er;
         }
       };
       const pcall = (res, rej) => {
-        const fmp = this.#fetchMethod?.(k, v, fetchOpts);
-        if (fmp && fmp instanceof Promise) {
-          fmp.then((v2) => res(v2 === undefined ? undefined : v2), rej);
-        }
+        this.fetchMethod(k, v, fetchOpts).then((v2) => res(v2), rej);
         ac.signal.addEventListener("abort", () => {
           if (!options.ignoreFetchAbort || options.allowStaleOnFetchAbort) {
-            res(undefined);
+            res();
             if (options.allowStaleOnFetchAbort) {
               res = (v2) => cb(v2, true);
             }
@@ -22192,45 +21867,39 @@ var require_cjs9 = __commonJS((exports) => {
       if (options.status)
         options.status.fetchDispatched = true;
       const p = new Promise(pcall).then(cb, eb);
-      const bf = Object.assign(p, {
-        __abortController: ac,
-        __staleWhileFetching: v,
-        __returned: undefined
-      });
+      p.__abortController = ac;
+      p.__staleWhileFetching = v;
+      p.__returned = null;
       if (index === undefined) {
-        this.set(k, bf, { ...fetchOpts.options, status: undefined });
-        index = this.#keyMap.get(k);
+        this.set(k, p, { ...fetchOpts.options, status: undefined });
+        index = this.keyMap.get(k);
       } else {
-        this.#valList[index] = bf;
+        this.valList[index] = p;
       }
-      return bf;
+      return p;
     }
-    #isBackgroundFetch(p) {
-      if (!this.#hasFetchMethod)
-        return false;
-      const b = p;
-      return !!b && b instanceof Promise && b.hasOwnProperty("__staleWhileFetching") && b.__abortController instanceof AC;
+    isBackgroundFetch(p) {
+      return p && typeof p === "object" && typeof p.then === "function" && Object.prototype.hasOwnProperty.call(p, "__staleWhileFetching") && Object.prototype.hasOwnProperty.call(p, "__returned") && (p.__returned === p || p.__returned === null);
     }
-    async fetch(k, fetchOptions = {}) {
-      const {
-        allowStale = this.allowStale,
-        updateAgeOnGet = this.updateAgeOnGet,
-        noDeleteOnStaleGet = this.noDeleteOnStaleGet,
-        ttl = this.ttl,
-        noDisposeOnSet = this.noDisposeOnSet,
-        size = 0,
-        sizeCalculation = this.sizeCalculation,
-        noUpdateTTL = this.noUpdateTTL,
-        noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
-        allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
-        ignoreFetchAbort = this.ignoreFetchAbort,
-        allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
-        context,
-        forceRefresh = false,
-        status,
-        signal
-      } = fetchOptions;
-      if (!this.#hasFetchMethod) {
+    async fetch(k, {
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      ttl = this.ttl,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
+      ignoreFetchAbort = this.ignoreFetchAbort,
+      allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
+      fetchContext = this.fetchContext,
+      forceRefresh = false,
+      status,
+      signal
+    } = {}) {
+      if (!this.fetchMethod) {
         if (status)
           status.fetch = "get";
         return this.get(k, {
@@ -22256,15 +21925,15 @@ var require_cjs9 = __commonJS((exports) => {
         status,
         signal
       };
-      let index = this.#keyMap.get(k);
+      let index = this.keyMap.get(k);
       if (index === undefined) {
         if (status)
           status.fetch = "miss";
-        const p = this.#backgroundFetch(k, index, options, context);
+        const p = this.backgroundFetch(k, index, options, fetchContext);
         return p.__returned = p;
       } else {
-        const v = this.#valList[index];
-        if (this.#isBackgroundFetch(v)) {
+        const v = this.valList[index];
+        if (this.isBackgroundFetch(v)) {
           const stale = allowStale && v.__staleWhileFetching !== undefined;
           if (status) {
             status.fetch = "inflight";
@@ -22273,50 +21942,52 @@ var require_cjs9 = __commonJS((exports) => {
           }
           return stale ? v.__staleWhileFetching : v.__returned = v;
         }
-        const isStale = this.#isStale(index);
+        const isStale = this.isStale(index);
         if (!forceRefresh && !isStale) {
           if (status)
             status.fetch = "hit";
-          this.#moveToTail(index);
+          this.moveToTail(index);
           if (updateAgeOnGet) {
-            this.#updateItemAge(index);
+            this.updateItemAge(index);
           }
-          if (status)
-            this.#statusTTL(status, index);
+          this.statusTTL(status, index);
           return v;
         }
-        const p = this.#backgroundFetch(k, index, options, context);
+        const p = this.backgroundFetch(k, index, options, fetchContext);
         const hasStale = p.__staleWhileFetching !== undefined;
         const staleVal = hasStale && allowStale;
         if (status) {
-          status.fetch = isStale ? "stale" : "refresh";
+          status.fetch = hasStale && isStale ? "stale" : "refresh";
           if (staleVal && isStale)
             status.returnedStale = true;
         }
         return staleVal ? p.__staleWhileFetching : p.__returned = p;
       }
     }
-    get(k, getOptions = {}) {
-      const { allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, status } = getOptions;
-      const index = this.#keyMap.get(k);
+    get(k, {
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      status
+    } = {}) {
+      const index = this.keyMap.get(k);
       if (index !== undefined) {
-        const value = this.#valList[index];
-        const fetching = this.#isBackgroundFetch(value);
-        if (status)
-          this.#statusTTL(status, index);
-        if (this.#isStale(index)) {
+        const value = this.valList[index];
+        const fetching = this.isBackgroundFetch(value);
+        this.statusTTL(status, index);
+        if (this.isStale(index)) {
           if (status)
             status.get = "stale";
           if (!fetching) {
             if (!noDeleteOnStaleGet) {
               this.delete(k);
             }
-            if (status && allowStale)
-              status.returnedStale = true;
+            if (status)
+              status.returnedStale = allowStale;
             return allowStale ? value : undefined;
           } else {
-            if (status && allowStale && value.__staleWhileFetching !== undefined) {
-              status.returnedStale = true;
+            if (status) {
+              status.returnedStale = allowStale && value.__staleWhileFetching !== undefined;
             }
             return allowStale ? value.__staleWhileFetching : undefined;
           }
@@ -22326,9 +21997,9 @@ var require_cjs9 = __commonJS((exports) => {
           if (fetching) {
             return value.__staleWhileFetching;
           }
-          this.#moveToTail(index);
+          this.moveToTail(index);
           if (updateAgeOnGet) {
-            this.#updateItemAge(index);
+            this.updateItemAge(index);
           }
           return value;
         }
@@ -22336,107 +22007,118 @@ var require_cjs9 = __commonJS((exports) => {
         status.get = "miss";
       }
     }
-    #connect(p, n) {
-      this.#prev[n] = p;
-      this.#next[p] = n;
+    connect(p, n) {
+      this.prev[n] = p;
+      this.next[p] = n;
     }
-    #moveToTail(index) {
-      if (index !== this.#tail) {
-        if (index === this.#head) {
-          this.#head = this.#next[index];
+    moveToTail(index) {
+      if (index !== this.tail) {
+        if (index === this.head) {
+          this.head = this.next[index];
         } else {
-          this.#connect(this.#prev[index], this.#next[index]);
+          this.connect(this.prev[index], this.next[index]);
         }
-        this.#connect(this.#tail, index);
-        this.#tail = index;
+        this.connect(this.tail, index);
+        this.tail = index;
       }
+    }
+    get del() {
+      deprecatedMethod("del", "delete");
+      return this.delete;
     }
     delete(k) {
       let deleted = false;
-      if (this.#size !== 0) {
-        const index = this.#keyMap.get(k);
+      if (this.size !== 0) {
+        const index = this.keyMap.get(k);
         if (index !== undefined) {
           deleted = true;
-          if (this.#size === 1) {
+          if (this.size === 1) {
             this.clear();
           } else {
-            this.#removeItemSize(index);
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v)) {
+            this.removeItemSize(index);
+            const v = this.valList[index];
+            if (this.isBackgroundFetch(v)) {
               v.__abortController.abort(new Error("deleted"));
-            } else if (this.#hasDispose || this.#hasDisposeAfter) {
-              if (this.#hasDispose) {
-                this.#dispose?.(v, k, "delete");
-              }
-              if (this.#hasDisposeAfter) {
-                this.#disposed?.push([v, k, "delete"]);
-              }
-            }
-            this.#keyMap.delete(k);
-            this.#keyList[index] = undefined;
-            this.#valList[index] = undefined;
-            if (index === this.#tail) {
-              this.#tail = this.#prev[index];
-            } else if (index === this.#head) {
-              this.#head = this.#next[index];
             } else {
-              this.#next[this.#prev[index]] = this.#next[index];
-              this.#prev[this.#next[index]] = this.#prev[index];
+              this.dispose(v, k, "delete");
+              if (this.disposeAfter) {
+                this.disposed.push([v, k, "delete"]);
+              }
             }
-            this.#size--;
-            this.#free.push(index);
+            this.keyMap.delete(k);
+            this.keyList[index] = null;
+            this.valList[index] = null;
+            if (index === this.tail) {
+              this.tail = this.prev[index];
+            } else if (index === this.head) {
+              this.head = this.next[index];
+            } else {
+              this.next[this.prev[index]] = this.next[index];
+              this.prev[this.next[index]] = this.prev[index];
+            }
+            this.size--;
+            this.free.push(index);
           }
         }
       }
-      if (this.#hasDisposeAfter && this.#disposed?.length) {
-        const dt = this.#disposed;
-        let task;
-        while (task = dt?.shift()) {
-          this.#disposeAfter?.(...task);
+      if (this.disposed) {
+        while (this.disposed.length) {
+          this.disposeAfter(...this.disposed.shift());
         }
       }
       return deleted;
     }
     clear() {
-      for (const index of this.#rindexes({ allowStale: true })) {
-        const v = this.#valList[index];
-        if (this.#isBackgroundFetch(v)) {
+      for (const index of this.rindexes({ allowStale: true })) {
+        const v = this.valList[index];
+        if (this.isBackgroundFetch(v)) {
           v.__abortController.abort(new Error("deleted"));
         } else {
-          const k = this.#keyList[index];
-          if (this.#hasDispose) {
-            this.#dispose?.(v, k, "delete");
-          }
-          if (this.#hasDisposeAfter) {
-            this.#disposed?.push([v, k, "delete"]);
+          const k = this.keyList[index];
+          this.dispose(v, k, "delete");
+          if (this.disposeAfter) {
+            this.disposed.push([v, k, "delete"]);
           }
         }
       }
-      this.#keyMap.clear();
-      this.#valList.fill(undefined);
-      this.#keyList.fill(undefined);
-      if (this.#ttls && this.#starts) {
-        this.#ttls.fill(0);
-        this.#starts.fill(0);
+      this.keyMap.clear();
+      this.valList.fill(null);
+      this.keyList.fill(null);
+      if (this.ttls) {
+        this.ttls.fill(0);
+        this.starts.fill(0);
       }
-      if (this.#sizes) {
-        this.#sizes.fill(0);
+      if (this.sizes) {
+        this.sizes.fill(0);
       }
-      this.#head = 0;
-      this.#tail = 0;
-      this.#free.length = 0;
-      this.#calculatedSize = 0;
-      this.#size = 0;
-      if (this.#hasDisposeAfter && this.#disposed) {
-        const dt = this.#disposed;
-        let task;
-        while (task = dt?.shift()) {
-          this.#disposeAfter?.(...task);
+      this.head = 0;
+      this.tail = 0;
+      this.initialFill = 1;
+      this.free.length = 0;
+      this.calculatedSize = 0;
+      this.size = 0;
+      if (this.disposed) {
+        while (this.disposed.length) {
+          this.disposeAfter(...this.disposed.shift());
         }
       }
     }
+    get reset() {
+      deprecatedMethod("reset", "clear");
+      return this.clear;
+    }
+    get length() {
+      deprecatedProperty("length", "size");
+      return this.size;
+    }
+    static get AbortController() {
+      return AC;
+    }
+    static get AbortSignal() {
+      return AS;
+    }
   }
-  exports.LRUCache = LRUCache;
+  module.exports = LRUCache;
 });
 
 // node_modules/@npmcli/git/lib/lines-to-revs.js
@@ -22549,8 +22231,8 @@ var require_lines_to_revs = __commonJS((exports, module) => {
 var require_revs = __commonJS((exports, module) => {
   var pinflight = require_inflight();
   var spawn = require_spawn();
-  var { LRUCache } = require_cjs9();
-  var revsCache = new LRUCache({
+  var LRU = require_lru_cache3();
+  var revsCache = new LRU({
     max: 100,
     ttl: 5 * 60 * 1000
   });
@@ -22846,10 +22528,10 @@ var require_npa = __commonJS((exports, module) => {
     this.gitSubdir = opts.gitSubdir;
     this.hosted = opts.hosted;
   };
-  var setGitAttrs = function(res, committish) {
+  var setGitCommittish = function(res, committish) {
     if (!committish) {
       res.gitCommittish = null;
-      return;
+      return res;
     }
     for (const part of committish.split("::")) {
       if (!part.includes(":")) {
@@ -22882,6 +22564,7 @@ var require_npa = __commonJS((exports, module) => {
       }
       log.warn("npm-package-arg", `ignoring unknown key "${name}"`);
     }
+    return res;
   };
   var fromFile = function(res, where) {
     if (!where) {
@@ -22895,10 +22578,10 @@ var require_npa = __commonJS((exports, module) => {
     const rawWithPrefix = prefix + res.rawSpec;
     let rawNoPrefix = rawWithPrefix.replace(/^file:/, "");
     try {
-      resolvedUrl = new URL2(rawWithPrefix, `file://${path.resolve(where)}/`);
-      specUrl = new URL2(rawWithPrefix);
+      resolvedUrl = new url.URL(rawWithPrefix, `file://${path.resolve(where)}/`);
+      specUrl = new url.URL(rawWithPrefix);
     } catch (originalError) {
-      const er = new Error("Invalid file: URL, must comply with RFC 8089");
+      const er = new Error("Invalid file: URL, must comply with RFC 8909");
       throw Object.assign(er, {
         raw: res.rawSpec,
         spec: res,
@@ -22906,17 +22589,26 @@ var require_npa = __commonJS((exports, module) => {
         originalError
       });
     }
-    if (resolvedUrl.host && resolvedUrl.host !== "localhost") {
-      const rawSpec = res.rawSpec.replace(/^file:\/\//, "file:///");
-      resolvedUrl = new URL2(rawSpec, `file://${path.resolve(where)}/`);
-      specUrl = new URL2(rawSpec);
-      rawNoPrefix = rawSpec.replace(/^file:/, "");
+    if (process.env.NPM_PACKAGE_ARG_8909_STRICT !== "1") {
+      if (resolvedUrl.host && resolvedUrl.host !== "localhost") {
+        const rawSpec = res.rawSpec.replace(/^file:\/\//, "file:///");
+        resolvedUrl = new url.URL(rawSpec, `file://${path.resolve(where)}/`);
+        specUrl = new url.URL(rawSpec);
+        rawNoPrefix = rawSpec.replace(/^file:/, "");
+      }
+      if (/^\/{1,3}\.\.?(\/|$)/.test(rawNoPrefix)) {
+        const rawSpec = res.rawSpec.replace(/^file:\/{1,3}/, "file:");
+        resolvedUrl = new url.URL(rawSpec, `file://${path.resolve(where)}/`);
+        specUrl = new url.URL(rawSpec);
+        rawNoPrefix = rawSpec.replace(/^file:/, "");
+      }
     }
-    if (/^\/{1,3}\.\.?(\/|$)/.test(rawNoPrefix)) {
-      const rawSpec = res.rawSpec.replace(/^file:\/{1,3}/, "file:");
-      resolvedUrl = new URL2(rawSpec, `file://${path.resolve(where)}/`);
-      specUrl = new URL2(rawSpec);
-      rawNoPrefix = rawSpec.replace(/^file:/, "");
+    if (resolvedUrl.host && resolvedUrl.host !== "localhost") {
+      const msg = `Invalid file: URL, must be absolute if // present`;
+      throw Object.assign(new Error(msg), {
+        raw: res.rawSpec,
+        parsed: resolvedUrl
+      });
     }
     let specPath = decodeURIComponent(specUrl.pathname);
     let resolvedPath = decodeURIComponent(resolvedUrl.pathname);
@@ -22940,56 +22632,55 @@ var require_npa = __commonJS((exports, module) => {
     res.hosted = hosted;
     res.saveSpec = hosted.toString({ noGitPlus: false, noCommittish: false });
     res.fetchSpec = hosted.getDefaultRepresentation() === "shortcut" ? null : hosted.toString();
-    setGitAttrs(res, hosted.committish);
-    return res;
+    return setGitCommittish(res, hosted.committish);
   };
   var unsupportedURLType = function(protocol, spec) {
     const err = new Error(`Unsupported URL Type "${protocol}": ${spec}`);
     err.code = "EUNSUPPORTEDPROTOCOL";
     return err;
   };
+  var matchGitScp = function(spec) {
+    const matched = spec.match(/^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i);
+    return matched && !matched[1].match(/:[0-9]+\/?.*$/i) && {
+      fetchSpec: matched[1],
+      gitCommittish: matched[2] == null ? null : matched[2]
+    };
+  };
   var fromURL = function(res) {
-    let rawSpec = res.rawSpec;
-    res.saveSpec = rawSpec;
-    if (rawSpec.startsWith("git+ssh:")) {
-      const matched = rawSpec.match(/^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i);
-      if (matched && !matched[1].match(/:[0-9]+\/?.*$/i)) {
-        res.type = "git";
-        setGitAttrs(res, matched[2]);
-        res.fetchSpec = matched[1];
-        return res;
-      }
-    } else if (rawSpec.startsWith("git+file://")) {
-      rawSpec = rawSpec.replace(/\\/g, "/");
-    }
-    const parsedUrl = new URL2(rawSpec);
-    switch (parsedUrl.protocol) {
+    const urlparse = url.parse(res.rawSpec);
+    res.saveSpec = res.rawSpec;
+    switch (urlparse.protocol) {
       case "git:":
       case "git+http:":
       case "git+https:":
       case "git+rsync:":
       case "git+ftp:":
       case "git+file:":
-      case "git+ssh:":
+      case "git+ssh:": {
         res.type = "git";
-        setGitAttrs(res, parsedUrl.hash.slice(1));
-        if (parsedUrl.protocol === "git+file:" && /^git\+file:\/\/[a-z]:/i.test(rawSpec)) {
-          res.fetchSpec = `git+file://${parsedUrl.host.toLowerCase()}:${parsedUrl.pathname}`;
+        const match = urlparse.protocol === "git+ssh:" ? matchGitScp(res.rawSpec) : null;
+        if (match) {
+          setGitCommittish(res, match.gitCommittish);
+          res.fetchSpec = match.fetchSpec;
         } else {
-          parsedUrl.hash = "";
-          res.fetchSpec = parsedUrl.toString();
-        }
-        if (res.fetchSpec.startsWith("git+")) {
-          res.fetchSpec = res.fetchSpec.slice(4);
+          setGitCommittish(res, urlparse.hash != null ? urlparse.hash.slice(1) : "");
+          urlparse.protocol = urlparse.protocol.replace(/^git[+]/, "");
+          if (urlparse.protocol === "file:" && /^git\+file:\/\/[a-z]:/i.test(res.rawSpec)) {
+            urlparse.host += ":";
+            urlparse.hostname += ":";
+          }
+          delete urlparse.hash;
+          res.fetchSpec = url.format(urlparse);
         }
         break;
+      }
       case "http:":
       case "https:":
         res.type = "remote";
         res.fetchSpec = res.saveSpec;
         break;
       default:
-        throw unsupportedURLType(parsedUrl.protocol, rawSpec);
+        throw unsupportedURLType(urlparse.protocol, res.rawSpec);
     }
     return res;
   };
@@ -23031,7 +22722,7 @@ var require_npa = __commonJS((exports, module) => {
   module.exports.resolve = resolve;
   module.exports.toPurl = toPurl;
   module.exports.Result = Result;
-  var { URL: URL2 } = __require("url");
+  var url = __require("url");
   var HostedGit = require_lib5();
   var semver = require_semver2();
   var path = global.FAKE_WINDOWS ? __require("path").win32 : __require("path");
