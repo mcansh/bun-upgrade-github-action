@@ -115,16 +115,20 @@ async function run(): Promise<void> {
       sha: commit.data.sha,
     });
 
-    let pr = await octokit.rest.pulls.create({
-      owner,
-      repo,
-      base: "main",
-      head: `refs/heads/${branch}`,
-      title: `Update ${dep} to latest version`,
-      body: `This PR updates ${dep} to the latest version.`,
-    });
+    try {
+      let pr = await octokit.rest.pulls.create({
+        owner,
+        repo,
+        base: "main",
+        head: `refs/heads/${branch}`,
+        title: `Update ${dep} to latest version`,
+        body: `This PR updates ${dep} to the latest version.`,
+      });
+      console.log(`💿 Created PR ${pr.data.html_url}`);
+    } catch (e) {
+      console.error(e);
+    }
 
-    console.log(`💿 Created PR ${pr.data.html_url}`);
     continue;
   }
 }
