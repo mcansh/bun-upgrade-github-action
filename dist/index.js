@@ -31407,14 +31407,14 @@ async function run() {
         await octokit.rest.git.createRef({
             owner,
             repo,
-            ref: `heads/${branch}`,
+            ref: `refs/heads/${branch}`,
             sha: commit.data.sha,
         });
         let pr = await octokit.rest.pulls.create({
             owner,
             repo,
             base: "main",
-            head: `heads/${branch}`,
+            head: `refs/heads/${branch}`,
             title: `Update ${dep} to latest version`,
             body: `This PR updates ${dep} to the latest version.`,
         });

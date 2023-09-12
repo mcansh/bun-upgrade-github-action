@@ -116,7 +116,7 @@ async function run(): Promise<void> {
       await octokit.rest.git.createRef({
         owner,
         repo,
-        ref: `heads/${branch}`,
+        ref: `refs/heads/${branch}`,
         sha: commit.data.sha,
       });
 
@@ -124,7 +124,7 @@ async function run(): Promise<void> {
         owner,
         repo,
         base: "main",
-        head: `heads/${branch}`,
+        head: `refs/heads/${branch}`,
         title: `Update ${dep} to latest version`,
         body: `This PR updates ${dep} to the latest version.`,
       });
