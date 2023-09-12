@@ -5,10 +5,9 @@
   "main": "./dist/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && ncc build --source-map --license licenses.txt",
     "lint": " eslint --cache --fix . --ignore-path .gitignore",
-    "package": "ncc build --source-map --license licenses.txt",
-    "all": "run-s lint build package"
+    "all": "run-s lint build"
   },
   "keywords": [],
   "author": "Logan McAnsh <logan@mcan.sh> (https://mcan.sh/)",
