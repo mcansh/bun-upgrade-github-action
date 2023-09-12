@@ -31407,7 +31407,7 @@ async function run() {
         let existingRef = await octokit.rest.git.getRef({
             owner,
             repo,
-            ref: `refs/heads/${branch}`,
+            ref: `heads/${branch}`,
         });
         if (existingRef) {
             await octokit.rest.git.updateRef({

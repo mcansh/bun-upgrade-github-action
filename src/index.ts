@@ -111,7 +111,7 @@ async function run(): Promise<void> {
     let existingRef = await octokit.rest.git.getRef({
       owner,
       repo,
-      ref: `refs/heads/${branch}`,
+      ref: `heads/${branch}`,
     });
 
     if (existingRef) {
