@@ -5,7 +5,7 @@
   "main": "./dist/index.js",
   "type": "module",
   "scripts": {
-    "build": "bun build ./src/index.ts --target node --outdir=dist",
+    "build": "tsc",
     "lint": " eslint --cache --fix . --ignore-path .gitignore",
     "package": "ncc build --source-map --license licenses.txt",
     "all": "run-s lint build package"
