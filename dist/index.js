@@ -43,7 +43,7 @@ async function run() {
         let updated = await NPMCliPackageJson.load(path.resolve(CWD));
         let updatedDependencies = getAllDependencies(updated);
         if (dependencies[dep] === updatedDependencies[dep]) {
-            core.debug(`${dep} is up to date`);
+            core.info(`${dep} is up to date`);
             continue;
         }
         let branch = `bun-dependabot/${dep}`;
@@ -60,7 +60,7 @@ async function run() {
             ...lastCommitPackageJson.devDependencies,
         };
         if (lastCommitDeps[dep] === updatedDependencies[dep]) {
-            console.log(`📦 PR already up to date`);
+            core.info(`📦 PR already up to date`);
             continue;
         }
         let bunContent = fs.readFileSync(path.join(CWD, BUN_LOCK), "base64");
@@ -122,7 +122,7 @@ async function run() {
                 ref: REF,
             });
             if (existingRef.status === 200) {
-                console.log(`📦 Updating branch ${branch}`);
+                core.info(`📦 Updating branch ${branch}`);
                 await octokit.rest.git.updateRef({
                     owner,
                     repo,
@@ -135,7 +135,7 @@ async function run() {
             console.error(`?? existing ref ${existingRef.status}`, existingRef);
         }
         catch (error) {
-            console.log(`📦 Creating branch ${branch}`);
+            core.info(`📦 Creating branch ${branch}`);
             await octokit.rest.git.createRef({
                 owner,
                 repo,
@@ -151,7 +151,7 @@ async function run() {
             state: "open",
         });
         if (existingPR.data.length > 0) {
-            console.log(`📦 PR already exists for ${dep}`);
+            core.info(`📦 PR already exists for ${dep}`);
             continue;
         }
         let pr = await octokit.rest.pulls.create({
@@ -162,7 +162,7 @@ async function run() {
             title: `Update ${dep} to latest version`,
             body: `This PR updates ${dep} to the latest version.`,
         });
-        console.log(`💿 Created PR ${pr.data.html_url}`);
+        core.info(`💿 Created PR ${pr.data.html_url}`);
         continue;
     }
 }
