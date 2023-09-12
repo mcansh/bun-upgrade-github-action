@@ -31428,20 +31428,26 @@ async function run() {
                 sha: commit.data.sha,
             });
         }
-        try {
-            let pr = await octokit.rest.pulls.create({
-                owner,
-                repo,
-                base: "main",
-                head: `refs/heads/${branch}`,
-                title: `Update ${dep} to latest version`,
-                body: `This PR updates ${dep} to the latest version.`,
-            });
-            console.log(`💿 Created PR ${pr.data.html_url}`);
+        let existingPR = await octokit.rest.pulls.list({
+            owner,
+            repo,
+            head: `${owner}:${branch}`,
+            base: "main",
+            state: "open",
+        });
+        if (existingPR.data.length > 0) {
+            console.log(`📦 PR already exists for ${dep}`);
+            continue;
         }
-        catch (e) {
-            console.error(e);
-        }
+        let pr = await octokit.rest.pulls.create({
+            owner,
+            repo,
+            base: "main",
+            head: `refs/heads/${branch}`,
+            title: `Update ${dep} to latest version`,
+            body: `This PR updates ${dep} to the latest version.`,
+        });
+        console.log(`💿 Created PR ${pr.data.html_url}`);
         continue;
     }
 }
