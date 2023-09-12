@@ -59,7 +59,7 @@ async function run(): Promise<void> {
     let updatedDependencies = getAllDependencies(updated);
 
     if (dependencies[dep] === updatedDependencies[dep]) {
-      core.debug(`${dep} is up to date`);
+      core.info(`${dep} is up to date`);
       continue;
     }
 
@@ -81,7 +81,7 @@ async function run(): Promise<void> {
     };
 
     if (lastCommitDeps[dep] === updatedDependencies[dep]) {
-      console.log(`📦 PR already up to date`);
+      core.info(`📦 PR already up to date`);
       continue;
     }
 
@@ -151,7 +151,7 @@ async function run(): Promise<void> {
       });
 
       if (existingRef.status === 200) {
-        console.log(`📦 Updating branch ${branch}`);
+        core.info(`📦 Updating branch ${branch}`);
         await octokit.rest.git.updateRef({
           owner,
           repo,
@@ -164,7 +164,7 @@ async function run(): Promise<void> {
 
       console.error(`?? existing ref ${existingRef.status}`, existingRef);
     } catch (error) {
-      console.log(`📦 Creating branch ${branch}`);
+      core.info(`📦 Creating branch ${branch}`);
       await octokit.rest.git.createRef({
         owner,
         repo,
@@ -182,7 +182,7 @@ async function run(): Promise<void> {
     });
 
     if (existingPR.data.length > 0) {
-      console.log(`📦 PR already exists for ${dep}`);
+      core.info(`📦 PR already exists for ${dep}`);
       continue;
     }
 
@@ -194,7 +194,7 @@ async function run(): Promise<void> {
       title: `Update ${dep} to latest version`,
       body: `This PR updates ${dep} to the latest version.`,
     });
-    console.log(`💿 Created PR ${pr.data.html_url}`);
+    core.info(`💿 Created PR ${pr.data.html_url}`);
     continue;
   }
 }
