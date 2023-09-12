@@ -31404,10 +31404,10 @@ async function run() {
                 name: "github-actions[bot]",
             },
         });
-        await octokit.rest.git.updateRef({
+        await octokit.rest.git.createRef({
             owner,
             repo,
-            ref: `heads/main`,
+            ref: `heads/${branch}`,
             sha: commit.data.sha,
         });
         let pr = await octokit.rest.pulls.create({

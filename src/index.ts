@@ -113,10 +113,10 @@ async function run(): Promise<void> {
         },
       });
 
-      await octokit.rest.git.updateRef({
+      await octokit.rest.git.createRef({
         owner,
         repo,
-        ref: `heads/main`,
+        ref: `heads/${branch}`,
         sha: commit.data.sha,
       });
 
