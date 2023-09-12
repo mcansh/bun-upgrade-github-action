@@ -32031,6 +32031,7 @@ async function run() {
                     sha: commit.data.sha,
                     force: true,
                 });
+                continue;
             }
             console.error(`?? existing ref ${existingRef.status}`, existingRef);
         }

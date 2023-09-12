@@ -124,6 +124,7 @@ async function run(): Promise<void> {
           sha: commit.data.sha,
           force: true,
         });
+        continue;
       }
 
       console.error(`?? existing ref ${existingRef.status}`, existingRef);
