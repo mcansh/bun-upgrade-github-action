@@ -31419,6 +31419,7 @@ async function run() {
             body: `This PR updates ${dep} to the latest version.`,
         });
         console.log(`💿 Created PR ${pr.data.html_url}`);
+        continue;
     }
 }
 function getAllDependencies(packageJson) {

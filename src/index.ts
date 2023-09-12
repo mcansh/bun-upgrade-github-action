@@ -125,6 +125,7 @@ async function run(): Promise<void> {
     });
 
     console.log(`💿 Created PR ${pr.data.html_url}`);
+    continue;
   }
 }
 
