@@ -38,100 +38,94 @@ async function run(): Promise<void> {
 
   core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);
 
-  await Promise.all(
-    depsToCheck.map(async (dep) => {
-      core.debug(`Checking ${dep}`);
-      cp.execSync(`bun add ${dep}`, { stdio: "inherit" });
+  for (let dep of depsToCheck) {
+    core.debug(`Checking ${dep}`);
+    cp.execSync(`bun add ${dep}`, { stdio: "inherit" });
 
-      let updated = await NPMCliPackageJson.load(
-        path.resolve(packageJsonInput),
-      );
+    let updated = await NPMCliPackageJson.load(path.resolve(packageJsonInput));
 
-      let updatedDependencies = getAllDependencies(updated);
+    let updatedDependencies = getAllDependencies(updated);
 
-      if (dependencies[dep] === updatedDependencies[dep]) {
-        core.debug(`${dep} is up to date`);
-        return;
-      }
+    if (dependencies[dep] === updatedDependencies[dep]) {
+      core.debug(`${dep} is up to date`);
+      return;
+    }
 
-      let branch = `bun-dependabot/${dep}`;
+    let branch = `bun-dependabot/${dep}`;
 
-      let bunContent = fs.readFileSync(
-        path.join(packageJsonInput, "bun.lockb"),
-      );
+    let bunContent = fs.readFileSync(path.join(packageJsonInput, "bun.lockb"));
 
-      let [bunBlob, packageJsonBlob] = await Promise.all([
-        octokit.rest.git.createBlob({
-          owner,
-          repo,
-          content: bunContent.toString(),
-          encoding: "utf-8",
-        }),
-        octokit.rest.git.createBlob({
-          owner,
-          repo,
-          content: JSON.stringify(updated.content, null, 2),
-          encoding: "utf-8",
-        }),
-      ]);
-
-      let latestCommit = await octokit.rest.git.getRef({
+    let [bunBlob, packageJsonBlob] = await Promise.all([
+      octokit.rest.git.createBlob({
         owner,
         repo,
-        ref: "heads/main", // TODO: get default branch
-      });
-
-      let tree = await octokit.rest.git.createTree({
+        content: bunContent.toString(),
+        encoding: "utf-8",
+      }),
+      octokit.rest.git.createBlob({
         owner,
         repo,
-        base_tree: latestCommit.data.object.sha,
-        tree: [
-          {
-            sha: bunBlob.data.sha,
-            path: "bun.lockb",
-            mode: "100644",
-            type: "blob",
-          },
-          {
-            sha: packageJsonBlob.data.sha,
-            path: "package.json",
-            mode: "100644",
-            type: "blob",
-          },
-        ],
-      });
+        content: JSON.stringify(updated.content, null, 2),
+        encoding: "utf-8",
+      }),
+    ]);
 
-      let commit = await octokit.rest.git.createCommit({
-        owner,
-        repo,
-        message: `Update ${dep} to latest version`,
-        tree: tree.data.sha,
-        parents: [latestCommit.data.object.sha],
-        author: {
-          email: "github-actions[bot]@users.noreply.github.com",
-          name: "github-actions[bot]",
+    let latestCommit = await octokit.rest.git.getRef({
+      owner,
+      repo,
+      ref: "heads/main", // TODO: get default branch
+    });
+
+    let tree = await octokit.rest.git.createTree({
+      owner,
+      repo,
+      base_tree: latestCommit.data.object.sha,
+      tree: [
+        {
+          sha: bunBlob.data.sha,
+          path: "bun.lockb",
+          mode: "100644",
+          type: "blob",
         },
-      });
+        {
+          sha: packageJsonBlob.data.sha,
+          path: "package.json",
+          mode: "100644",
+          type: "blob",
+        },
+      ],
+    });
 
-      await octokit.rest.git.createRef({
-        owner,
-        repo,
-        ref: `refs/heads/${branch}`,
-        sha: commit.data.sha,
-      });
+    let commit = await octokit.rest.git.createCommit({
+      owner,
+      repo,
+      message: `Update ${dep} to latest version`,
+      tree: tree.data.sha,
+      parents: [latestCommit.data.object.sha],
+      author: {
+        email: "github-actions[bot]@users.noreply.github.com",
+        name: "github-actions[bot]",
+      },
+    });
 
-      let pr = await octokit.rest.pulls.create({
-        owner,
-        repo,
-        base: "main",
-        head: `refs/heads/${branch}`,
-        title: `Update ${dep} to latest version`,
-        body: `This PR updates ${dep} to the latest version.`,
-      });
+    await octokit.rest.git.createRef({
+      owner,
+      repo,
+      ref: `refs/heads/${branch}`,
+      sha: commit.data.sha,
+    });
 
-      console.log(`💿 Created PR ${pr.data.url}`);
-    }),
-  );
+    let pr = await octokit.rest.pulls.create({
+      owner,
+      repo,
+      base: "main",
+      head: `refs/heads/${branch}`,
+      title: `Update ${dep} to latest version`,
+      body: `This PR updates ${dep} to the latest version.`,
+    });
+
+    console.log(`💿 Created PR ${pr.data.html_url}`);
+  }
 }
 
 function getAllDependencies(packageJson: NPMCliPackageJson) {

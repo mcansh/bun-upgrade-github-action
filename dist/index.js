@@ -31344,7 +31344,7 @@ async function run() {
     let dependencies = getAllDependencies(json);
     let depsToCheck = Object.keys(dependencies).filter((d) => !deps.includes(d));
     core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);
-    await Promise.all(depsToCheck.map(async (dep) => {
+    for (let dep of depsToCheck) {
         core.debug(`Checking ${dep}`);
         external_node_child_process_namespaceObject.execSync(`bun add ${dep}`, { stdio: "inherit" });
         let updated = await lib.load(external_node_path_namespaceObject.resolve(packageJsonInput));
@@ -31418,8 +31418,8 @@ async function run() {
             title: `Update ${dep} to latest version`,
             body: `This PR updates ${dep} to the latest version.`,
         });
-        console.log(`💿 Created PR ${pr.data.url}`);
-    }));
+        console.log(`💿 Created PR ${pr.data.html_url}`);
+    }
 }
 function getAllDependencies(packageJson) {
     let dependencies = packageJson.content.dependencies;
