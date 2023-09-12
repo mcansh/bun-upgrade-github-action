@@ -10541,10 +10541,6 @@ function getNodeRequestOptions(request) {
 		agent = agent(parsedURL);
 	}
 
-	if (!headers.has('Connection') && !agent) {
-		headers.set('Connection', 'close');
-	}
-
 	// HTTP-network fetch step 4.2
 	// chunked encoding is handled by Node.js
 
@@ -10964,6 +10960,7 @@ exports.Headers = Headers;
 exports.Request = Request;
 exports.Response = Response;
 exports.FetchError = FetchError;
+exports.AbortError = AbortError;
 
 
 /***/ }),
@@ -30232,6 +30229,15 @@ class LRUCache {
             if (v !== oldVal) {
                 if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
                     oldVal.__abortController.abort(new Error('replaced'));
+                    const { __staleWhileFetching: s } = oldVal;
+                    if (s !== undefined && !noDisposeOnSet) {
+                        if (this.#hasDispose) {
+                            this.#dispose?.(s, k, 'set');
+                        }
+                        if (this.#hasDisposeAfter) {
+                            this.#disposed?.push([s, k, 'set']);
+                        }
+                    }
                 }
                 else if (!noDisposeOnSet) {
                     if (this.#hasDispose) {
@@ -31968,13 +31974,13 @@ async function run() {
             continue;
         }
         let branch = `bun-dependabot/${dep}`;
-        let bunContent = external_node_fs_namespaceObject.readFileSync(external_node_path_namespaceObject.join(packageJsonInput, "bun.lockb"));
+        let bunContent = external_node_fs_namespaceObject.readFileSync(external_node_path_namespaceObject.join(packageJsonInput, "bun.lockb"), "base64");
         let [bunBlob, packageJsonBlob] = await Promise.all([
             octokit.rest.git.createBlob({
                 owner,
                 repo,
-                content: bunContent.toString(),
-                encoding: "utf-8",
+                content: bunContent,
+                encoding: "base64",
             }),
             octokit.rest.git.createBlob({
                 owner,
