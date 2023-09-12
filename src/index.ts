@@ -55,14 +55,17 @@ async function run(): Promise<void> {
 
     let branch = `bun-dependabot/${dep}`;
 
-    let bunContent = fs.readFileSync(path.join(packageJsonInput, "bun.lockb"));
+    let bunContent = fs.readFileSync(
+      path.join(packageJsonInput, "bun.lockb"),
+      "base64",
+    );
 
     let [bunBlob, packageJsonBlob] = await Promise.all([
       octokit.rest.git.createBlob({
         owner,
         repo,
-        content: bunContent.toString(),
-        encoding: "utf-8",
+        content: bunContent,
+        encoding: "base64",
       }),
       octokit.rest.git.createBlob({
         owner,
