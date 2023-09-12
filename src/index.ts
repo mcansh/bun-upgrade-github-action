@@ -108,12 +108,28 @@ async function run(): Promise<void> {
       },
     });
 
-    await octokit.rest.git.createRef({
+    let existingRef = await octokit.rest.git.getRef({
       owner,
       repo,
       ref: `refs/heads/${branch}`,
-      sha: commit.data.sha,
     });
+
+    if (existingRef) {
+      await octokit.rest.git.updateRef({
+        owner,
+        repo,
+        ref: `refs/heads/${branch}`,
+        sha: commit.data.sha,
+        force: true,
+      });
+    } else {
+      await octokit.rest.git.createRef({
+        owner,
+        repo,
+        ref: `refs/heads/${branch}`,
+        sha: commit.data.sha,
+      });
+    }
 
     try {
       let pr = await octokit.rest.pulls.create({
