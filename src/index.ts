@@ -65,20 +65,13 @@ async function run(): Promise<void> {
 
     let branch = `bun-dependabot/${dep}`;
 
-    let lastCommitToBranch = await octokit.rest.repos.getContent({
+    let lastCommitDeps = await getLastCommitDeps({
+      octokit,
       owner,
       repo,
-      path: PACKAGE_JSON,
-      ref: branch,
-      mediaType: { format: "raw" },
+      packageJsonPath: PACKAGE_JSON,
+      branch,
     });
-
-    let lastCommitPackageJson = JSON.parse(lastCommitToBranch.data.toString());
-
-    let lastCommitDeps = {
-      ...lastCommitPackageJson.dependencies,
-      ...lastCommitPackageJson.devDependencies,
-    };
 
     if (lastCommitDeps[dep] === updatedDependencies[dep]) {
       core.info(`📦 PR already up to date`);
@@ -162,7 +155,8 @@ async function run(): Promise<void> {
         continue;
       }
 
-      console.error(`?? existing ref ${existingRef.status}`, existingRef);
+      core.error(`?? existing ref ${existingRef.status}`);
+      core.error(JSON.stringify(existingRef));
     } catch (error) {
       core.info(`📦 Creating branch ${branch}`);
       await octokit.rest.git.createRef({
@@ -194,6 +188,7 @@ async function run(): Promise<void> {
       title: `Update ${dep} to latest version`,
       body: `This PR updates ${dep} to the latest version.`,
     });
+
     core.info(`💿 Created PR ${pr.data.html_url}`);
     continue;
   }
@@ -207,6 +202,36 @@ function getAllDependencies(packageJson: NPMCliPackageJson) {
     ...dependencies,
     ...devDependencies,
   };
+}
+
+async function getLastCommitDeps({
+  octokit,
+  branch,
+  owner,
+  packageJsonPath,
+  repo,
+}: {
+  octokit: ReturnType<typeof getOctokit>;
+  owner: string;
+  repo: string;
+  packageJsonPath: string;
+  branch: string;
+}) {
+  let lastCommitToBranch = await octokit.rest.repos.getContent({
+    owner,
+    repo,
+    path: packageJsonPath,
+    ref: branch,
+    mediaType: { format: "raw" },
+  });
+  let lastCommitPackageJson = JSON.parse(lastCommitToBranch.data.toString());
+
+  let lastCommitDeps = {
+    ...lastCommitPackageJson.dependencies,
+    ...lastCommitPackageJson.devDependencies,
+  };
+
+  return lastCommitDeps;
 }
 
 run().then(
