@@ -2,39 +2,49 @@ import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
 import * as core from "@actions/core";
-
 import { getOctokit } from "@actions/github";
 import NPMCliPackageJson from "@npmcli/package-json";
+import { z } from "zod";
 
 async function run(): Promise<void> {
-  let token = core.getInput("GH_TOKEN", { required: true });
-  let octokit = getOctokit(token);
-
-  let GITHUB_REPOSITORY = core.getInput("GITHUB_REPOSITORY");
-  let [owner, repo] = GITHUB_REPOSITORY.split("/");
-
-  let ignored = core.getInput("IGNORED_DEPENDENCIES");
-  let deps = ignored.split(",").map((d) => d.trim());
-
-  let packageJsonInput = core.getInput("PACKAGE_JSON_PATH", {
-    trimWhitespace: true,
+  let schema = z.object({
+    GITHUB_REPOSITORY: z.string(),
+    GH_TOKEN: z.string(),
+    PACKAGE_JSON_PATH: z.string().optional().default("./"),
+    IGNORED_DEPENDENCIES: z.string().optional().default(""),
   });
 
-  if (!packageJsonInput) {
-    packageJsonInput = "./";
-  }
+  let env = schema.parse({
+    GITHUB_REPOSITORY: core.getInput("GITHUB_REPOSITORY"),
+    GH_TOKEN: core.getInput("GH_TOKEN", { required: true }),
+    PACKAGE_JSON_PATH: core.getInput("PACKAGE_JSON_PATH"),
+    IGNORED_DEPENDENCIES: core.getInput("IGNORED_DEPENDENCIES"),
+  });
 
-  if (packageJsonInput.endsWith("package.json")) {
-    packageJsonInput = path.dirname(packageJsonInput);
-  }
+  let octokit = getOctokit(env.GH_TOKEN);
 
-  core.debug(`Ignoring dependencies: ${deps.join(", ")}`);
+  let PACKAGE_JSON = "package.json" as const;
+  let BUN_LOCK = "bun.lockb" as const;
 
-  let json = await NPMCliPackageJson.load(path.resolve(packageJsonInput));
+  let [owner, repo] = env.GITHUB_REPOSITORY.split("/");
+
+  if (!owner || !repo) throw new Error(`Invalid GITHUB_REPOSITORY`);
+
+  let ignoredDeps = env.IGNORED_DEPENDENCIES.split(",").map((d) => d.trim());
+
+  let CWD = path.resolve(env.PACKAGE_JSON_PATH);
+
+  if (CWD.endsWith(PACKAGE_JSON)) CWD = path.dirname(CWD);
+
+  core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
+
+  let json = await NPMCliPackageJson.load(path.resolve(CWD));
 
   let dependencies = getAllDependencies(json);
 
-  let depsToCheck = Object.keys(dependencies).filter((d) => !deps.includes(d));
+  let depsToCheck = Object.keys(dependencies).filter((d) => {
+    return !ignoredDeps.includes(d);
+  });
 
   core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);
 
@@ -44,7 +54,7 @@ async function run(): Promise<void> {
     cp.execSync(`git reset --hard`, { stdio: "inherit" });
     cp.execSync(`bun add ${dep}`, { stdio: "inherit" });
 
-    let updated = await NPMCliPackageJson.load(path.resolve(packageJsonInput));
+    let updated = await NPMCliPackageJson.load(path.resolve(CWD));
 
     let updatedDependencies = getAllDependencies(updated);
 
@@ -55,10 +65,7 @@ async function run(): Promise<void> {
 
     let branch = `bun-dependabot/${dep}`;
 
-    let bunContent = fs.readFileSync(
-      path.join(packageJsonInput, "bun.lockb"),
-      "base64",
-    );
+    let bunContent = fs.readFileSync(path.join(CWD, BUN_LOCK), "base64");
 
     let [bunBlob, packageJsonBlob] = await Promise.all([
       octokit.rest.git.createBlob({
@@ -88,13 +95,13 @@ async function run(): Promise<void> {
       tree: [
         {
           sha: bunBlob.data.sha,
-          path: "bun.lockb",
+          path: BUN_LOCK,
           mode: "100644",
           type: "blob",
         },
         {
           sha: packageJsonBlob.data.sha,
-          path: "package.json",
+          path: PACKAGE_JSON,
           mode: "100644",
           type: "blob",
         },
@@ -113,11 +120,14 @@ async function run(): Promise<void> {
       },
     });
 
+    let REF = `heads/${branch}` as const;
+    let FULL_REF = `refs/${REF}` as const;
+
     try {
       let existingRef = await octokit.rest.git.getRef({
         owner,
         repo,
-        ref: `heads/${branch}`,
+        ref: REF,
       });
 
       if (existingRef.status === 200) {
@@ -125,7 +135,7 @@ async function run(): Promise<void> {
         await octokit.rest.git.updateRef({
           owner,
           repo,
-          ref: `heads/${branch}`,
+          ref: REF,
           sha: commit.data.sha,
           force: true,
         });
@@ -138,7 +148,7 @@ async function run(): Promise<void> {
       await octokit.rest.git.createRef({
         owner,
         repo,
-        ref: `refs/heads/${branch}`,
+        ref: FULL_REF,
         sha: commit.data.sha,
       });
     }
@@ -160,7 +170,7 @@ async function run(): Promise<void> {
       owner,
       repo,
       base: "main",
-      head: `refs/heads/${branch}`,
+      head: FULL_REF,
       title: `Update ${dep} to latest version`,
       body: `This PR updates ${dep} to the latest version.`,
     });
@@ -179,7 +189,12 @@ function getAllDependencies(packageJson: NPMCliPackageJson) {
   };
 }
 
-run().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+run().then(
+  () => {
+    process.exit(0);
+  },
+  (error: unknown) => {
+    if (error) console.error(error);
+    process.exit(1);
+  },
+);

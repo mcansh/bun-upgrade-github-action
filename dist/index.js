@@ -3195,9 +3195,9 @@ module.exports = (opts = {}) => ({
 
 const pinflight = __nccwpck_require__(439)
 const spawn = __nccwpck_require__(3869)
-const { LRUCache } = __nccwpck_require__(6893)
+const LRU = __nccwpck_require__(5772)
 
-const revsCache = new LRUCache({
+const revsCache = new LRU({
   max: 100,
   ttl: 5 * 60 * 1000,
 })
@@ -3314,7 +3314,7 @@ module.exports = (opts = {}) => {
 /***/ 208:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-const { isexe, sync: isexeSync } = __nccwpck_require__(8331)
+const isexe = __nccwpck_require__(7126)
 const { join, delimiter, sep, posix } = __nccwpck_require__(1017)
 
 const isWindows = process.platform === 'win32'
@@ -3347,7 +3347,11 @@ const getPathInfo = (cmd, {
   if (isWindows) {
     const pathExtExe = optPathExt ||
       ['.EXE', '.CMD', '.BAT', '.COM'].join(optDelimiter)
-    const pathExt = pathExtExe.split(optDelimiter).flatMap((item) => [item, item.toLowerCase()])
+    const pathExt = pathExtExe.split(optDelimiter).reduce((acc, item) => {
+      acc.push(item)
+      acc.push(item.toLowerCase())
+      return acc
+    }, [])
     if (cmd.includes('.') && pathExt[0] !== '') {
       pathExt.unshift('')
     }
@@ -3402,7 +3406,7 @@ const whichSync = (cmd, opt = {}) => {
 
     for (const ext of pathExt) {
       const withExt = p + ext
-      const is = isexeSync(withExt, { pathExt: pathExtExe, ignoreErrors: true })
+      const is = isexe.sync(withExt, { pathExt: pathExtExe, ignoreErrors: true })
       if (is) {
         if (!opt.all) {
           return withExt
@@ -4709,7 +4713,7 @@ module.exports = promiseSpawn
 /***/ 5119:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-const { isexe, sync: isexeSync } = __nccwpck_require__(5102)
+const isexe = __nccwpck_require__(7126)
 const { join, delimiter, sep, posix } = __nccwpck_require__(1017)
 
 const isWindows = process.platform === 'win32'
@@ -4742,7 +4746,11 @@ const getPathInfo = (cmd, {
   if (isWindows) {
     const pathExtExe = optPathExt ||
       ['.EXE', '.CMD', '.BAT', '.COM'].join(optDelimiter)
-    const pathExt = pathExtExe.split(optDelimiter).flatMap((item) => [item, item.toLowerCase()])
+    const pathExt = pathExtExe.split(optDelimiter).reduce((acc, item) => {
+      acc.push(item)
+      acc.push(item.toLowerCase())
+      return acc
+    }, [])
     if (cmd.includes('.') && pathExt[0] !== '') {
       pathExt.unshift('')
     }
@@ -4797,7 +4805,7 @@ const whichSync = (cmd, opt = {}) => {
 
     for (const ext of pathExt) {
       const withExt = p + ext
-      const is = isexeSync(withExt, { pathExt: pathExtExe, ignoreErrors: true })
+      const is = isexe.sync(withExt, { pathExt: pathExtExe, ignoreErrors: true })
       if (is) {
         if (!opt.all) {
           return withExt
@@ -8352,12 +8360,12 @@ module.exports = hosts
 
 
 
-const { LRUCache } = __nccwpck_require__(1410)
+const LRU = __nccwpck_require__(5631)
 const hosts = __nccwpck_require__(5572)
 const fromUrl = __nccwpck_require__(1756)
 const parseUrl = __nccwpck_require__(4250)
 
-const cache = new LRUCache({ max: 1000 })
+const cache = new LRU({ max: 1000 })
 
 class GitHost {
   constructor (type, user, auth, project, committish, defaultRepresentation, opts = {}) {
@@ -8690,6 +8698,167 @@ var data = __nccwpck_require__(6151);
 module.exports = function isCore(x, nodeVersion) {
 	return has(data, x) && versionIncluded(nodeVersion, data[x]);
 };
+
+
+/***/ }),
+
+/***/ 7126:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+var fs = __nccwpck_require__(7147)
+var core
+if (process.platform === 'win32' || global.TESTING_WINDOWS) {
+  core = __nccwpck_require__(2001)
+} else {
+  core = __nccwpck_require__(9728)
+}
+
+module.exports = isexe
+isexe.sync = sync
+
+function isexe (path, options, cb) {
+  if (typeof options === 'function') {
+    cb = options
+    options = {}
+  }
+
+  if (!cb) {
+    if (typeof Promise !== 'function') {
+      throw new TypeError('callback not provided')
+    }
+
+    return new Promise(function (resolve, reject) {
+      isexe(path, options || {}, function (er, is) {
+        if (er) {
+          reject(er)
+        } else {
+          resolve(is)
+        }
+      })
+    })
+  }
+
+  core(path, options || {}, function (er, is) {
+    // ignore EACCES because that just means we aren't allowed to run it
+    if (er) {
+      if (er.code === 'EACCES' || options && options.ignoreErrors) {
+        er = null
+        is = false
+      }
+    }
+    cb(er, is)
+  })
+}
+
+function sync (path, options) {
+  // my kingdom for a filtered catch
+  try {
+    return core.sync(path, options || {})
+  } catch (er) {
+    if (options && options.ignoreErrors || er.code === 'EACCES') {
+      return false
+    } else {
+      throw er
+    }
+  }
+}
+
+
+/***/ }),
+
+/***/ 9728:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+module.exports = isexe
+isexe.sync = sync
+
+var fs = __nccwpck_require__(7147)
+
+function isexe (path, options, cb) {
+  fs.stat(path, function (er, stat) {
+    cb(er, er ? false : checkStat(stat, options))
+  })
+}
+
+function sync (path, options) {
+  return checkStat(fs.statSync(path), options)
+}
+
+function checkStat (stat, options) {
+  return stat.isFile() && checkMode(stat, options)
+}
+
+function checkMode (stat, options) {
+  var mod = stat.mode
+  var uid = stat.uid
+  var gid = stat.gid
+
+  var myUid = options.uid !== undefined ?
+    options.uid : process.getuid && process.getuid()
+  var myGid = options.gid !== undefined ?
+    options.gid : process.getgid && process.getgid()
+
+  var u = parseInt('100', 8)
+  var g = parseInt('010', 8)
+  var o = parseInt('001', 8)
+  var ug = u | g
+
+  var ret = (mod & o) ||
+    (mod & g) && gid === myGid ||
+    (mod & u) && uid === myUid ||
+    (mod & ug) && myUid === 0
+
+  return ret
+}
+
+
+/***/ }),
+
+/***/ 2001:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+module.exports = isexe
+isexe.sync = sync
+
+var fs = __nccwpck_require__(7147)
+
+function checkPathExt (path, options) {
+  var pathext = options.pathExt !== undefined ?
+    options.pathExt : process.env.PATHEXT
+
+  if (!pathext) {
+    return true
+  }
+
+  pathext = pathext.split(';')
+  if (pathext.indexOf('') !== -1) {
+    return true
+  }
+  for (var i = 0; i < pathext.length; i++) {
+    var p = pathext[i].toLowerCase()
+    if (p && path.substr(-p.length).toLowerCase() === p) {
+      return true
+    }
+  }
+  return false
+}
+
+function checkStat (stat, path, options) {
+  if (!stat.isSymbolicLink() && !stat.isFile()) {
+    return false
+  }
+  return checkPathExt(path, options)
+}
+
+function isexe (path, options, cb) {
+  fs.stat(path, function (er, stat) {
+    cb(er, er ? false : checkStat(stat, path, options))
+  })
+}
+
+function sync (path, options) {
+  return checkStat(fs.statSync(path), path, options)
+}
 
 
 /***/ }),
@@ -11693,7 +11862,7 @@ module.exports.resolve = resolve
 module.exports.toPurl = toPurl
 module.exports.Result = Result
 
-const { URL } = __nccwpck_require__(7310)
+const url = __nccwpck_require__(7310)
 const HostedGit = __nccwpck_require__(167)
 const semver = __nccwpck_require__(1383)
 const path = global.FAKE_WINDOWS ? (__nccwpck_require__(1017).win32) : __nccwpck_require__(1017)
@@ -11872,11 +12041,10 @@ Result.prototype.toJSON = function () {
   return result
 }
 
-// sets res.gitCommittish, res.gitRange, and res.gitSubdir
-function setGitAttrs (res, committish) {
+function setGitCommittish (res, committish) {
   if (!committish) {
     res.gitCommittish = null
-    return
+    return res
   }
 
   // for each :: separated item:
@@ -11914,6 +12082,8 @@ function setGitAttrs (res, committish) {
     }
     log.warn('npm-package-arg', `ignoring unknown key "${name}"`)
   }
+
+  return res
 }
 
 function fromFile (res, where) {
@@ -11933,10 +12103,10 @@ function fromFile (res, where) {
   const rawWithPrefix = prefix + res.rawSpec
   let rawNoPrefix = rawWithPrefix.replace(/^file:/, '')
   try {
-    resolvedUrl = new URL(rawWithPrefix, `file://${path.resolve(where)}/`)
-    specUrl = new URL(rawWithPrefix)
+    resolvedUrl = new url.URL(rawWithPrefix, `file://${path.resolve(where)}/`)
+    specUrl = new url.URL(rawWithPrefix)
   } catch (originalError) {
-    const er = new Error('Invalid file: URL, must comply with RFC 8089')
+    const er = new Error('Invalid file: URL, must comply with RFC 8909')
     throw Object.assign(er, {
       raw: res.rawSpec,
       spec: res,
@@ -11945,23 +12115,40 @@ function fromFile (res, where) {
     })
   }
 
-  // XXX backwards compatibility lack of compliance with RFC 8089
+  // environment switch for testing
+  if (process.env.NPM_PACKAGE_ARG_8909_STRICT !== '1') {
+    // XXX backwards compatibility lack of compliance with 8909
+    // Remove when we want a breaking change to come into RFC compliance.
+    if (resolvedUrl.host && resolvedUrl.host !== 'localhost') {
+      const rawSpec = res.rawSpec.replace(/^file:\/\//, 'file:///')
+      resolvedUrl = new url.URL(rawSpec, `file://${path.resolve(where)}/`)
+      specUrl = new url.URL(rawSpec)
+      rawNoPrefix = rawSpec.replace(/^file:/, '')
+    }
+    // turn file:/../foo into file:../foo
+    // for 1, 2 or 3 leading slashes since we attempted
+    // in the previous step to make it a file protocol url with a leading slash
+    if (/^\/{1,3}\.\.?(\/|$)/.test(rawNoPrefix)) {
+      const rawSpec = res.rawSpec.replace(/^file:\/{1,3}/, 'file:')
+      resolvedUrl = new url.URL(rawSpec, `file://${path.resolve(where)}/`)
+      specUrl = new url.URL(rawSpec)
+      rawNoPrefix = rawSpec.replace(/^file:/, '')
+    }
+    // XXX end 8909 violation backwards compatibility section
+  }
+
+  // file:foo - relative url to ./foo
+  // file:/foo - absolute path /foo
+  // file:///foo - absolute path to /foo, no authority host
+  // file://localhost/foo - absolute path to /foo, on localhost
+  // file://foo - absolute path to / on foo host (error!)
   if (resolvedUrl.host && resolvedUrl.host !== 'localhost') {
-    const rawSpec = res.rawSpec.replace(/^file:\/\//, 'file:///')
-    resolvedUrl = new URL(rawSpec, `file://${path.resolve(where)}/`)
-    specUrl = new URL(rawSpec)
-    rawNoPrefix = rawSpec.replace(/^file:/, '')
+    const msg = `Invalid file: URL, must be absolute if // present`
+    throw Object.assign(new Error(msg), {
+      raw: res.rawSpec,
+      parsed: resolvedUrl,
+    })
   }
-  // turn file:/../foo into file:../foo
-  // for 1, 2 or 3 leading slashes since we attempted
-  // in the previous step to make it a file protocol url with a leading slash
-  if (/^\/{1,3}\.\.?(\/|$)/.test(rawNoPrefix)) {
-    const rawSpec = res.rawSpec.replace(/^file:\/{1,3}/, 'file:')
-    resolvedUrl = new URL(rawSpec, `file://${path.resolve(where)}/`)
-    specUrl = new URL(rawSpec)
-    rawNoPrefix = rawSpec.replace(/^file:/, '')
-  }
-  // XXX end RFC 8089 violation backwards compatibility section
 
   // turn /C:/blah into just C:/blah on windows
   let specPath = decodeURIComponent(specUrl.pathname)
@@ -11991,8 +12178,7 @@ function fromHostedGit (res, hosted) {
   res.hosted = hosted
   res.saveSpec = hosted.toString({ noGitPlus: false, noCommittish: false })
   res.fetchSpec = hosted.getDefaultRepresentation() === 'shortcut' ? null : hosted.toString()
-  setGitAttrs(res, hosted.committish)
-  return res
+  return setGitCommittish(res, hosted.committish)
 }
 
 function unsupportedURLType (protocol, spec) {
@@ -12001,51 +12187,54 @@ function unsupportedURLType (protocol, spec) {
   return err
 }
 
-function fromURL (res) {
-  let rawSpec = res.rawSpec
-  res.saveSpec = rawSpec
-  if (rawSpec.startsWith('git+ssh:')) {
-    // git ssh specifiers are overloaded to also use scp-style git
-    // specifiers, so we have to parse those out and treat them special.
-    // They are NOT true URIs, so we can't hand them to URL.
-
-    // This regex looks for things that look like:
-    // git+ssh://git@my.custom.git.com:username/project.git#deadbeef
-    // ...and various combinations. The username in the beginning is *required*.
-    const matched = rawSpec.match(/^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i)
-    if (matched && !matched[1].match(/:[0-9]+\/?.*$/i)) {
-      res.type = 'git'
-      setGitAttrs(res, matched[2])
-      res.fetchSpec = matched[1]
-      return res
-    }
-  } else if (rawSpec.startsWith('git+file://')) {
-    // URL can't handle windows paths
-    rawSpec = rawSpec.replace(/\\/g, '/')
+function matchGitScp (spec) {
+  // git ssh specifiers are overloaded to also use scp-style git
+  // specifiers, so we have to parse those out and treat them special.
+  // They are NOT true URIs, so we can't hand them to `url.parse`.
+  //
+  // This regex looks for things that look like:
+  // git+ssh://git@my.custom.git.com:username/project.git#deadbeef
+  //
+  // ...and various combinations. The username in the beginning is *required*.
+  const matched = spec.match(/^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i)
+  return matched && !matched[1].match(/:[0-9]+\/?.*$/i) && {
+    fetchSpec: matched[1],
+    gitCommittish: matched[2] == null ? null : matched[2],
   }
-  const parsedUrl = new URL(rawSpec)
+}
+
+function fromURL (res) {
+  // eslint-disable-next-line node/no-deprecated-api
+  const urlparse = url.parse(res.rawSpec)
+  res.saveSpec = res.rawSpec
   // check the protocol, and then see if it's git or not
-  switch (parsedUrl.protocol) {
+  switch (urlparse.protocol) {
     case 'git:':
     case 'git+http:':
     case 'git+https:':
     case 'git+rsync:':
     case 'git+ftp:':
     case 'git+file:':
-    case 'git+ssh:':
+    case 'git+ssh:': {
       res.type = 'git'
-      setGitAttrs(res, parsedUrl.hash.slice(1))
-      if (parsedUrl.protocol === 'git+file:' && /^git\+file:\/\/[a-z]:/i.test(rawSpec)) {
-        // URL can't handle drive letters on windows file paths, the host can't contain a :
-        res.fetchSpec = `git+file://${parsedUrl.host.toLowerCase()}:${parsedUrl.pathname}`
+      const match = urlparse.protocol === 'git+ssh:' ? matchGitScp(res.rawSpec)
+        : null
+      if (match) {
+        setGitCommittish(res, match.gitCommittish)
+        res.fetchSpec = match.fetchSpec
       } else {
-        parsedUrl.hash = ''
-        res.fetchSpec = parsedUrl.toString()
-      }
-      if (res.fetchSpec.startsWith('git+')) {
-        res.fetchSpec = res.fetchSpec.slice(4)
+        setGitCommittish(res, urlparse.hash != null ? urlparse.hash.slice(1) : '')
+        urlparse.protocol = urlparse.protocol.replace(/^git[+]/, '')
+        if (urlparse.protocol === 'file:' && /^git\+file:\/\/[a-z]:/i.test(res.rawSpec)) {
+          // keep the drive letter : on windows file paths
+          urlparse.host += ':'
+          urlparse.hostname += ':'
+        }
+        delete urlparse.hash
+        res.fetchSpec = url.format(urlparse)
       }
       break
+    }
     case 'http:':
     case 'https:':
       res.type = 'remote'
@@ -12053,7 +12242,7 @@ function fromURL (res) {
       break
 
     default:
-      throw unsupportedURLType(parsedUrl.protocol, rawSpec)
+      throw unsupportedURLType(urlparse.protocol, res.rawSpec)
   }
 
   return res
@@ -19900,1817 +20089,1237 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("zlib");
 
 /***/ }),
 
-/***/ 6893:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 5772:
+/***/ ((module) => {
 
-
-/**
- * @module LRUCache
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.LRUCache = void 0;
-const perf = typeof performance === 'object' &&
-    performance &&
-    typeof performance.now === 'function'
+const perf =
+  typeof performance === 'object' &&
+  performance &&
+  typeof performance.now === 'function'
     ? performance
-    : Date;
-const warned = new Set();
-/* c8 ignore start */
-const PROCESS = (typeof process === 'object' && !!process ? process : {});
-/* c8 ignore start */
-const emitWarning = (msg, type, code, fn) => {
-    typeof PROCESS.emitWarning === 'function'
-        ? PROCESS.emitWarning(msg, type, code, fn)
-        : console.error(`[${code}] ${type}: ${msg}`);
-};
-let AC = globalThis.AbortController;
-let AS = globalThis.AbortSignal;
-/* c8 ignore start */
-if (typeof AC === 'undefined') {
-    //@ts-ignore
-    AS = class AbortSignal {
-        onabort;
-        _onabort = [];
-        reason;
-        aborted = false;
-        addEventListener(_, fn) {
-            this._onabort.push(fn);
+    : Date
+
+const hasAbortController = typeof AbortController === 'function'
+
+// minimal backwards-compatibility polyfill
+// this doesn't have nearly all the checks and whatnot that
+// actual AbortController/Signal has, but it's enough for
+// our purposes, and if used properly, behaves the same.
+const AC = hasAbortController
+  ? AbortController
+  : class AbortController {
+      constructor() {
+        this.signal = new AS()
+      }
+      abort(reason = new Error('This operation was aborted')) {
+        this.signal.reason = this.signal.reason || reason
+        this.signal.aborted = true
+        this.signal.dispatchEvent({
+          type: 'abort',
+          target: this.signal,
+        })
+      }
+    }
+
+const hasAbortSignal = typeof AbortSignal === 'function'
+// Some polyfills put this on the AC class, not global
+const hasACAbortSignal = typeof AC.AbortSignal === 'function'
+const AS = hasAbortSignal
+  ? AbortSignal
+  : hasACAbortSignal
+  ? AC.AbortController
+  : class AbortSignal {
+      constructor() {
+        this.reason = undefined
+        this.aborted = false
+        this._listeners = []
+      }
+      dispatchEvent(e) {
+        if (e.type === 'abort') {
+          this.aborted = true
+          this.onabort(e)
+          this._listeners.forEach(f => f(e), this)
         }
-    };
-    //@ts-ignore
-    AC = class AbortController {
-        constructor() {
-            warnACPolyfill();
+      }
+      onabort() {}
+      addEventListener(ev, fn) {
+        if (ev === 'abort') {
+          this._listeners.push(fn)
         }
-        signal = new AS();
-        abort(reason) {
-            if (this.signal.aborted)
-                return;
-            //@ts-ignore
-            this.signal.reason = reason;
-            //@ts-ignore
-            this.signal.aborted = true;
-            //@ts-ignore
-            for (const fn of this.signal._onabort) {
-                fn(reason);
-            }
-            this.signal.onabort?.(reason);
+      }
+      removeEventListener(ev, fn) {
+        if (ev === 'abort') {
+          this._listeners = this._listeners.filter(f => f !== fn)
         }
-    };
-    let printACPolyfillWarning = PROCESS.env?.LRU_CACHE_IGNORE_AC_WARNING !== '1';
-    const warnACPolyfill = () => {
-        if (!printACPolyfillWarning)
-            return;
-        printACPolyfillWarning = false;
-        emitWarning('AbortController is not defined. If using lru-cache in ' +
-            'node 14, load an AbortController polyfill from the ' +
-            '`node-abort-controller` package. A minimal polyfill is ' +
-            'provided for use by LRUCache.fetch(), but it should not be ' +
-            'relied upon in other contexts (eg, passing it to other APIs that ' +
-            'use AbortController/AbortSignal might have undesirable effects). ' +
-            'You may disable this with LRU_CACHE_IGNORE_AC_WARNING=1 in the env.', 'NO_ABORT_CONTROLLER', 'ENOTSUP', warnACPolyfill);
-    };
+      }
+    }
+
+const warned = new Set()
+const deprecatedOption = (opt, instead) => {
+  const code = `LRU_CACHE_OPTION_${opt}`
+  if (shouldWarn(code)) {
+    warn(code, `${opt} option`, `options.${instead}`, LRUCache)
+  }
 }
-/* c8 ignore stop */
-const shouldWarn = (code) => !warned.has(code);
-const TYPE = Symbol('type');
-const isPosInt = (n) => n && n === Math.floor(n) && n > 0 && isFinite(n);
-/* c8 ignore start */
-// This is a little bit ridiculous, tbh.
-// The maximum array length is 2^32-1 or thereabouts on most JS impls.
-// And well before that point, you're caching the entire world, I mean,
-// that's ~32GB of just integers for the next/prev links, plus whatever
-// else to hold that many keys and values.  Just filling the memory with
-// zeroes at init time is brutal when you get that big.
-// But why not be complete?
-// Maybe in the future, these limits will have expanded.
-const getUintArray = (max) => !isPosInt(max)
+const deprecatedMethod = (method, instead) => {
+  const code = `LRU_CACHE_METHOD_${method}`
+  if (shouldWarn(code)) {
+    const { prototype } = LRUCache
+    const { get } = Object.getOwnPropertyDescriptor(prototype, method)
+    warn(code, `${method} method`, `cache.${instead}()`, get)
+  }
+}
+const deprecatedProperty = (field, instead) => {
+  const code = `LRU_CACHE_PROPERTY_${field}`
+  if (shouldWarn(code)) {
+    const { prototype } = LRUCache
+    const { get } = Object.getOwnPropertyDescriptor(prototype, field)
+    warn(code, `${field} property`, `cache.${instead}`, get)
+  }
+}
+
+const emitWarning = (...a) => {
+  typeof process === 'object' &&
+  process &&
+  typeof process.emitWarning === 'function'
+    ? process.emitWarning(...a)
+    : console.error(...a)
+}
+
+const shouldWarn = code => !warned.has(code)
+
+const warn = (code, what, instead, fn) => {
+  warned.add(code)
+  const msg = `The ${what} is deprecated. Please use ${instead} instead.`
+  emitWarning(msg, 'DeprecationWarning', code, fn)
+}
+
+const isPosInt = n => n && n === Math.floor(n) && n > 0 && isFinite(n)
+
+/* istanbul ignore next - This is a little bit ridiculous, tbh.
+ * The maximum array length is 2^32-1 or thereabouts on most JS impls.
+ * And well before that point, you're caching the entire world, I mean,
+ * that's ~32GB of just integers for the next/prev links, plus whatever
+ * else to hold that many keys and values.  Just filling the memory with
+ * zeroes at init time is brutal when you get that big.
+ * But why not be complete?
+ * Maybe in the future, these limits will have expanded. */
+const getUintArray = max =>
+  !isPosInt(max)
     ? null
     : max <= Math.pow(2, 8)
-        ? Uint8Array
-        : max <= Math.pow(2, 16)
-            ? Uint16Array
-            : max <= Math.pow(2, 32)
-                ? Uint32Array
-                : max <= Number.MAX_SAFE_INTEGER
-                    ? ZeroArray
-                    : null;
-/* c8 ignore stop */
+    ? Uint8Array
+    : max <= Math.pow(2, 16)
+    ? Uint16Array
+    : max <= Math.pow(2, 32)
+    ? Uint32Array
+    : max <= Number.MAX_SAFE_INTEGER
+    ? ZeroArray
+    : null
+
 class ZeroArray extends Array {
-    constructor(size) {
-        super(size);
-        this.fill(0);
-    }
+  constructor(size) {
+    super(size)
+    this.fill(0)
+  }
 }
+
 class Stack {
-    heap;
-    length;
-    // private constructor
-    static #constructing = false;
-    static create(max) {
-        const HeapCls = getUintArray(max);
-        if (!HeapCls)
-            return [];
-        Stack.#constructing = true;
-        const s = new Stack(max, HeapCls);
-        Stack.#constructing = false;
-        return s;
+  constructor(max) {
+    if (max === 0) {
+      return []
     }
-    constructor(max, HeapCls) {
-        /* c8 ignore start */
-        if (!Stack.#constructing) {
-            throw new TypeError('instantiate Stack using Stack.create(n)');
-        }
-        /* c8 ignore stop */
-        this.heap = new HeapCls(max);
-        this.length = 0;
-    }
-    push(n) {
-        this.heap[this.length++] = n;
-    }
-    pop() {
-        return this.heap[--this.length];
-    }
+    const UintArray = getUintArray(max)
+    this.heap = new UintArray(max)
+    this.length = 0
+  }
+  push(n) {
+    this.heap[this.length++] = n
+  }
+  pop() {
+    return this.heap[--this.length]
+  }
 }
-/**
- * Default export, the thing you're using this module to get.
- *
- * All properties from the options object (with the exception of
- * {@link OptionsBase.max} and {@link OptionsBase.maxSize}) are added as
- * normal public members. (`max` and `maxBase` are read-only getters.)
- * Changing any of these will alter the defaults for subsequent method calls,
- * but is otherwise safe.
- */
+
 class LRUCache {
-    // properties coming in from the options of these, only max and maxSize
-    // really *need* to be protected. The rest can be modified, as they just
-    // set defaults for various methods.
-    #max;
-    #maxSize;
-    #dispose;
-    #disposeAfter;
-    #fetchMethod;
-    /**
-     * {@link LRUCache.OptionsBase.ttl}
-     */
-    ttl;
-    /**
-     * {@link LRUCache.OptionsBase.ttlResolution}
-     */
-    ttlResolution;
-    /**
-     * {@link LRUCache.OptionsBase.ttlAutopurge}
-     */
-    ttlAutopurge;
-    /**
-     * {@link LRUCache.OptionsBase.updateAgeOnGet}
-     */
-    updateAgeOnGet;
-    /**
-     * {@link LRUCache.OptionsBase.updateAgeOnHas}
-     */
-    updateAgeOnHas;
-    /**
-     * {@link LRUCache.OptionsBase.allowStale}
-     */
-    allowStale;
-    /**
-     * {@link LRUCache.OptionsBase.noDisposeOnSet}
-     */
-    noDisposeOnSet;
-    /**
-     * {@link LRUCache.OptionsBase.noUpdateTTL}
-     */
-    noUpdateTTL;
-    /**
-     * {@link LRUCache.OptionsBase.maxEntrySize}
-     */
-    maxEntrySize;
-    /**
-     * {@link LRUCache.OptionsBase.sizeCalculation}
-     */
-    sizeCalculation;
-    /**
-     * {@link LRUCache.OptionsBase.noDeleteOnFetchRejection}
-     */
-    noDeleteOnFetchRejection;
-    /**
-     * {@link LRUCache.OptionsBase.noDeleteOnStaleGet}
-     */
-    noDeleteOnStaleGet;
-    /**
-     * {@link LRUCache.OptionsBase.allowStaleOnFetchAbort}
-     */
-    allowStaleOnFetchAbort;
-    /**
-     * {@link LRUCache.OptionsBase.allowStaleOnFetchRejection}
-     */
-    allowStaleOnFetchRejection;
-    /**
-     * {@link LRUCache.OptionsBase.ignoreFetchAbort}
-     */
-    ignoreFetchAbort;
-    // computed properties
-    #size;
-    #calculatedSize;
-    #keyMap;
-    #keyList;
-    #valList;
-    #next;
-    #prev;
-    #head;
-    #tail;
-    #free;
-    #disposed;
-    #sizes;
-    #starts;
-    #ttls;
-    #hasDispose;
-    #hasFetchMethod;
-    #hasDisposeAfter;
-    /**
-     * Do not call this method unless you need to inspect the
-     * inner workings of the cache.  If anything returned by this
-     * object is modified in any way, strange breakage may occur.
-     *
-     * These fields are private for a reason!
-     *
-     * @internal
-     */
-    static unsafeExposeInternals(c) {
-        return {
-            // properties
-            starts: c.#starts,
-            ttls: c.#ttls,
-            sizes: c.#sizes,
-            keyMap: c.#keyMap,
-            keyList: c.#keyList,
-            valList: c.#valList,
-            next: c.#next,
-            prev: c.#prev,
-            get head() {
-                return c.#head;
-            },
-            get tail() {
-                return c.#tail;
-            },
-            free: c.#free,
-            // methods
-            isBackgroundFetch: (p) => c.#isBackgroundFetch(p),
-            backgroundFetch: (k, index, options, context) => c.#backgroundFetch(k, index, options, context),
-            moveToTail: (index) => c.#moveToTail(index),
-            indexes: (options) => c.#indexes(options),
-            rindexes: (options) => c.#rindexes(options),
-            isStale: (index) => c.#isStale(index),
-        };
+  constructor(options = {}) {
+    const {
+      max = 0,
+      ttl,
+      ttlResolution = 1,
+      ttlAutopurge,
+      updateAgeOnGet,
+      updateAgeOnHas,
+      allowStale,
+      dispose,
+      disposeAfter,
+      noDisposeOnSet,
+      noUpdateTTL,
+      maxSize = 0,
+      maxEntrySize = 0,
+      sizeCalculation,
+      fetchMethod,
+      fetchContext,
+      noDeleteOnFetchRejection,
+      noDeleteOnStaleGet,
+      allowStaleOnFetchRejection,
+      allowStaleOnFetchAbort,
+      ignoreFetchAbort,
+    } = options
+
+    // deprecated options, don't trigger a warning for getting them if
+    // the thing being passed in is another LRUCache we're copying.
+    const { length, maxAge, stale } =
+      options instanceof LRUCache ? {} : options
+
+    if (max !== 0 && !isPosInt(max)) {
+      throw new TypeError('max option must be a nonnegative integer')
     }
-    // Protected read-only members
-    /**
-     * {@link LRUCache.OptionsBase.max} (read-only)
-     */
-    get max() {
-        return this.#max;
+
+    const UintArray = max ? getUintArray(max) : Array
+    if (!UintArray) {
+      throw new Error('invalid max value: ' + max)
     }
-    /**
-     * {@link LRUCache.OptionsBase.maxSize} (read-only)
-     */
-    get maxSize() {
-        return this.#maxSize;
+
+    this.max = max
+    this.maxSize = maxSize
+    this.maxEntrySize = maxEntrySize || this.maxSize
+    this.sizeCalculation = sizeCalculation || length
+    if (this.sizeCalculation) {
+      if (!this.maxSize && !this.maxEntrySize) {
+        throw new TypeError(
+          'cannot set sizeCalculation without setting maxSize or maxEntrySize'
+        )
+      }
+      if (typeof this.sizeCalculation !== 'function') {
+        throw new TypeError('sizeCalculation set to non-function')
+      }
     }
-    /**
-     * The total computed size of items in the cache (read-only)
-     */
-    get calculatedSize() {
-        return this.#calculatedSize;
+
+    this.fetchMethod = fetchMethod || null
+    if (this.fetchMethod && typeof this.fetchMethod !== 'function') {
+      throw new TypeError(
+        'fetchMethod must be a function if specified'
+      )
     }
-    /**
-     * The number of items stored in the cache (read-only)
-     */
-    get size() {
-        return this.#size;
+
+    this.fetchContext = fetchContext
+    if (!this.fetchMethod && fetchContext !== undefined) {
+      throw new TypeError(
+        'cannot set fetchContext without fetchMethod'
+      )
     }
-    /**
-     * {@link LRUCache.OptionsBase.fetchMethod} (read-only)
-     */
-    get fetchMethod() {
-        return this.#fetchMethod;
+
+    this.keyMap = new Map()
+    this.keyList = new Array(max).fill(null)
+    this.valList = new Array(max).fill(null)
+    this.next = new UintArray(max)
+    this.prev = new UintArray(max)
+    this.head = 0
+    this.tail = 0
+    this.free = new Stack(max)
+    this.initialFill = 1
+    this.size = 0
+
+    if (typeof dispose === 'function') {
+      this.dispose = dispose
     }
-    /**
-     * {@link LRUCache.OptionsBase.dispose} (read-only)
-     */
-    get dispose() {
-        return this.#dispose;
+    if (typeof disposeAfter === 'function') {
+      this.disposeAfter = disposeAfter
+      this.disposed = []
+    } else {
+      this.disposeAfter = null
+      this.disposed = null
     }
-    /**
-     * {@link LRUCache.OptionsBase.disposeAfter} (read-only)
-     */
-    get disposeAfter() {
-        return this.#disposeAfter;
-    }
-    constructor(options) {
-        const { max = 0, ttl, ttlResolution = 1, ttlAutopurge, updateAgeOnGet, updateAgeOnHas, allowStale, dispose, disposeAfter, noDisposeOnSet, noUpdateTTL, maxSize = 0, maxEntrySize = 0, sizeCalculation, fetchMethod, noDeleteOnFetchRejection, noDeleteOnStaleGet, allowStaleOnFetchRejection, allowStaleOnFetchAbort, ignoreFetchAbort, } = options;
-        if (max !== 0 && !isPosInt(max)) {
-            throw new TypeError('max option must be a nonnegative integer');
+    this.noDisposeOnSet = !!noDisposeOnSet
+    this.noUpdateTTL = !!noUpdateTTL
+    this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection
+    this.allowStaleOnFetchRejection = !!allowStaleOnFetchRejection
+    this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort
+    this.ignoreFetchAbort = !!ignoreFetchAbort
+
+    // NB: maxEntrySize is set to maxSize if it's set
+    if (this.maxEntrySize !== 0) {
+      if (this.maxSize !== 0) {
+        if (!isPosInt(this.maxSize)) {
+          throw new TypeError(
+            'maxSize must be a positive integer if specified'
+          )
         }
-        const UintArray = max ? getUintArray(max) : Array;
-        if (!UintArray) {
-            throw new Error('invalid max value: ' + max);
-        }
-        this.#max = max;
-        this.#maxSize = maxSize;
-        this.maxEntrySize = maxEntrySize || this.#maxSize;
-        this.sizeCalculation = sizeCalculation;
-        if (this.sizeCalculation) {
-            if (!this.#maxSize && !this.maxEntrySize) {
-                throw new TypeError('cannot set sizeCalculation without setting maxSize or maxEntrySize');
-            }
-            if (typeof this.sizeCalculation !== 'function') {
-                throw new TypeError('sizeCalculation set to non-function');
-            }
-        }
-        if (fetchMethod !== undefined &&
-            typeof fetchMethod !== 'function') {
-            throw new TypeError('fetchMethod must be a function if specified');
-        }
-        this.#fetchMethod = fetchMethod;
-        this.#hasFetchMethod = !!fetchMethod;
-        this.#keyMap = new Map();
-        this.#keyList = new Array(max).fill(undefined);
-        this.#valList = new Array(max).fill(undefined);
-        this.#next = new UintArray(max);
-        this.#prev = new UintArray(max);
-        this.#head = 0;
-        this.#tail = 0;
-        this.#free = Stack.create(max);
-        this.#size = 0;
-        this.#calculatedSize = 0;
-        if (typeof dispose === 'function') {
-            this.#dispose = dispose;
-        }
-        if (typeof disposeAfter === 'function') {
-            this.#disposeAfter = disposeAfter;
-            this.#disposed = [];
-        }
-        else {
-            this.#disposeAfter = undefined;
-            this.#disposed = undefined;
-        }
-        this.#hasDispose = !!this.#dispose;
-        this.#hasDisposeAfter = !!this.#disposeAfter;
-        this.noDisposeOnSet = !!noDisposeOnSet;
-        this.noUpdateTTL = !!noUpdateTTL;
-        this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection;
-        this.allowStaleOnFetchRejection = !!allowStaleOnFetchRejection;
-        this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort;
-        this.ignoreFetchAbort = !!ignoreFetchAbort;
-        // NB: maxEntrySize is set to maxSize if it's set
-        if (this.maxEntrySize !== 0) {
-            if (this.#maxSize !== 0) {
-                if (!isPosInt(this.#maxSize)) {
-                    throw new TypeError('maxSize must be a positive integer if specified');
-                }
-            }
-            if (!isPosInt(this.maxEntrySize)) {
-                throw new TypeError('maxEntrySize must be a positive integer if specified');
-            }
-            this.#initializeSizeTracking();
-        }
-        this.allowStale = !!allowStale;
-        this.noDeleteOnStaleGet = !!noDeleteOnStaleGet;
-        this.updateAgeOnGet = !!updateAgeOnGet;
-        this.updateAgeOnHas = !!updateAgeOnHas;
-        this.ttlResolution =
-            isPosInt(ttlResolution) || ttlResolution === 0
-                ? ttlResolution
-                : 1;
-        this.ttlAutopurge = !!ttlAutopurge;
-        this.ttl = ttl || 0;
-        if (this.ttl) {
-            if (!isPosInt(this.ttl)) {
-                throw new TypeError('ttl must be a positive integer if specified');
-            }
-            this.#initializeTTLTracking();
-        }
-        // do not allow completely unbounded caches
-        if (this.#max === 0 && this.ttl === 0 && this.#maxSize === 0) {
-            throw new TypeError('At least one of max, maxSize, or ttl is required');
-        }
-        if (!this.ttlAutopurge && !this.#max && !this.#maxSize) {
-            const code = 'LRU_CACHE_UNBOUNDED';
-            if (shouldWarn(code)) {
-                warned.add(code);
-                const msg = 'TTL caching without ttlAutopurge, max, or maxSize can ' +
-                    'result in unbounded memory consumption.';
-                emitWarning(msg, 'UnboundedCacheWarning', code, LRUCache);
-            }
-        }
+      }
+      if (!isPosInt(this.maxEntrySize)) {
+        throw new TypeError(
+          'maxEntrySize must be a positive integer if specified'
+        )
+      }
+      this.initializeSizeTracking()
     }
-    /**
-     * Return the remaining TTL time for a given entry key
-     */
-    getRemainingTTL(key) {
-        return this.#keyMap.has(key) ? Infinity : 0;
+
+    this.allowStale = !!allowStale || !!stale
+    this.noDeleteOnStaleGet = !!noDeleteOnStaleGet
+    this.updateAgeOnGet = !!updateAgeOnGet
+    this.updateAgeOnHas = !!updateAgeOnHas
+    this.ttlResolution =
+      isPosInt(ttlResolution) || ttlResolution === 0
+        ? ttlResolution
+        : 1
+    this.ttlAutopurge = !!ttlAutopurge
+    this.ttl = ttl || maxAge || 0
+    if (this.ttl) {
+      if (!isPosInt(this.ttl)) {
+        throw new TypeError(
+          'ttl must be a positive integer if specified'
+        )
+      }
+      this.initializeTTLTracking()
     }
-    #initializeTTLTracking() {
-        const ttls = new ZeroArray(this.#max);
-        const starts = new ZeroArray(this.#max);
-        this.#ttls = ttls;
-        this.#starts = starts;
-        this.#setItemTTL = (index, ttl, start = perf.now()) => {
-            starts[index] = ttl !== 0 ? start : 0;
-            ttls[index] = ttl;
-            if (ttl !== 0 && this.ttlAutopurge) {
-                const t = setTimeout(() => {
-                    if (this.#isStale(index)) {
-                        this.delete(this.#keyList[index]);
-                    }
-                }, ttl + 1);
-                // unref() not supported on all platforms
-                /* c8 ignore start */
-                if (t.unref) {
-                    t.unref();
-                }
-                /* c8 ignore stop */
-            }
-        };
-        this.#updateItemAge = index => {
-            starts[index] = ttls[index] !== 0 ? perf.now() : 0;
-        };
-        this.#statusTTL = (status, index) => {
-            if (ttls[index]) {
-                const ttl = ttls[index];
-                const start = starts[index];
-                status.ttl = ttl;
-                status.start = start;
-                status.now = cachedNow || getNow();
-                const age = status.now - start;
-                status.remainingTTL = ttl - age;
-            }
-        };
-        // debounce calls to perf.now() to 1s so we're not hitting
-        // that costly call repeatedly.
-        let cachedNow = 0;
-        const getNow = () => {
-            const n = perf.now();
-            if (this.ttlResolution > 0) {
-                cachedNow = n;
-                const t = setTimeout(() => (cachedNow = 0), this.ttlResolution);
-                // not available on all platforms
-                /* c8 ignore start */
-                if (t.unref) {
-                    t.unref();
-                }
-                /* c8 ignore stop */
-            }
-            return n;
-        };
-        this.getRemainingTTL = key => {
-            const index = this.#keyMap.get(key);
-            if (index === undefined) {
-                return 0;
-            }
-            const ttl = ttls[index];
-            const start = starts[index];
-            if (ttl === 0 || start === 0) {
-                return Infinity;
-            }
-            const age = (cachedNow || getNow()) - start;
-            return ttl - age;
-        };
-        this.#isStale = index => {
-            return (ttls[index] !== 0 &&
-                starts[index] !== 0 &&
-                (cachedNow || getNow()) - starts[index] > ttls[index]);
-        };
+
+    // do not allow completely unbounded caches
+    if (this.max === 0 && this.ttl === 0 && this.maxSize === 0) {
+      throw new TypeError(
+        'At least one of max, maxSize, or ttl is required'
+      )
     }
-    // conditionally set private methods related to TTL
-    #updateItemAge = () => { };
-    #statusTTL = () => { };
-    #setItemTTL = () => { };
-    /* c8 ignore stop */
-    #isStale = () => false;
-    #initializeSizeTracking() {
-        const sizes = new ZeroArray(this.#max);
-        this.#calculatedSize = 0;
-        this.#sizes = sizes;
-        this.#removeItemSize = index => {
-            this.#calculatedSize -= sizes[index];
-            sizes[index] = 0;
-        };
-        this.#requireSize = (k, v, size, sizeCalculation) => {
-            // provisionally accept background fetches.
-            // actual value size will be checked when they return.
-            if (this.#isBackgroundFetch(v)) {
-                return 0;
-            }
-            if (!isPosInt(size)) {
-                if (sizeCalculation) {
-                    if (typeof sizeCalculation !== 'function') {
-                        throw new TypeError('sizeCalculation must be a function');
-                    }
-                    size = sizeCalculation(v, k);
-                    if (!isPosInt(size)) {
-                        throw new TypeError('sizeCalculation return invalid (expect positive integer)');
-                    }
-                }
-                else {
-                    throw new TypeError('invalid size value (must be positive integer). ' +
-                        'When maxSize or maxEntrySize is used, sizeCalculation ' +
-                        'or size must be set.');
-                }
-            }
-            return size;
-        };
-        this.#addItemSize = (index, size, status) => {
-            sizes[index] = size;
-            if (this.#maxSize) {
-                const maxSize = this.#maxSize - sizes[index];
-                while (this.#calculatedSize > maxSize) {
-                    this.#evict(true);
-                }
-            }
-            this.#calculatedSize += sizes[index];
-            if (status) {
-                status.entrySize = size;
-                status.totalCalculatedSize = this.#calculatedSize;
-            }
-        };
+    if (!this.ttlAutopurge && !this.max && !this.maxSize) {
+      const code = 'LRU_CACHE_UNBOUNDED'
+      if (shouldWarn(code)) {
+        warned.add(code)
+        const msg =
+          'TTL caching without ttlAutopurge, max, or maxSize can ' +
+          'result in unbounded memory consumption.'
+        emitWarning(msg, 'UnboundedCacheWarning', code, LRUCache)
+      }
     }
-    #removeItemSize = _i => { };
-    #addItemSize = (_i, _s, _st) => { };
-    #requireSize = (_k, _v, size, sizeCalculation) => {
-        if (size || sizeCalculation) {
-            throw new TypeError('cannot set size without setting maxSize or maxEntrySize on cache');
+
+    if (stale) {
+      deprecatedOption('stale', 'allowStale')
+    }
+    if (maxAge) {
+      deprecatedOption('maxAge', 'ttl')
+    }
+    if (length) {
+      deprecatedOption('length', 'sizeCalculation')
+    }
+  }
+
+  getRemainingTTL(key) {
+    return this.has(key, { updateAgeOnHas: false }) ? Infinity : 0
+  }
+
+  initializeTTLTracking() {
+    this.ttls = new ZeroArray(this.max)
+    this.starts = new ZeroArray(this.max)
+
+    this.setItemTTL = (index, ttl, start = perf.now()) => {
+      this.starts[index] = ttl !== 0 ? start : 0
+      this.ttls[index] = ttl
+      if (ttl !== 0 && this.ttlAutopurge) {
+        const t = setTimeout(() => {
+          if (this.isStale(index)) {
+            this.delete(this.keyList[index])
+          }
+        }, ttl + 1)
+        /* istanbul ignore else - unref() not supported on all platforms */
+        if (t.unref) {
+          t.unref()
         }
-        return 0;
-    };
-    *#indexes({ allowStale = this.allowStale } = {}) {
-        if (this.#size) {
-            for (let i = this.#tail; true;) {
-                if (!this.#isValidIndex(i)) {
-                    break;
-                }
-                if (allowStale || !this.#isStale(i)) {
-                    yield i;
-                }
-                if (i === this.#head) {
-                    break;
-                }
-                else {
-                    i = this.#prev[i];
-                }
+      }
+    }
+
+    this.updateItemAge = index => {
+      this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0
+    }
+
+    this.statusTTL = (status, index) => {
+      if (status) {
+        status.ttl = this.ttls[index]
+        status.start = this.starts[index]
+        status.now = cachedNow || getNow()
+        status.remainingTTL = status.now + status.ttl - status.start
+      }
+    }
+
+    // debounce calls to perf.now() to 1s so we're not hitting
+    // that costly call repeatedly.
+    let cachedNow = 0
+    const getNow = () => {
+      const n = perf.now()
+      if (this.ttlResolution > 0) {
+        cachedNow = n
+        const t = setTimeout(
+          () => (cachedNow = 0),
+          this.ttlResolution
+        )
+        /* istanbul ignore else - not available on all platforms */
+        if (t.unref) {
+          t.unref()
+        }
+      }
+      return n
+    }
+
+    this.getRemainingTTL = key => {
+      const index = this.keyMap.get(key)
+      if (index === undefined) {
+        return 0
+      }
+      return this.ttls[index] === 0 || this.starts[index] === 0
+        ? Infinity
+        : this.starts[index] +
+            this.ttls[index] -
+            (cachedNow || getNow())
+    }
+
+    this.isStale = index => {
+      return (
+        this.ttls[index] !== 0 &&
+        this.starts[index] !== 0 &&
+        (cachedNow || getNow()) - this.starts[index] >
+          this.ttls[index]
+      )
+    }
+  }
+  updateItemAge(_index) {}
+  statusTTL(_status, _index) {}
+  setItemTTL(_index, _ttl, _start) {}
+  isStale(_index) {
+    return false
+  }
+
+  initializeSizeTracking() {
+    this.calculatedSize = 0
+    this.sizes = new ZeroArray(this.max)
+    this.removeItemSize = index => {
+      this.calculatedSize -= this.sizes[index]
+      this.sizes[index] = 0
+    }
+    this.requireSize = (k, v, size, sizeCalculation) => {
+      // provisionally accept background fetches.
+      // actual value size will be checked when they return.
+      if (this.isBackgroundFetch(v)) {
+        return 0
+      }
+      if (!isPosInt(size)) {
+        if (sizeCalculation) {
+          if (typeof sizeCalculation !== 'function') {
+            throw new TypeError('sizeCalculation must be a function')
+          }
+          size = sizeCalculation(v, k)
+          if (!isPosInt(size)) {
+            throw new TypeError(
+              'sizeCalculation return invalid (expect positive integer)'
+            )
+          }
+        } else {
+          throw new TypeError(
+            'invalid size value (must be positive integer). ' +
+              'When maxSize or maxEntrySize is used, sizeCalculation or size ' +
+              'must be set.'
+          )
+        }
+      }
+      return size
+    }
+    this.addItemSize = (index, size, status) => {
+      this.sizes[index] = size
+      if (this.maxSize) {
+        const maxSize = this.maxSize - this.sizes[index]
+        while (this.calculatedSize > maxSize) {
+          this.evict(true)
+        }
+      }
+      this.calculatedSize += this.sizes[index]
+      if (status) {
+        status.entrySize = size
+        status.totalCalculatedSize = this.calculatedSize
+      }
+    }
+  }
+  removeItemSize(_index) {}
+  addItemSize(_index, _size) {}
+  requireSize(_k, _v, size, sizeCalculation) {
+    if (size || sizeCalculation) {
+      throw new TypeError(
+        'cannot set size without setting maxSize or maxEntrySize on cache'
+      )
+    }
+  }
+
+  *indexes({ allowStale = this.allowStale } = {}) {
+    if (this.size) {
+      for (let i = this.tail; true; ) {
+        if (!this.isValidIndex(i)) {
+          break
+        }
+        if (allowStale || !this.isStale(i)) {
+          yield i
+        }
+        if (i === this.head) {
+          break
+        } else {
+          i = this.prev[i]
+        }
+      }
+    }
+  }
+
+  *rindexes({ allowStale = this.allowStale } = {}) {
+    if (this.size) {
+      for (let i = this.head; true; ) {
+        if (!this.isValidIndex(i)) {
+          break
+        }
+        if (allowStale || !this.isStale(i)) {
+          yield i
+        }
+        if (i === this.tail) {
+          break
+        } else {
+          i = this.next[i]
+        }
+      }
+    }
+  }
+
+  isValidIndex(index) {
+    return (
+      index !== undefined &&
+      this.keyMap.get(this.keyList[index]) === index
+    )
+  }
+
+  *entries() {
+    for (const i of this.indexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield [this.keyList[i], this.valList[i]]
+      }
+    }
+  }
+  *rentries() {
+    for (const i of this.rindexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield [this.keyList[i], this.valList[i]]
+      }
+    }
+  }
+
+  *keys() {
+    for (const i of this.indexes()) {
+      if (
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.keyList[i]
+      }
+    }
+  }
+  *rkeys() {
+    for (const i of this.rindexes()) {
+      if (
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.keyList[i]
+      }
+    }
+  }
+
+  *values() {
+    for (const i of this.indexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.valList[i]
+      }
+    }
+  }
+  *rvalues() {
+    for (const i of this.rindexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.valList[i]
+      }
+    }
+  }
+
+  [Symbol.iterator]() {
+    return this.entries()
+  }
+
+  find(fn, getOptions) {
+    for (const i of this.indexes()) {
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      if (fn(value, this.keyList[i], this)) {
+        return this.get(this.keyList[i], getOptions)
+      }
+    }
+  }
+
+  forEach(fn, thisp = this) {
+    for (const i of this.indexes()) {
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      fn.call(thisp, value, this.keyList[i], this)
+    }
+  }
+
+  rforEach(fn, thisp = this) {
+    for (const i of this.rindexes()) {
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      fn.call(thisp, value, this.keyList[i], this)
+    }
+  }
+
+  get prune() {
+    deprecatedMethod('prune', 'purgeStale')
+    return this.purgeStale
+  }
+
+  purgeStale() {
+    let deleted = false
+    for (const i of this.rindexes({ allowStale: true })) {
+      if (this.isStale(i)) {
+        this.delete(this.keyList[i])
+        deleted = true
+      }
+    }
+    return deleted
+  }
+
+  dump() {
+    const arr = []
+    for (const i of this.indexes({ allowStale: true })) {
+      const key = this.keyList[i]
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      const entry = { value }
+      if (this.ttls) {
+        entry.ttl = this.ttls[i]
+        // always dump the start relative to a portable timestamp
+        // it's ok for this to be a bit slow, it's a rare operation.
+        const age = perf.now() - this.starts[i]
+        entry.start = Math.floor(Date.now() - age)
+      }
+      if (this.sizes) {
+        entry.size = this.sizes[i]
+      }
+      arr.unshift([key, entry])
+    }
+    return arr
+  }
+
+  load(arr) {
+    this.clear()
+    for (const [key, entry] of arr) {
+      if (entry.start) {
+        // entry.start is a portable timestamp, but we may be using
+        // node's performance.now(), so calculate the offset.
+        // it's ok for this to be a bit slow, it's a rare operation.
+        const age = Date.now() - entry.start
+        entry.start = perf.now() - age
+      }
+      this.set(key, entry.value, entry)
+    }
+  }
+
+  dispose(_v, _k, _reason) {}
+
+  set(
+    k,
+    v,
+    {
+      ttl = this.ttl,
+      start,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      status,
+    } = {}
+  ) {
+    size = this.requireSize(k, v, size, sizeCalculation)
+    // if the item doesn't fit, don't do anything
+    // NB: maxEntrySize set to maxSize by default
+    if (this.maxEntrySize && size > this.maxEntrySize) {
+      if (status) {
+        status.set = 'miss'
+        status.maxEntrySizeExceeded = true
+      }
+      // have to delete, in case a background fetch is there already.
+      // in non-async cases, this is a no-op
+      this.delete(k)
+      return this
+    }
+    let index = this.size === 0 ? undefined : this.keyMap.get(k)
+    if (index === undefined) {
+      // addition
+      index = this.newIndex()
+      this.keyList[index] = k
+      this.valList[index] = v
+      this.keyMap.set(k, index)
+      this.next[this.tail] = index
+      this.prev[index] = this.tail
+      this.tail = index
+      this.size++
+      this.addItemSize(index, size, status)
+      if (status) {
+        status.set = 'add'
+      }
+      noUpdateTTL = false
+    } else {
+      // update
+      this.moveToTail(index)
+      const oldVal = this.valList[index]
+      if (v !== oldVal) {
+        if (this.isBackgroundFetch(oldVal)) {
+          oldVal.__abortController.abort(new Error('replaced'))
+        } else {
+          if (!noDisposeOnSet) {
+            this.dispose(oldVal, k, 'set')
+            if (this.disposeAfter) {
+              this.disposed.push([oldVal, k, 'set'])
             }
+          }
         }
-    }
-    *#rindexes({ allowStale = this.allowStale } = {}) {
-        if (this.#size) {
-            for (let i = this.#head; true;) {
-                if (!this.#isValidIndex(i)) {
-                    break;
-                }
-                if (allowStale || !this.#isStale(i)) {
-                    yield i;
-                }
-                if (i === this.#tail) {
-                    break;
-                }
-                else {
-                    i = this.#next[i];
-                }
-            }
+        this.removeItemSize(index)
+        this.valList[index] = v
+        this.addItemSize(index, size, status)
+        if (status) {
+          status.set = 'replace'
+          const oldValue =
+            oldVal && this.isBackgroundFetch(oldVal)
+              ? oldVal.__staleWhileFetching
+              : oldVal
+          if (oldValue !== undefined) status.oldValue = oldValue
         }
+      } else if (status) {
+        status.set = 'update'
+      }
     }
-    #isValidIndex(index) {
-        return (index !== undefined &&
-            this.#keyMap.get(this.#keyList[index]) === index);
+    if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
+      this.initializeTTLTracking()
     }
-    /**
-     * Return a generator yielding `[key, value]` pairs,
-     * in order from most recently used to least recently used.
-     */
-    *entries() {
-        for (const i of this.#indexes()) {
-            if (this.#valList[i] !== undefined &&
-                this.#keyList[i] !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield [this.#keyList[i], this.#valList[i]];
-            }
+    if (!noUpdateTTL) {
+      this.setItemTTL(index, ttl, start)
+    }
+    this.statusTTL(status, index)
+    if (this.disposeAfter) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
+    }
+    return this
+  }
+
+  newIndex() {
+    if (this.size === 0) {
+      return this.tail
+    }
+    if (this.size === this.max && this.max !== 0) {
+      return this.evict(false)
+    }
+    if (this.free.length !== 0) {
+      return this.free.pop()
+    }
+    // initial fill, just keep writing down the list
+    return this.initialFill++
+  }
+
+  pop() {
+    if (this.size) {
+      const val = this.valList[this.head]
+      this.evict(true)
+      return val
+    }
+  }
+
+  evict(free) {
+    const head = this.head
+    const k = this.keyList[head]
+    const v = this.valList[head]
+    if (this.isBackgroundFetch(v)) {
+      v.__abortController.abort(new Error('evicted'))
+    } else {
+      this.dispose(v, k, 'evict')
+      if (this.disposeAfter) {
+        this.disposed.push([v, k, 'evict'])
+      }
+    }
+    this.removeItemSize(head)
+    // if we aren't about to use the index, then null these out
+    if (free) {
+      this.keyList[head] = null
+      this.valList[head] = null
+      this.free.push(head)
+    }
+    this.head = this.next[head]
+    this.keyMap.delete(k)
+    this.size--
+    return head
+  }
+
+  has(k, { updateAgeOnHas = this.updateAgeOnHas, status } = {}) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined) {
+      if (!this.isStale(index)) {
+        if (updateAgeOnHas) {
+          this.updateItemAge(index)
         }
+        if (status) status.has = 'hit'
+        this.statusTTL(status, index)
+        return true
+      } else if (status) {
+        status.has = 'stale'
+        this.statusTTL(status, index)
+      }
+    } else if (status) {
+      status.has = 'miss'
     }
-    /**
-     * Inverse order version of {@link LRUCache.entries}
-     *
-     * Return a generator yielding `[key, value]` pairs,
-     * in order from least recently used to most recently used.
-     */
-    *rentries() {
-        for (const i of this.#rindexes()) {
-            if (this.#valList[i] !== undefined &&
-                this.#keyList[i] !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield [this.#keyList[i], this.#valList[i]];
-            }
+    return false
+  }
+
+  // like get(), but without any LRU updating or TTL expiration
+  peek(k, { allowStale = this.allowStale } = {}) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined && (allowStale || !this.isStale(index))) {
+      const v = this.valList[index]
+      // either stale and allowed, or forcing a refresh of non-stale value
+      return this.isBackgroundFetch(v) ? v.__staleWhileFetching : v
+    }
+  }
+
+  backgroundFetch(k, index, options, context) {
+    const v = index === undefined ? undefined : this.valList[index]
+    if (this.isBackgroundFetch(v)) {
+      return v
+    }
+    const ac = new AC()
+    if (options.signal) {
+      options.signal.addEventListener('abort', () =>
+        ac.abort(options.signal.reason)
+      )
+    }
+    const fetchOpts = {
+      signal: ac.signal,
+      options,
+      context,
+    }
+    const cb = (v, updateCache = false) => {
+      const { aborted } = ac.signal
+      const ignoreAbort = options.ignoreFetchAbort && v !== undefined
+      if (options.status) {
+        if (aborted && !updateCache) {
+          options.status.fetchAborted = true
+          options.status.fetchError = ac.signal.reason
+          if (ignoreAbort) options.status.fetchAbortIgnored = true
+        } else {
+          options.status.fetchResolved = true
         }
-    }
-    /**
-     * Return a generator yielding the keys in the cache,
-     * in order from most recently used to least recently used.
-     */
-    *keys() {
-        for (const i of this.#indexes()) {
-            const k = this.#keyList[i];
-            if (k !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield k;
-            }
-        }
-    }
-    /**
-     * Inverse order version of {@link LRUCache.keys}
-     *
-     * Return a generator yielding the keys in the cache,
-     * in order from least recently used to most recently used.
-     */
-    *rkeys() {
-        for (const i of this.#rindexes()) {
-            const k = this.#keyList[i];
-            if (k !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield k;
-            }
-        }
-    }
-    /**
-     * Return a generator yielding the values in the cache,
-     * in order from most recently used to least recently used.
-     */
-    *values() {
-        for (const i of this.#indexes()) {
-            const v = this.#valList[i];
-            if (v !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield this.#valList[i];
-            }
-        }
-    }
-    /**
-     * Inverse order version of {@link LRUCache.values}
-     *
-     * Return a generator yielding the values in the cache,
-     * in order from least recently used to most recently used.
-     */
-    *rvalues() {
-        for (const i of this.#rindexes()) {
-            const v = this.#valList[i];
-            if (v !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield this.#valList[i];
-            }
-        }
-    }
-    /**
-     * Iterating over the cache itself yields the same results as
-     * {@link LRUCache.entries}
-     */
-    [Symbol.iterator]() {
-        return this.entries();
-    }
-    /**
-     * Find a value for which the supplied fn method returns a truthy value,
-     * similar to Array.find().  fn is called as fn(value, key, cache).
-     */
-    find(fn, getOptions = {}) {
-        for (const i of this.#indexes()) {
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined)
-                continue;
-            if (fn(value, this.#keyList[i], this)) {
-                return this.get(this.#keyList[i], getOptions);
-            }
-        }
-    }
-    /**
-     * Call the supplied function on each item in the cache, in order from
-     * most recently used to least recently used.  fn is called as
-     * fn(value, key, cache).  Does not update age or recenty of use.
-     * Does not iterate over stale values.
-     */
-    forEach(fn, thisp = this) {
-        for (const i of this.#indexes()) {
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined)
-                continue;
-            fn.call(thisp, value, this.#keyList[i], this);
-        }
-    }
-    /**
-     * The same as {@link LRUCache.forEach} but items are iterated over in
-     * reverse order.  (ie, less recently used items are iterated over first.)
-     */
-    rforEach(fn, thisp = this) {
-        for (const i of this.#rindexes()) {
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined)
-                continue;
-            fn.call(thisp, value, this.#keyList[i], this);
-        }
-    }
-    /**
-     * Delete any stale entries. Returns true if anything was removed,
-     * false otherwise.
-     */
-    purgeStale() {
-        let deleted = false;
-        for (const i of this.#rindexes({ allowStale: true })) {
-            if (this.#isStale(i)) {
-                this.delete(this.#keyList[i]);
-                deleted = true;
-            }
-        }
-        return deleted;
-    }
-    /**
-     * Return an array of [key, {@link LRUCache.Entry}] tuples which can be
-     * passed to cache.load()
-     */
-    dump() {
-        const arr = [];
-        for (const i of this.#indexes({ allowStale: true })) {
-            const key = this.#keyList[i];
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined || key === undefined)
-                continue;
-            const entry = { value };
-            if (this.#ttls && this.#starts) {
-                entry.ttl = this.#ttls[i];
-                // always dump the start relative to a portable timestamp
-                // it's ok for this to be a bit slow, it's a rare operation.
-                const age = perf.now() - this.#starts[i];
-                entry.start = Math.floor(Date.now() - age);
-            }
-            if (this.#sizes) {
-                entry.size = this.#sizes[i];
-            }
-            arr.unshift([key, entry]);
-        }
-        return arr;
-    }
-    /**
-     * Reset the cache and load in the items in entries in the order listed.
-     * Note that the shape of the resulting cache may be different if the
-     * same options are not used in both caches.
-     */
-    load(arr) {
-        this.clear();
-        for (const [key, entry] of arr) {
-            if (entry.start) {
-                // entry.start is a portable timestamp, but we may be using
-                // node's performance.now(), so calculate the offset, so that
-                // we get the intended remaining TTL, no matter how long it's
-                // been on ice.
-                //
-                // it's ok for this to be a bit slow, it's a rare operation.
-                const age = Date.now() - entry.start;
-                entry.start = perf.now() - age;
-            }
-            this.set(key, entry.value, entry);
-        }
-    }
-    /**
-     * Add a value to the cache.
-     *
-     * Note: if `undefined` is specified as a value, this is an alias for
-     * {@link LRUCache#delete}
-     */
-    set(k, v, setOptions = {}) {
+      }
+      if (aborted && !ignoreAbort && !updateCache) {
+        return fetchFail(ac.signal.reason)
+      }
+      // either we didn't abort, and are still here, or we did, and ignored
+      if (this.valList[index] === p) {
         if (v === undefined) {
-            this.delete(k);
-            return this;
+          if (p.__staleWhileFetching) {
+            this.valList[index] = p.__staleWhileFetching
+          } else {
+            this.delete(k)
+          }
+        } else {
+          if (options.status) options.status.fetchUpdated = true
+          this.set(k, v, fetchOpts.options)
         }
-        const { ttl = this.ttl, start, noDisposeOnSet = this.noDisposeOnSet, sizeCalculation = this.sizeCalculation, status, } = setOptions;
-        let { noUpdateTTL = this.noUpdateTTL } = setOptions;
-        const size = this.#requireSize(k, v, setOptions.size || 0, sizeCalculation);
-        // if the item doesn't fit, don't do anything
-        // NB: maxEntrySize set to maxSize by default
-        if (this.maxEntrySize && size > this.maxEntrySize) {
-            if (status) {
-                status.set = 'miss';
-                status.maxEntrySizeExceeded = true;
-            }
-            // have to delete, in case something is there already.
-            this.delete(k);
-            return this;
-        }
-        let index = this.#size === 0 ? undefined : this.#keyMap.get(k);
-        if (index === undefined) {
-            // addition
-            index = (this.#size === 0
-                ? this.#tail
-                : this.#free.length !== 0
-                    ? this.#free.pop()
-                    : this.#size === this.#max
-                        ? this.#evict(false)
-                        : this.#size);
-            this.#keyList[index] = k;
-            this.#valList[index] = v;
-            this.#keyMap.set(k, index);
-            this.#next[this.#tail] = index;
-            this.#prev[index] = this.#tail;
-            this.#tail = index;
-            this.#size++;
-            this.#addItemSize(index, size, status);
-            if (status)
-                status.set = 'add';
-            noUpdateTTL = false;
-        }
-        else {
-            // update
-            this.#moveToTail(index);
-            const oldVal = this.#valList[index];
-            if (v !== oldVal) {
-                if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
-                    oldVal.__abortController.abort(new Error('replaced'));
-                    const { __staleWhileFetching: s } = oldVal;
-                    if (s !== undefined && !noDisposeOnSet) {
-                        if (this.#hasDispose) {
-                            this.#dispose?.(s, k, 'set');
-                        }
-                        if (this.#hasDisposeAfter) {
-                            this.#disposed?.push([s, k, 'set']);
-                        }
-                    }
-                }
-                else if (!noDisposeOnSet) {
-                    if (this.#hasDispose) {
-                        this.#dispose?.(oldVal, k, 'set');
-                    }
-                    if (this.#hasDisposeAfter) {
-                        this.#disposed?.push([oldVal, k, 'set']);
-                    }
-                }
-                this.#removeItemSize(index);
-                this.#addItemSize(index, size, status);
-                this.#valList[index] = v;
-                if (status) {
-                    status.set = 'replace';
-                    const oldValue = oldVal && this.#isBackgroundFetch(oldVal)
-                        ? oldVal.__staleWhileFetching
-                        : oldVal;
-                    if (oldValue !== undefined)
-                        status.oldValue = oldValue;
-                }
-            }
-            else if (status) {
-                status.set = 'update';
-            }
-        }
-        if (ttl !== 0 && !this.#ttls) {
-            this.#initializeTTLTracking();
-        }
-        if (this.#ttls) {
-            if (!noUpdateTTL) {
-                this.#setItemTTL(index, ttl, start);
-            }
-            if (status)
-                this.#statusTTL(status, index);
-        }
-        if (!noDisposeOnSet && this.#hasDisposeAfter && this.#disposed) {
-            const dt = this.#disposed;
-            let task;
-            while ((task = dt?.shift())) {
-                this.#disposeAfter?.(...task);
-            }
-        }
-        return this;
+      }
+      return v
     }
-    /**
-     * Evict the least recently used item, returning its value or
-     * `undefined` if cache is empty.
-     */
-    pop() {
-        try {
-            while (this.#size) {
-                const val = this.#valList[this.#head];
-                this.#evict(true);
-                if (this.#isBackgroundFetch(val)) {
-                    if (val.__staleWhileFetching) {
-                        return val.__staleWhileFetching;
-                    }
-                }
-                else if (val !== undefined) {
-                    return val;
-                }
-            }
-        }
-        finally {
-            if (this.#hasDisposeAfter && this.#disposed) {
-                const dt = this.#disposed;
-                let task;
-                while ((task = dt?.shift())) {
-                    this.#disposeAfter?.(...task);
-                }
-            }
-        }
+    const eb = er => {
+      if (options.status) {
+        options.status.fetchRejected = true
+        options.status.fetchError = er
+      }
+      return fetchFail(er)
     }
-    #evict(free) {
-        const head = this.#head;
-        const k = this.#keyList[head];
-        const v = this.#valList[head];
-        if (this.#hasFetchMethod && this.#isBackgroundFetch(v)) {
-            v.__abortController.abort(new Error('evicted'));
+    const fetchFail = er => {
+      const { aborted } = ac.signal
+      const allowStaleAborted =
+        aborted && options.allowStaleOnFetchAbort
+      const allowStale =
+        allowStaleAborted || options.allowStaleOnFetchRejection
+      const noDelete = allowStale || options.noDeleteOnFetchRejection
+      if (this.valList[index] === p) {
+        // if we allow stale on fetch rejections, then we need to ensure that
+        // the stale value is not removed from the cache when the fetch fails.
+        const del = !noDelete || p.__staleWhileFetching === undefined
+        if (del) {
+          this.delete(k)
+        } else if (!allowStaleAborted) {
+          // still replace the *promise* with the stale value,
+          // since we are done with the promise at this point.
+          // leave it untouched if we're still waiting for an
+          // aborted background fetch that hasn't yet returned.
+          this.valList[index] = p.__staleWhileFetching
         }
-        else if (this.#hasDispose || this.#hasDisposeAfter) {
-            if (this.#hasDispose) {
-                this.#dispose?.(v, k, 'evict');
-            }
-            if (this.#hasDisposeAfter) {
-                this.#disposed?.push([v, k, 'evict']);
-            }
+      }
+      if (allowStale) {
+        if (options.status && p.__staleWhileFetching !== undefined) {
+          options.status.returnedStale = true
         }
-        this.#removeItemSize(head);
-        // if we aren't about to use the index, then null these out
-        if (free) {
-            this.#keyList[head] = undefined;
-            this.#valList[head] = undefined;
-            this.#free.push(head);
-        }
-        if (this.#size === 1) {
-            this.#head = this.#tail = 0;
-            this.#free.length = 0;
-        }
-        else {
-            this.#head = this.#next[head];
-        }
-        this.#keyMap.delete(k);
-        this.#size--;
-        return head;
+        return p.__staleWhileFetching
+      } else if (p.__returned === p) {
+        throw er
+      }
     }
-    /**
-     * Check if a key is in the cache, without updating the recency of use.
-     * Will return false if the item is stale, even though it is technically
-     * in the cache.
-     *
-     * Will not update item age unless
-     * {@link LRUCache.OptionsBase.updateAgeOnHas} is set.
-     */
-    has(k, hasOptions = {}) {
-        const { updateAgeOnHas = this.updateAgeOnHas, status } = hasOptions;
-        const index = this.#keyMap.get(k);
-        if (index !== undefined) {
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v) &&
-                v.__staleWhileFetching === undefined) {
-                return false;
-            }
-            if (!this.#isStale(index)) {
-                if (updateAgeOnHas) {
-                    this.#updateItemAge(index);
-                }
-                if (status) {
-                    status.has = 'hit';
-                    this.#statusTTL(status, index);
-                }
-                return true;
-            }
-            else if (status) {
-                status.has = 'stale';
-                this.#statusTTL(status, index);
-            }
+    const pcall = (res, rej) => {
+      this.fetchMethod(k, v, fetchOpts).then(v => res(v), rej)
+      // ignored, we go until we finish, regardless.
+      // defer check until we are actually aborting,
+      // so fetchMethod can override.
+      ac.signal.addEventListener('abort', () => {
+        if (
+          !options.ignoreFetchAbort ||
+          options.allowStaleOnFetchAbort
+        ) {
+          res()
+          // when it eventually resolves, update the cache.
+          if (options.allowStaleOnFetchAbort) {
+            res = v => cb(v, true)
+          }
         }
-        else if (status) {
-            status.has = 'miss';
-        }
-        return false;
+      })
     }
-    /**
-     * Like {@link LRUCache#get} but doesn't update recency or delete stale
-     * items.
-     *
-     * Returns `undefined` if the item is stale, unless
-     * {@link LRUCache.OptionsBase.allowStale} is set.
-     */
-    peek(k, peekOptions = {}) {
-        const { allowStale = this.allowStale } = peekOptions;
-        const index = this.#keyMap.get(k);
-        if (index !== undefined &&
-            (allowStale || !this.#isStale(index))) {
-            const v = this.#valList[index];
-            // either stale and allowed, or forcing a refresh of non-stale value
-            return this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
-        }
+    if (options.status) options.status.fetchDispatched = true
+    const p = new Promise(pcall).then(cb, eb)
+    p.__abortController = ac
+    p.__staleWhileFetching = v
+    p.__returned = null
+    if (index === undefined) {
+      // internal, don't expose status.
+      this.set(k, p, { ...fetchOpts.options, status: undefined })
+      index = this.keyMap.get(k)
+    } else {
+      this.valList[index] = p
     }
-    #backgroundFetch(k, index, options, context) {
-        const v = index === undefined ? undefined : this.#valList[index];
-        if (this.#isBackgroundFetch(v)) {
-            return v;
-        }
-        const ac = new AC();
-        const { signal } = options;
-        // when/if our AC signals, then stop listening to theirs.
-        signal?.addEventListener('abort', () => ac.abort(signal.reason), {
-            signal: ac.signal,
-        });
-        const fetchOpts = {
-            signal: ac.signal,
-            options,
-            context,
-        };
-        const cb = (v, updateCache = false) => {
-            const { aborted } = ac.signal;
-            const ignoreAbort = options.ignoreFetchAbort && v !== undefined;
-            if (options.status) {
-                if (aborted && !updateCache) {
-                    options.status.fetchAborted = true;
-                    options.status.fetchError = ac.signal.reason;
-                    if (ignoreAbort)
-                        options.status.fetchAbortIgnored = true;
-                }
-                else {
-                    options.status.fetchResolved = true;
-                }
-            }
-            if (aborted && !ignoreAbort && !updateCache) {
-                return fetchFail(ac.signal.reason);
-            }
-            // either we didn't abort, and are still here, or we did, and ignored
-            const bf = p;
-            if (this.#valList[index] === p) {
-                if (v === undefined) {
-                    if (bf.__staleWhileFetching) {
-                        this.#valList[index] = bf.__staleWhileFetching;
-                    }
-                    else {
-                        this.delete(k);
-                    }
-                }
-                else {
-                    if (options.status)
-                        options.status.fetchUpdated = true;
-                    this.set(k, v, fetchOpts.options);
-                }
-            }
-            return v;
-        };
-        const eb = (er) => {
-            if (options.status) {
-                options.status.fetchRejected = true;
-                options.status.fetchError = er;
-            }
-            return fetchFail(er);
-        };
-        const fetchFail = (er) => {
-            const { aborted } = ac.signal;
-            const allowStaleAborted = aborted && options.allowStaleOnFetchAbort;
-            const allowStale = allowStaleAborted || options.allowStaleOnFetchRejection;
-            const noDelete = allowStale || options.noDeleteOnFetchRejection;
-            const bf = p;
-            if (this.#valList[index] === p) {
-                // if we allow stale on fetch rejections, then we need to ensure that
-                // the stale value is not removed from the cache when the fetch fails.
-                const del = !noDelete || bf.__staleWhileFetching === undefined;
-                if (del) {
-                    this.delete(k);
-                }
-                else if (!allowStaleAborted) {
-                    // still replace the *promise* with the stale value,
-                    // since we are done with the promise at this point.
-                    // leave it untouched if we're still waiting for an
-                    // aborted background fetch that hasn't yet returned.
-                    this.#valList[index] = bf.__staleWhileFetching;
-                }
-            }
-            if (allowStale) {
-                if (options.status && bf.__staleWhileFetching !== undefined) {
-                    options.status.returnedStale = true;
-                }
-                return bf.__staleWhileFetching;
-            }
-            else if (bf.__returned === bf) {
-                throw er;
-            }
-        };
-        const pcall = (res, rej) => {
-            const fmp = this.#fetchMethod?.(k, v, fetchOpts);
-            if (fmp && fmp instanceof Promise) {
-                fmp.then(v => res(v === undefined ? undefined : v), rej);
-            }
-            // ignored, we go until we finish, regardless.
-            // defer check until we are actually aborting,
-            // so fetchMethod can override.
-            ac.signal.addEventListener('abort', () => {
-                if (!options.ignoreFetchAbort ||
-                    options.allowStaleOnFetchAbort) {
-                    res(undefined);
-                    // when it eventually resolves, update the cache.
-                    if (options.allowStaleOnFetchAbort) {
-                        res = v => cb(v, true);
-                    }
-                }
-            });
-        };
-        if (options.status)
-            options.status.fetchDispatched = true;
-        const p = new Promise(pcall).then(cb, eb);
-        const bf = Object.assign(p, {
-            __abortController: ac,
-            __staleWhileFetching: v,
-            __returned: undefined,
-        });
-        if (index === undefined) {
-            // internal, don't expose status.
-            this.set(k, bf, { ...fetchOpts.options, status: undefined });
-            index = this.#keyMap.get(k);
-        }
-        else {
-            this.#valList[index] = bf;
-        }
-        return bf;
+    return p
+  }
+
+  isBackgroundFetch(p) {
+    return (
+      p &&
+      typeof p === 'object' &&
+      typeof p.then === 'function' &&
+      Object.prototype.hasOwnProperty.call(
+        p,
+        '__staleWhileFetching'
+      ) &&
+      Object.prototype.hasOwnProperty.call(p, '__returned') &&
+      (p.__returned === p || p.__returned === null)
+    )
+  }
+
+  // this takes the union of get() and set() opts, because it does both
+  async fetch(
+    k,
+    {
+      // get options
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      // set options
+      ttl = this.ttl,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      // fetch exclusive options
+      noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
+      ignoreFetchAbort = this.ignoreFetchAbort,
+      allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
+      fetchContext = this.fetchContext,
+      forceRefresh = false,
+      status,
+      signal,
+    } = {}
+  ) {
+    if (!this.fetchMethod) {
+      if (status) status.fetch = 'get'
+      return this.get(k, {
+        allowStale,
+        updateAgeOnGet,
+        noDeleteOnStaleGet,
+        status,
+      })
     }
-    #isBackgroundFetch(p) {
-        if (!this.#hasFetchMethod)
-            return false;
-        const b = p;
-        return (!!b &&
-            b instanceof Promise &&
-            b.hasOwnProperty('__staleWhileFetching') &&
-            b.__abortController instanceof AC);
+
+    const options = {
+      allowStale,
+      updateAgeOnGet,
+      noDeleteOnStaleGet,
+      ttl,
+      noDisposeOnSet,
+      size,
+      sizeCalculation,
+      noUpdateTTL,
+      noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection,
+      allowStaleOnFetchAbort,
+      ignoreFetchAbort,
+      status,
+      signal,
     }
-    async fetch(k, fetchOptions = {}) {
-        const { 
-        // get options
-        allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, 
-        // set options
-        ttl = this.ttl, noDisposeOnSet = this.noDisposeOnSet, size = 0, sizeCalculation = this.sizeCalculation, noUpdateTTL = this.noUpdateTTL, 
-        // fetch exclusive options
-        noDeleteOnFetchRejection = this.noDeleteOnFetchRejection, allowStaleOnFetchRejection = this.allowStaleOnFetchRejection, ignoreFetchAbort = this.ignoreFetchAbort, allowStaleOnFetchAbort = this.allowStaleOnFetchAbort, context, forceRefresh = false, status, signal, } = fetchOptions;
-        if (!this.#hasFetchMethod) {
-            if (status)
-                status.fetch = 'get';
-            return this.get(k, {
-                allowStale,
-                updateAgeOnGet,
-                noDeleteOnStaleGet,
-                status,
-            });
+
+    let index = this.keyMap.get(k)
+    if (index === undefined) {
+      if (status) status.fetch = 'miss'
+      const p = this.backgroundFetch(k, index, options, fetchContext)
+      return (p.__returned = p)
+    } else {
+      // in cache, maybe already fetching
+      const v = this.valList[index]
+      if (this.isBackgroundFetch(v)) {
+        const stale =
+          allowStale && v.__staleWhileFetching !== undefined
+        if (status) {
+          status.fetch = 'inflight'
+          if (stale) status.returnedStale = true
         }
-        const options = {
-            allowStale,
-            updateAgeOnGet,
-            noDeleteOnStaleGet,
-            ttl,
-            noDisposeOnSet,
-            size,
-            sizeCalculation,
-            noUpdateTTL,
-            noDeleteOnFetchRejection,
-            allowStaleOnFetchRejection,
-            allowStaleOnFetchAbort,
-            ignoreFetchAbort,
-            status,
-            signal,
-        };
-        let index = this.#keyMap.get(k);
-        if (index === undefined) {
-            if (status)
-                status.fetch = 'miss';
-            const p = this.#backgroundFetch(k, index, options, context);
-            return (p.__returned = p);
+        return stale ? v.__staleWhileFetching : (v.__returned = v)
+      }
+
+      // if we force a refresh, that means do NOT serve the cached value,
+      // unless we are already in the process of refreshing the cache.
+      const isStale = this.isStale(index)
+      if (!forceRefresh && !isStale) {
+        if (status) status.fetch = 'hit'
+        this.moveToTail(index)
+        if (updateAgeOnGet) {
+          this.updateItemAge(index)
         }
-        else {
-            // in cache, maybe already fetching
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v)) {
-                const stale = allowStale && v.__staleWhileFetching !== undefined;
-                if (status) {
-                    status.fetch = 'inflight';
-                    if (stale)
-                        status.returnedStale = true;
-                }
-                return stale ? v.__staleWhileFetching : (v.__returned = v);
-            }
-            // if we force a refresh, that means do NOT serve the cached value,
-            // unless we are already in the process of refreshing the cache.
-            const isStale = this.#isStale(index);
-            if (!forceRefresh && !isStale) {
-                if (status)
-                    status.fetch = 'hit';
-                this.#moveToTail(index);
-                if (updateAgeOnGet) {
-                    this.#updateItemAge(index);
-                }
-                if (status)
-                    this.#statusTTL(status, index);
-                return v;
-            }
-            // ok, it is stale or a forced refresh, and not already fetching.
-            // refresh the cache.
-            const p = this.#backgroundFetch(k, index, options, context);
-            const hasStale = p.__staleWhileFetching !== undefined;
-            const staleVal = hasStale && allowStale;
-            if (status) {
-                status.fetch = isStale ? 'stale' : 'refresh';
-                if (staleVal && isStale)
-                    status.returnedStale = true;
-            }
-            return staleVal ? p.__staleWhileFetching : (p.__returned = p);
-        }
+        this.statusTTL(status, index)
+        return v
+      }
+
+      // ok, it is stale or a forced refresh, and not already fetching.
+      // refresh the cache.
+      const p = this.backgroundFetch(k, index, options, fetchContext)
+      const hasStale = p.__staleWhileFetching !== undefined
+      const staleVal = hasStale && allowStale
+      if (status) {
+        status.fetch = hasStale && isStale ? 'stale' : 'refresh'
+        if (staleVal && isStale) status.returnedStale = true
+      }
+      return staleVal ? p.__staleWhileFetching : (p.__returned = p)
     }
-    /**
-     * Return a value from the cache. Will update the recency of the cache
-     * entry found.
-     *
-     * If the key is not found, get() will return `undefined`.
-     */
-    get(k, getOptions = {}) {
-        const { allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, status, } = getOptions;
-        const index = this.#keyMap.get(k);
-        if (index !== undefined) {
-            const value = this.#valList[index];
-            const fetching = this.#isBackgroundFetch(value);
-            if (status)
-                this.#statusTTL(status, index);
-            if (this.#isStale(index)) {
-                if (status)
-                    status.get = 'stale';
-                // delete only if not an in-flight background fetch
-                if (!fetching) {
-                    if (!noDeleteOnStaleGet) {
-                        this.delete(k);
-                    }
-                    if (status && allowStale)
-                        status.returnedStale = true;
-                    return allowStale ? value : undefined;
-                }
-                else {
-                    if (status &&
-                        allowStale &&
-                        value.__staleWhileFetching !== undefined) {
-                        status.returnedStale = true;
-                    }
-                    return allowStale ? value.__staleWhileFetching : undefined;
-                }
-            }
-            else {
-                if (status)
-                    status.get = 'hit';
-                // if we're currently fetching it, we don't actually have it yet
-                // it's not stale, which means this isn't a staleWhileRefetching.
-                // If it's not stale, and fetching, AND has a __staleWhileFetching
-                // value, then that means the user fetched with {forceRefresh:true},
-                // so it's safe to return that value.
-                if (fetching) {
-                    return value.__staleWhileFetching;
-                }
-                this.#moveToTail(index);
-                if (updateAgeOnGet) {
-                    this.#updateItemAge(index);
-                }
-                return value;
-            }
+  }
+
+  get(
+    k,
+    {
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      status,
+    } = {}
+  ) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined) {
+      const value = this.valList[index]
+      const fetching = this.isBackgroundFetch(value)
+      this.statusTTL(status, index)
+      if (this.isStale(index)) {
+        if (status) status.get = 'stale'
+        // delete only if not an in-flight background fetch
+        if (!fetching) {
+          if (!noDeleteOnStaleGet) {
+            this.delete(k)
+          }
+          if (status) status.returnedStale = allowStale
+          return allowStale ? value : undefined
+        } else {
+          if (status) {
+            status.returnedStale =
+              allowStale && value.__staleWhileFetching !== undefined
+          }
+          return allowStale ? value.__staleWhileFetching : undefined
         }
-        else if (status) {
-            status.get = 'miss';
+      } else {
+        if (status) status.get = 'hit'
+        // if we're currently fetching it, we don't actually have it yet
+        // it's not stale, which means this isn't a staleWhileRefetching.
+        // If it's not stale, and fetching, AND has a __staleWhileFetching
+        // value, then that means the user fetched with {forceRefresh:true},
+        // so it's safe to return that value.
+        if (fetching) {
+          return value.__staleWhileFetching
         }
+        this.moveToTail(index)
+        if (updateAgeOnGet) {
+          this.updateItemAge(index)
+        }
+        return value
+      }
+    } else if (status) {
+      status.get = 'miss'
     }
-    #connect(p, n) {
-        this.#prev[n] = p;
-        this.#next[p] = n;
+  }
+
+  connect(p, n) {
+    this.prev[n] = p
+    this.next[p] = n
+  }
+
+  moveToTail(index) {
+    // if tail already, nothing to do
+    // if head, move head to next[index]
+    // else
+    //   move next[prev[index]] to next[index] (head has no prev)
+    //   move prev[next[index]] to prev[index]
+    // prev[index] = tail
+    // next[tail] = index
+    // tail = index
+    if (index !== this.tail) {
+      if (index === this.head) {
+        this.head = this.next[index]
+      } else {
+        this.connect(this.prev[index], this.next[index])
+      }
+      this.connect(this.tail, index)
+      this.tail = index
     }
-    #moveToTail(index) {
-        // if tail already, nothing to do
-        // if head, move head to next[index]
-        // else
-        //   move next[prev[index]] to next[index] (head has no prev)
-        //   move prev[next[index]] to prev[index]
-        // prev[index] = tail
-        // next[tail] = index
-        // tail = index
-        if (index !== this.#tail) {
-            if (index === this.#head) {
-                this.#head = this.#next[index];
+  }
+
+  get del() {
+    deprecatedMethod('del', 'delete')
+    return this.delete
+  }
+
+  delete(k) {
+    let deleted = false
+    if (this.size !== 0) {
+      const index = this.keyMap.get(k)
+      if (index !== undefined) {
+        deleted = true
+        if (this.size === 1) {
+          this.clear()
+        } else {
+          this.removeItemSize(index)
+          const v = this.valList[index]
+          if (this.isBackgroundFetch(v)) {
+            v.__abortController.abort(new Error('deleted'))
+          } else {
+            this.dispose(v, k, 'delete')
+            if (this.disposeAfter) {
+              this.disposed.push([v, k, 'delete'])
             }
-            else {
-                this.#connect(this.#prev[index], this.#next[index]);
-            }
-            this.#connect(this.#tail, index);
-            this.#tail = index;
+          }
+          this.keyMap.delete(k)
+          this.keyList[index] = null
+          this.valList[index] = null
+          if (index === this.tail) {
+            this.tail = this.prev[index]
+          } else if (index === this.head) {
+            this.head = this.next[index]
+          } else {
+            this.next[this.prev[index]] = this.next[index]
+            this.prev[this.next[index]] = this.prev[index]
+          }
+          this.size--
+          this.free.push(index)
         }
+      }
     }
-    /**
-     * Deletes a key out of the cache.
-     * Returns true if the key was deleted, false otherwise.
-     */
-    delete(k) {
-        let deleted = false;
-        if (this.#size !== 0) {
-            const index = this.#keyMap.get(k);
-            if (index !== undefined) {
-                deleted = true;
-                if (this.#size === 1) {
-                    this.clear();
-                }
-                else {
-                    this.#removeItemSize(index);
-                    const v = this.#valList[index];
-                    if (this.#isBackgroundFetch(v)) {
-                        v.__abortController.abort(new Error('deleted'));
-                    }
-                    else if (this.#hasDispose || this.#hasDisposeAfter) {
-                        if (this.#hasDispose) {
-                            this.#dispose?.(v, k, 'delete');
-                        }
-                        if (this.#hasDisposeAfter) {
-                            this.#disposed?.push([v, k, 'delete']);
-                        }
-                    }
-                    this.#keyMap.delete(k);
-                    this.#keyList[index] = undefined;
-                    this.#valList[index] = undefined;
-                    if (index === this.#tail) {
-                        this.#tail = this.#prev[index];
-                    }
-                    else if (index === this.#head) {
-                        this.#head = this.#next[index];
-                    }
-                    else {
-                        this.#next[this.#prev[index]] = this.#next[index];
-                        this.#prev[this.#next[index]] = this.#prev[index];
-                    }
-                    this.#size--;
-                    this.#free.push(index);
-                }
-            }
-        }
-        if (this.#hasDisposeAfter && this.#disposed?.length) {
-            const dt = this.#disposed;
-            let task;
-            while ((task = dt?.shift())) {
-                this.#disposeAfter?.(...task);
-            }
-        }
-        return deleted;
+    if (this.disposed) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
     }
-    /**
-     * Clear the cache entirely, throwing away all values.
-     */
-    clear() {
-        for (const index of this.#rindexes({ allowStale: true })) {
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v)) {
-                v.__abortController.abort(new Error('deleted'));
-            }
-            else {
-                const k = this.#keyList[index];
-                if (this.#hasDispose) {
-                    this.#dispose?.(v, k, 'delete');
-                }
-                if (this.#hasDisposeAfter) {
-                    this.#disposed?.push([v, k, 'delete']);
-                }
-            }
+    return deleted
+  }
+
+  clear() {
+    for (const index of this.rindexes({ allowStale: true })) {
+      const v = this.valList[index]
+      if (this.isBackgroundFetch(v)) {
+        v.__abortController.abort(new Error('deleted'))
+      } else {
+        const k = this.keyList[index]
+        this.dispose(v, k, 'delete')
+        if (this.disposeAfter) {
+          this.disposed.push([v, k, 'delete'])
         }
-        this.#keyMap.clear();
-        this.#valList.fill(undefined);
-        this.#keyList.fill(undefined);
-        if (this.#ttls && this.#starts) {
-            this.#ttls.fill(0);
-            this.#starts.fill(0);
-        }
-        if (this.#sizes) {
-            this.#sizes.fill(0);
-        }
-        this.#head = 0;
-        this.#tail = 0;
-        this.#free.length = 0;
-        this.#calculatedSize = 0;
-        this.#size = 0;
-        if (this.#hasDisposeAfter && this.#disposed) {
-            const dt = this.#disposed;
-            let task;
-            while ((task = dt?.shift())) {
-                this.#disposeAfter?.(...task);
-            }
-        }
+      }
     }
+
+    this.keyMap.clear()
+    this.valList.fill(null)
+    this.keyList.fill(null)
+    if (this.ttls) {
+      this.ttls.fill(0)
+      this.starts.fill(0)
+    }
+    if (this.sizes) {
+      this.sizes.fill(0)
+    }
+    this.head = 0
+    this.tail = 0
+    this.initialFill = 1
+    this.free.length = 0
+    this.calculatedSize = 0
+    this.size = 0
+    if (this.disposed) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
+    }
+  }
+
+  get reset() {
+    deprecatedMethod('reset', 'clear')
+    return this.clear
+  }
+
+  get length() {
+    deprecatedProperty('length', 'size')
+    return this.size
+  }
+
+  static get AbortController() {
+    return AC
+  }
+  static get AbortSignal() {
+    return AS
+  }
 }
-exports.LRUCache = LRUCache;
-//# sourceMappingURL=index.js.map
 
-/***/ }),
+module.exports = LRUCache
 
-/***/ 8331:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.sync = exports.isexe = exports.posix = exports.win32 = void 0;
-const posix = __importStar(__nccwpck_require__(261));
-exports.posix = posix;
-const win32 = __importStar(__nccwpck_require__(9578));
-exports.win32 = win32;
-__exportStar(__nccwpck_require__(6229), exports);
-const platform = process.env._ISEXE_TEST_PLATFORM_ || process.platform;
-const impl = platform === 'win32' ? win32 : posix;
-/**
- * Determine whether a path is executable on the current platform.
- */
-exports.isexe = impl.isexe;
-/**
- * Synchronously determine whether a path is executable on the
- * current platform.
- */
-exports.sync = impl.sync;
-//# sourceMappingURL=index.js.map
-
-/***/ }),
-
-/***/ 6229:
-/***/ ((__unused_webpack_module, exports) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-//# sourceMappingURL=options.js.map
-
-/***/ }),
-
-/***/ 261:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-/**
- * This is the Posix implementation of isexe, which uses the file
- * mode and uid/gid values.
- *
- * @module
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.sync = exports.isexe = void 0;
-const fs_1 = __nccwpck_require__(7147);
-const promises_1 = __nccwpck_require__(3292);
-/**
- * Determine whether a path is executable according to the mode and
- * current (or specified) user and group IDs.
- */
-const isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat(await (0, promises_1.stat)(path), options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.isexe = isexe;
-/**
- * Synchronously determine whether a path is executable according to
- * the mode and current (or specified) user and group IDs.
- */
-const sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat((0, fs_1.statSync)(path), options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.sync = sync;
-const checkStat = (stat, options) => stat.isFile() && checkMode(stat, options);
-const checkMode = (stat, options) => {
-    const myUid = options.uid ?? process.getuid?.();
-    const myGroups = options.groups ?? process.getgroups?.() ?? [];
-    const myGid = options.gid ?? process.getgid?.() ?? myGroups[0];
-    if (myUid === undefined || myGid === undefined) {
-        throw new Error('cannot get uid or gid');
-    }
-    const groups = new Set([myGid, ...myGroups]);
-    const mod = stat.mode;
-    const uid = stat.uid;
-    const gid = stat.gid;
-    const u = parseInt('100', 8);
-    const g = parseInt('010', 8);
-    const o = parseInt('001', 8);
-    const ug = u | g;
-    return !!(mod & o ||
-        (mod & g && groups.has(gid)) ||
-        (mod & u && uid === myUid) ||
-        (mod & ug && myUid === 0));
-};
-//# sourceMappingURL=posix.js.map
-
-/***/ }),
-
-/***/ 9578:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-/**
- * This is the Windows implementation of isexe, which uses the file
- * extension and PATHEXT setting.
- *
- * @module
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.sync = exports.isexe = void 0;
-const fs_1 = __nccwpck_require__(7147);
-const promises_1 = __nccwpck_require__(3292);
-/**
- * Determine whether a path is executable based on the file extension
- * and PATHEXT environment variable (or specified pathExt option)
- */
-const isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat(await (0, promises_1.stat)(path), path, options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.isexe = isexe;
-/**
- * Synchronously determine whether a path is executable based on the file
- * extension and PATHEXT environment variable (or specified pathExt option)
- */
-const sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat((0, fs_1.statSync)(path), path, options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.sync = sync;
-const checkPathExt = (path, options) => {
-    const { pathExt = process.env.PATHEXT || '' } = options;
-    const peSplit = pathExt.split(';');
-    if (peSplit.indexOf('') !== -1) {
-        return true;
-    }
-    for (let i = 0; i < peSplit.length; i++) {
-        const p = peSplit[i].toLowerCase();
-        const ext = path.substring(path.length - p.length).toLowerCase();
-        if (p && ext === p) {
-            return true;
-        }
-    }
-    return false;
-};
-const checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, options);
-//# sourceMappingURL=win32.js.map
-
-/***/ }),
-
-/***/ 5102:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.sync = exports.isexe = exports.posix = exports.win32 = void 0;
-const posix = __importStar(__nccwpck_require__(2068));
-exports.posix = posix;
-const win32 = __importStar(__nccwpck_require__(2129));
-exports.win32 = win32;
-__exportStar(__nccwpck_require__(1991), exports);
-const platform = process.env._ISEXE_TEST_PLATFORM_ || process.platform;
-const impl = platform === 'win32' ? win32 : posix;
-/**
- * Determine whether a path is executable on the current platform.
- */
-exports.isexe = impl.isexe;
-/**
- * Synchronously determine whether a path is executable on the
- * current platform.
- */
-exports.sync = impl.sync;
-//# sourceMappingURL=index.js.map
-
-/***/ }),
-
-/***/ 1991:
-/***/ ((__unused_webpack_module, exports) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-//# sourceMappingURL=options.js.map
-
-/***/ }),
-
-/***/ 2068:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-/**
- * This is the Posix implementation of isexe, which uses the file
- * mode and uid/gid values.
- *
- * @module
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.sync = exports.isexe = void 0;
-const fs_1 = __nccwpck_require__(7147);
-const promises_1 = __nccwpck_require__(3292);
-/**
- * Determine whether a path is executable according to the mode and
- * current (or specified) user and group IDs.
- */
-const isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat(await (0, promises_1.stat)(path), options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.isexe = isexe;
-/**
- * Synchronously determine whether a path is executable according to
- * the mode and current (or specified) user and group IDs.
- */
-const sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat((0, fs_1.statSync)(path), options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.sync = sync;
-const checkStat = (stat, options) => stat.isFile() && checkMode(stat, options);
-const checkMode = (stat, options) => {
-    const myUid = options.uid ?? process.getuid?.();
-    const myGroups = options.groups ?? process.getgroups?.() ?? [];
-    const myGid = options.gid ?? process.getgid?.() ?? myGroups[0];
-    if (myUid === undefined || myGid === undefined) {
-        throw new Error('cannot get uid or gid');
-    }
-    const groups = new Set([myGid, ...myGroups]);
-    const mod = stat.mode;
-    const uid = stat.uid;
-    const gid = stat.gid;
-    const u = parseInt('100', 8);
-    const g = parseInt('010', 8);
-    const o = parseInt('001', 8);
-    const ug = u | g;
-    return !!(mod & o ||
-        (mod & g && groups.has(gid)) ||
-        (mod & u && uid === myUid) ||
-        (mod & ug && myUid === 0));
-};
-//# sourceMappingURL=posix.js.map
-
-/***/ }),
-
-/***/ 2129:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-/**
- * This is the Windows implementation of isexe, which uses the file
- * extension and PATHEXT setting.
- *
- * @module
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.sync = exports.isexe = void 0;
-const fs_1 = __nccwpck_require__(7147);
-const promises_1 = __nccwpck_require__(3292);
-/**
- * Determine whether a path is executable based on the file extension
- * and PATHEXT environment variable (or specified pathExt option)
- */
-const isexe = async (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat(await (0, promises_1.stat)(path), path, options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.isexe = isexe;
-/**
- * Synchronously determine whether a path is executable based on the file
- * extension and PATHEXT environment variable (or specified pathExt option)
- */
-const sync = (path, options = {}) => {
-    const { ignoreErrors = false } = options;
-    try {
-        return checkStat((0, fs_1.statSync)(path), path, options);
-    }
-    catch (e) {
-        const er = e;
-        if (ignoreErrors || er.code === 'EACCES')
-            return false;
-        throw er;
-    }
-};
-exports.sync = sync;
-const checkPathExt = (path, options) => {
-    const { pathExt = process.env.PATHEXT || '' } = options;
-    const peSplit = pathExt.split(';');
-    if (peSplit.indexOf('') !== -1) {
-        return true;
-    }
-    for (let i = 0; i < peSplit.length; i++) {
-        const p = peSplit[i].toLowerCase();
-        const ext = path.substring(path.length - p.length).toLowerCase();
-        if (p && ext === p) {
-            return true;
-        }
-    }
-    return false;
-};
-const checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, options);
-//# sourceMappingURL=win32.js.map
 
 /***/ }),
 
@@ -24919,1413 +24528,1237 @@ exports.unescape = unescape;
 
 /***/ }),
 
-/***/ 1410:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 5631:
+/***/ ((module) => {
 
-
-/**
- * @module LRUCache
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.LRUCache = void 0;
-const perf = typeof performance === 'object' &&
-    performance &&
-    typeof performance.now === 'function'
+const perf =
+  typeof performance === 'object' &&
+  performance &&
+  typeof performance.now === 'function'
     ? performance
-    : Date;
-const warned = new Set();
-/* c8 ignore start */
-const PROCESS = (typeof process === 'object' && !!process ? process : {});
-/* c8 ignore start */
-const emitWarning = (msg, type, code, fn) => {
-    typeof PROCESS.emitWarning === 'function'
-        ? PROCESS.emitWarning(msg, type, code, fn)
-        : console.error(`[${code}] ${type}: ${msg}`);
-};
-let AC = globalThis.AbortController;
-let AS = globalThis.AbortSignal;
-/* c8 ignore start */
-if (typeof AC === 'undefined') {
-    //@ts-ignore
-    AS = class AbortSignal {
-        onabort;
-        _onabort = [];
-        reason;
-        aborted = false;
-        addEventListener(_, fn) {
-            this._onabort.push(fn);
+    : Date
+
+const hasAbortController = typeof AbortController === 'function'
+
+// minimal backwards-compatibility polyfill
+// this doesn't have nearly all the checks and whatnot that
+// actual AbortController/Signal has, but it's enough for
+// our purposes, and if used properly, behaves the same.
+const AC = hasAbortController
+  ? AbortController
+  : class AbortController {
+      constructor() {
+        this.signal = new AS()
+      }
+      abort(reason = new Error('This operation was aborted')) {
+        this.signal.reason = this.signal.reason || reason
+        this.signal.aborted = true
+        this.signal.dispatchEvent({
+          type: 'abort',
+          target: this.signal,
+        })
+      }
+    }
+
+const hasAbortSignal = typeof AbortSignal === 'function'
+// Some polyfills put this on the AC class, not global
+const hasACAbortSignal = typeof AC.AbortSignal === 'function'
+const AS = hasAbortSignal
+  ? AbortSignal
+  : hasACAbortSignal
+  ? AC.AbortController
+  : class AbortSignal {
+      constructor() {
+        this.reason = undefined
+        this.aborted = false
+        this._listeners = []
+      }
+      dispatchEvent(e) {
+        if (e.type === 'abort') {
+          this.aborted = true
+          this.onabort(e)
+          this._listeners.forEach(f => f(e), this)
         }
-    };
-    //@ts-ignore
-    AC = class AbortController {
-        constructor() {
-            warnACPolyfill();
+      }
+      onabort() {}
+      addEventListener(ev, fn) {
+        if (ev === 'abort') {
+          this._listeners.push(fn)
         }
-        signal = new AS();
-        abort(reason) {
-            if (this.signal.aborted)
-                return;
-            //@ts-ignore
-            this.signal.reason = reason;
-            //@ts-ignore
-            this.signal.aborted = true;
-            //@ts-ignore
-            for (const fn of this.signal._onabort) {
-                fn(reason);
-            }
-            this.signal.onabort?.(reason);
+      }
+      removeEventListener(ev, fn) {
+        if (ev === 'abort') {
+          this._listeners = this._listeners.filter(f => f !== fn)
         }
-    };
-    let printACPolyfillWarning = PROCESS.env?.LRU_CACHE_IGNORE_AC_WARNING !== '1';
-    const warnACPolyfill = () => {
-        if (!printACPolyfillWarning)
-            return;
-        printACPolyfillWarning = false;
-        emitWarning('AbortController is not defined. If using lru-cache in ' +
-            'node 14, load an AbortController polyfill from the ' +
-            '`node-abort-controller` package. A minimal polyfill is ' +
-            'provided for use by LRUCache.fetch(), but it should not be ' +
-            'relied upon in other contexts (eg, passing it to other APIs that ' +
-            'use AbortController/AbortSignal might have undesirable effects). ' +
-            'You may disable this with LRU_CACHE_IGNORE_AC_WARNING=1 in the env.', 'NO_ABORT_CONTROLLER', 'ENOTSUP', warnACPolyfill);
-    };
+      }
+    }
+
+const warned = new Set()
+const deprecatedOption = (opt, instead) => {
+  const code = `LRU_CACHE_OPTION_${opt}`
+  if (shouldWarn(code)) {
+    warn(code, `${opt} option`, `options.${instead}`, LRUCache)
+  }
 }
-/* c8 ignore stop */
-const shouldWarn = (code) => !warned.has(code);
-const TYPE = Symbol('type');
-const isPosInt = (n) => n && n === Math.floor(n) && n > 0 && isFinite(n);
-/* c8 ignore start */
-// This is a little bit ridiculous, tbh.
-// The maximum array length is 2^32-1 or thereabouts on most JS impls.
-// And well before that point, you're caching the entire world, I mean,
-// that's ~32GB of just integers for the next/prev links, plus whatever
-// else to hold that many keys and values.  Just filling the memory with
-// zeroes at init time is brutal when you get that big.
-// But why not be complete?
-// Maybe in the future, these limits will have expanded.
-const getUintArray = (max) => !isPosInt(max)
+const deprecatedMethod = (method, instead) => {
+  const code = `LRU_CACHE_METHOD_${method}`
+  if (shouldWarn(code)) {
+    const { prototype } = LRUCache
+    const { get } = Object.getOwnPropertyDescriptor(prototype, method)
+    warn(code, `${method} method`, `cache.${instead}()`, get)
+  }
+}
+const deprecatedProperty = (field, instead) => {
+  const code = `LRU_CACHE_PROPERTY_${field}`
+  if (shouldWarn(code)) {
+    const { prototype } = LRUCache
+    const { get } = Object.getOwnPropertyDescriptor(prototype, field)
+    warn(code, `${field} property`, `cache.${instead}`, get)
+  }
+}
+
+const emitWarning = (...a) => {
+  typeof process === 'object' &&
+  process &&
+  typeof process.emitWarning === 'function'
+    ? process.emitWarning(...a)
+    : console.error(...a)
+}
+
+const shouldWarn = code => !warned.has(code)
+
+const warn = (code, what, instead, fn) => {
+  warned.add(code)
+  const msg = `The ${what} is deprecated. Please use ${instead} instead.`
+  emitWarning(msg, 'DeprecationWarning', code, fn)
+}
+
+const isPosInt = n => n && n === Math.floor(n) && n > 0 && isFinite(n)
+
+/* istanbul ignore next - This is a little bit ridiculous, tbh.
+ * The maximum array length is 2^32-1 or thereabouts on most JS impls.
+ * And well before that point, you're caching the entire world, I mean,
+ * that's ~32GB of just integers for the next/prev links, plus whatever
+ * else to hold that many keys and values.  Just filling the memory with
+ * zeroes at init time is brutal when you get that big.
+ * But why not be complete?
+ * Maybe in the future, these limits will have expanded. */
+const getUintArray = max =>
+  !isPosInt(max)
     ? null
     : max <= Math.pow(2, 8)
-        ? Uint8Array
-        : max <= Math.pow(2, 16)
-            ? Uint16Array
-            : max <= Math.pow(2, 32)
-                ? Uint32Array
-                : max <= Number.MAX_SAFE_INTEGER
-                    ? ZeroArray
-                    : null;
-/* c8 ignore stop */
+    ? Uint8Array
+    : max <= Math.pow(2, 16)
+    ? Uint16Array
+    : max <= Math.pow(2, 32)
+    ? Uint32Array
+    : max <= Number.MAX_SAFE_INTEGER
+    ? ZeroArray
+    : null
+
 class ZeroArray extends Array {
-    constructor(size) {
-        super(size);
-        this.fill(0);
-    }
+  constructor(size) {
+    super(size)
+    this.fill(0)
+  }
 }
+
 class Stack {
-    heap;
-    length;
-    // private constructor
-    static #constructing = false;
-    static create(max) {
-        const HeapCls = getUintArray(max);
-        if (!HeapCls)
-            return [];
-        Stack.#constructing = true;
-        const s = new Stack(max, HeapCls);
-        Stack.#constructing = false;
-        return s;
+  constructor(max) {
+    if (max === 0) {
+      return []
     }
-    constructor(max, HeapCls) {
-        /* c8 ignore start */
-        if (!Stack.#constructing) {
-            throw new TypeError('instantiate Stack using Stack.create(n)');
-        }
-        /* c8 ignore stop */
-        this.heap = new HeapCls(max);
-        this.length = 0;
-    }
-    push(n) {
-        this.heap[this.length++] = n;
-    }
-    pop() {
-        return this.heap[--this.length];
-    }
+    const UintArray = getUintArray(max)
+    this.heap = new UintArray(max)
+    this.length = 0
+  }
+  push(n) {
+    this.heap[this.length++] = n
+  }
+  pop() {
+    return this.heap[--this.length]
+  }
 }
-/**
- * Default export, the thing you're using this module to get.
- *
- * All properties from the options object (with the exception of
- * {@link OptionsBase.max} and {@link OptionsBase.maxSize}) are added as
- * normal public members. (`max` and `maxBase` are read-only getters.)
- * Changing any of these will alter the defaults for subsequent method calls,
- * but is otherwise safe.
- */
+
 class LRUCache {
-    // properties coming in from the options of these, only max and maxSize
-    // really *need* to be protected. The rest can be modified, as they just
-    // set defaults for various methods.
-    #max;
-    #maxSize;
-    #dispose;
-    #disposeAfter;
-    #fetchMethod;
-    /**
-     * {@link LRUCache.OptionsBase.ttl}
-     */
-    ttl;
-    /**
-     * {@link LRUCache.OptionsBase.ttlResolution}
-     */
-    ttlResolution;
-    /**
-     * {@link LRUCache.OptionsBase.ttlAutopurge}
-     */
-    ttlAutopurge;
-    /**
-     * {@link LRUCache.OptionsBase.updateAgeOnGet}
-     */
-    updateAgeOnGet;
-    /**
-     * {@link LRUCache.OptionsBase.updateAgeOnHas}
-     */
-    updateAgeOnHas;
-    /**
-     * {@link LRUCache.OptionsBase.allowStale}
-     */
-    allowStale;
-    /**
-     * {@link LRUCache.OptionsBase.noDisposeOnSet}
-     */
-    noDisposeOnSet;
-    /**
-     * {@link LRUCache.OptionsBase.noUpdateTTL}
-     */
-    noUpdateTTL;
-    /**
-     * {@link LRUCache.OptionsBase.maxEntrySize}
-     */
-    maxEntrySize;
-    /**
-     * {@link LRUCache.OptionsBase.sizeCalculation}
-     */
-    sizeCalculation;
-    /**
-     * {@link LRUCache.OptionsBase.noDeleteOnFetchRejection}
-     */
-    noDeleteOnFetchRejection;
-    /**
-     * {@link LRUCache.OptionsBase.noDeleteOnStaleGet}
-     */
-    noDeleteOnStaleGet;
-    /**
-     * {@link LRUCache.OptionsBase.allowStaleOnFetchAbort}
-     */
-    allowStaleOnFetchAbort;
-    /**
-     * {@link LRUCache.OptionsBase.allowStaleOnFetchRejection}
-     */
-    allowStaleOnFetchRejection;
-    /**
-     * {@link LRUCache.OptionsBase.ignoreFetchAbort}
-     */
-    ignoreFetchAbort;
-    // computed properties
-    #size;
-    #calculatedSize;
-    #keyMap;
-    #keyList;
-    #valList;
-    #next;
-    #prev;
-    #head;
-    #tail;
-    #free;
-    #disposed;
-    #sizes;
-    #starts;
-    #ttls;
-    #hasDispose;
-    #hasFetchMethod;
-    #hasDisposeAfter;
-    /**
-     * Do not call this method unless you need to inspect the
-     * inner workings of the cache.  If anything returned by this
-     * object is modified in any way, strange breakage may occur.
-     *
-     * These fields are private for a reason!
-     *
-     * @internal
-     */
-    static unsafeExposeInternals(c) {
-        return {
-            // properties
-            starts: c.#starts,
-            ttls: c.#ttls,
-            sizes: c.#sizes,
-            keyMap: c.#keyMap,
-            keyList: c.#keyList,
-            valList: c.#valList,
-            next: c.#next,
-            prev: c.#prev,
-            get head() {
-                return c.#head;
-            },
-            get tail() {
-                return c.#tail;
-            },
-            free: c.#free,
-            // methods
-            isBackgroundFetch: (p) => c.#isBackgroundFetch(p),
-            backgroundFetch: (k, index, options, context) => c.#backgroundFetch(k, index, options, context),
-            moveToTail: (index) => c.#moveToTail(index),
-            indexes: (options) => c.#indexes(options),
-            rindexes: (options) => c.#rindexes(options),
-            isStale: (index) => c.#isStale(index),
-        };
+  constructor(options = {}) {
+    const {
+      max = 0,
+      ttl,
+      ttlResolution = 1,
+      ttlAutopurge,
+      updateAgeOnGet,
+      updateAgeOnHas,
+      allowStale,
+      dispose,
+      disposeAfter,
+      noDisposeOnSet,
+      noUpdateTTL,
+      maxSize = 0,
+      maxEntrySize = 0,
+      sizeCalculation,
+      fetchMethod,
+      fetchContext,
+      noDeleteOnFetchRejection,
+      noDeleteOnStaleGet,
+      allowStaleOnFetchRejection,
+      allowStaleOnFetchAbort,
+      ignoreFetchAbort,
+    } = options
+
+    // deprecated options, don't trigger a warning for getting them if
+    // the thing being passed in is another LRUCache we're copying.
+    const { length, maxAge, stale } =
+      options instanceof LRUCache ? {} : options
+
+    if (max !== 0 && !isPosInt(max)) {
+      throw new TypeError('max option must be a nonnegative integer')
     }
-    // Protected read-only members
-    /**
-     * {@link LRUCache.OptionsBase.max} (read-only)
-     */
-    get max() {
-        return this.#max;
+
+    const UintArray = max ? getUintArray(max) : Array
+    if (!UintArray) {
+      throw new Error('invalid max value: ' + max)
     }
-    /**
-     * {@link LRUCache.OptionsBase.maxSize} (read-only)
-     */
-    get maxSize() {
-        return this.#maxSize;
+
+    this.max = max
+    this.maxSize = maxSize
+    this.maxEntrySize = maxEntrySize || this.maxSize
+    this.sizeCalculation = sizeCalculation || length
+    if (this.sizeCalculation) {
+      if (!this.maxSize && !this.maxEntrySize) {
+        throw new TypeError(
+          'cannot set sizeCalculation without setting maxSize or maxEntrySize'
+        )
+      }
+      if (typeof this.sizeCalculation !== 'function') {
+        throw new TypeError('sizeCalculation set to non-function')
+      }
     }
-    /**
-     * The total computed size of items in the cache (read-only)
-     */
-    get calculatedSize() {
-        return this.#calculatedSize;
+
+    this.fetchMethod = fetchMethod || null
+    if (this.fetchMethod && typeof this.fetchMethod !== 'function') {
+      throw new TypeError(
+        'fetchMethod must be a function if specified'
+      )
     }
-    /**
-     * The number of items stored in the cache (read-only)
-     */
-    get size() {
-        return this.#size;
+
+    this.fetchContext = fetchContext
+    if (!this.fetchMethod && fetchContext !== undefined) {
+      throw new TypeError(
+        'cannot set fetchContext without fetchMethod'
+      )
     }
-    /**
-     * {@link LRUCache.OptionsBase.fetchMethod} (read-only)
-     */
-    get fetchMethod() {
-        return this.#fetchMethod;
+
+    this.keyMap = new Map()
+    this.keyList = new Array(max).fill(null)
+    this.valList = new Array(max).fill(null)
+    this.next = new UintArray(max)
+    this.prev = new UintArray(max)
+    this.head = 0
+    this.tail = 0
+    this.free = new Stack(max)
+    this.initialFill = 1
+    this.size = 0
+
+    if (typeof dispose === 'function') {
+      this.dispose = dispose
     }
-    /**
-     * {@link LRUCache.OptionsBase.dispose} (read-only)
-     */
-    get dispose() {
-        return this.#dispose;
+    if (typeof disposeAfter === 'function') {
+      this.disposeAfter = disposeAfter
+      this.disposed = []
+    } else {
+      this.disposeAfter = null
+      this.disposed = null
     }
-    /**
-     * {@link LRUCache.OptionsBase.disposeAfter} (read-only)
-     */
-    get disposeAfter() {
-        return this.#disposeAfter;
-    }
-    constructor(options) {
-        const { max = 0, ttl, ttlResolution = 1, ttlAutopurge, updateAgeOnGet, updateAgeOnHas, allowStale, dispose, disposeAfter, noDisposeOnSet, noUpdateTTL, maxSize = 0, maxEntrySize = 0, sizeCalculation, fetchMethod, noDeleteOnFetchRejection, noDeleteOnStaleGet, allowStaleOnFetchRejection, allowStaleOnFetchAbort, ignoreFetchAbort, } = options;
-        if (max !== 0 && !isPosInt(max)) {
-            throw new TypeError('max option must be a nonnegative integer');
+    this.noDisposeOnSet = !!noDisposeOnSet
+    this.noUpdateTTL = !!noUpdateTTL
+    this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection
+    this.allowStaleOnFetchRejection = !!allowStaleOnFetchRejection
+    this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort
+    this.ignoreFetchAbort = !!ignoreFetchAbort
+
+    // NB: maxEntrySize is set to maxSize if it's set
+    if (this.maxEntrySize !== 0) {
+      if (this.maxSize !== 0) {
+        if (!isPosInt(this.maxSize)) {
+          throw new TypeError(
+            'maxSize must be a positive integer if specified'
+          )
         }
-        const UintArray = max ? getUintArray(max) : Array;
-        if (!UintArray) {
-            throw new Error('invalid max value: ' + max);
-        }
-        this.#max = max;
-        this.#maxSize = maxSize;
-        this.maxEntrySize = maxEntrySize || this.#maxSize;
-        this.sizeCalculation = sizeCalculation;
-        if (this.sizeCalculation) {
-            if (!this.#maxSize && !this.maxEntrySize) {
-                throw new TypeError('cannot set sizeCalculation without setting maxSize or maxEntrySize');
-            }
-            if (typeof this.sizeCalculation !== 'function') {
-                throw new TypeError('sizeCalculation set to non-function');
-            }
-        }
-        if (fetchMethod !== undefined &&
-            typeof fetchMethod !== 'function') {
-            throw new TypeError('fetchMethod must be a function if specified');
-        }
-        this.#fetchMethod = fetchMethod;
-        this.#hasFetchMethod = !!fetchMethod;
-        this.#keyMap = new Map();
-        this.#keyList = new Array(max).fill(undefined);
-        this.#valList = new Array(max).fill(undefined);
-        this.#next = new UintArray(max);
-        this.#prev = new UintArray(max);
-        this.#head = 0;
-        this.#tail = 0;
-        this.#free = Stack.create(max);
-        this.#size = 0;
-        this.#calculatedSize = 0;
-        if (typeof dispose === 'function') {
-            this.#dispose = dispose;
-        }
-        if (typeof disposeAfter === 'function') {
-            this.#disposeAfter = disposeAfter;
-            this.#disposed = [];
-        }
-        else {
-            this.#disposeAfter = undefined;
-            this.#disposed = undefined;
-        }
-        this.#hasDispose = !!this.#dispose;
-        this.#hasDisposeAfter = !!this.#disposeAfter;
-        this.noDisposeOnSet = !!noDisposeOnSet;
-        this.noUpdateTTL = !!noUpdateTTL;
-        this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection;
-        this.allowStaleOnFetchRejection = !!allowStaleOnFetchRejection;
-        this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort;
-        this.ignoreFetchAbort = !!ignoreFetchAbort;
-        // NB: maxEntrySize is set to maxSize if it's set
-        if (this.maxEntrySize !== 0) {
-            if (this.#maxSize !== 0) {
-                if (!isPosInt(this.#maxSize)) {
-                    throw new TypeError('maxSize must be a positive integer if specified');
-                }
-            }
-            if (!isPosInt(this.maxEntrySize)) {
-                throw new TypeError('maxEntrySize must be a positive integer if specified');
-            }
-            this.#initializeSizeTracking();
-        }
-        this.allowStale = !!allowStale;
-        this.noDeleteOnStaleGet = !!noDeleteOnStaleGet;
-        this.updateAgeOnGet = !!updateAgeOnGet;
-        this.updateAgeOnHas = !!updateAgeOnHas;
-        this.ttlResolution =
-            isPosInt(ttlResolution) || ttlResolution === 0
-                ? ttlResolution
-                : 1;
-        this.ttlAutopurge = !!ttlAutopurge;
-        this.ttl = ttl || 0;
-        if (this.ttl) {
-            if (!isPosInt(this.ttl)) {
-                throw new TypeError('ttl must be a positive integer if specified');
-            }
-            this.#initializeTTLTracking();
-        }
-        // do not allow completely unbounded caches
-        if (this.#max === 0 && this.ttl === 0 && this.#maxSize === 0) {
-            throw new TypeError('At least one of max, maxSize, or ttl is required');
-        }
-        if (!this.ttlAutopurge && !this.#max && !this.#maxSize) {
-            const code = 'LRU_CACHE_UNBOUNDED';
-            if (shouldWarn(code)) {
-                warned.add(code);
-                const msg = 'TTL caching without ttlAutopurge, max, or maxSize can ' +
-                    'result in unbounded memory consumption.';
-                emitWarning(msg, 'UnboundedCacheWarning', code, LRUCache);
-            }
-        }
+      }
+      if (!isPosInt(this.maxEntrySize)) {
+        throw new TypeError(
+          'maxEntrySize must be a positive integer if specified'
+        )
+      }
+      this.initializeSizeTracking()
     }
-    /**
-     * Return the remaining TTL time for a given entry key
-     */
-    getRemainingTTL(key) {
-        return this.#keyMap.has(key) ? Infinity : 0;
+
+    this.allowStale = !!allowStale || !!stale
+    this.noDeleteOnStaleGet = !!noDeleteOnStaleGet
+    this.updateAgeOnGet = !!updateAgeOnGet
+    this.updateAgeOnHas = !!updateAgeOnHas
+    this.ttlResolution =
+      isPosInt(ttlResolution) || ttlResolution === 0
+        ? ttlResolution
+        : 1
+    this.ttlAutopurge = !!ttlAutopurge
+    this.ttl = ttl || maxAge || 0
+    if (this.ttl) {
+      if (!isPosInt(this.ttl)) {
+        throw new TypeError(
+          'ttl must be a positive integer if specified'
+        )
+      }
+      this.initializeTTLTracking()
     }
-    #initializeTTLTracking() {
-        const ttls = new ZeroArray(this.#max);
-        const starts = new ZeroArray(this.#max);
-        this.#ttls = ttls;
-        this.#starts = starts;
-        this.#setItemTTL = (index, ttl, start = perf.now()) => {
-            starts[index] = ttl !== 0 ? start : 0;
-            ttls[index] = ttl;
-            if (ttl !== 0 && this.ttlAutopurge) {
-                const t = setTimeout(() => {
-                    if (this.#isStale(index)) {
-                        this.delete(this.#keyList[index]);
-                    }
-                }, ttl + 1);
-                // unref() not supported on all platforms
-                /* c8 ignore start */
-                if (t.unref) {
-                    t.unref();
-                }
-                /* c8 ignore stop */
-            }
-        };
-        this.#updateItemAge = index => {
-            starts[index] = ttls[index] !== 0 ? perf.now() : 0;
-        };
-        this.#statusTTL = (status, index) => {
-            if (ttls[index]) {
-                const ttl = ttls[index];
-                const start = starts[index];
-                status.ttl = ttl;
-                status.start = start;
-                status.now = cachedNow || getNow();
-                const age = status.now - start;
-                status.remainingTTL = ttl - age;
-            }
-        };
-        // debounce calls to perf.now() to 1s so we're not hitting
-        // that costly call repeatedly.
-        let cachedNow = 0;
-        const getNow = () => {
-            const n = perf.now();
-            if (this.ttlResolution > 0) {
-                cachedNow = n;
-                const t = setTimeout(() => (cachedNow = 0), this.ttlResolution);
-                // not available on all platforms
-                /* c8 ignore start */
-                if (t.unref) {
-                    t.unref();
-                }
-                /* c8 ignore stop */
-            }
-            return n;
-        };
-        this.getRemainingTTL = key => {
-            const index = this.#keyMap.get(key);
-            if (index === undefined) {
-                return 0;
-            }
-            const ttl = ttls[index];
-            const start = starts[index];
-            if (ttl === 0 || start === 0) {
-                return Infinity;
-            }
-            const age = (cachedNow || getNow()) - start;
-            return ttl - age;
-        };
-        this.#isStale = index => {
-            return (ttls[index] !== 0 &&
-                starts[index] !== 0 &&
-                (cachedNow || getNow()) - starts[index] > ttls[index]);
-        };
+
+    // do not allow completely unbounded caches
+    if (this.max === 0 && this.ttl === 0 && this.maxSize === 0) {
+      throw new TypeError(
+        'At least one of max, maxSize, or ttl is required'
+      )
     }
-    // conditionally set private methods related to TTL
-    #updateItemAge = () => { };
-    #statusTTL = () => { };
-    #setItemTTL = () => { };
-    /* c8 ignore stop */
-    #isStale = () => false;
-    #initializeSizeTracking() {
-        const sizes = new ZeroArray(this.#max);
-        this.#calculatedSize = 0;
-        this.#sizes = sizes;
-        this.#removeItemSize = index => {
-            this.#calculatedSize -= sizes[index];
-            sizes[index] = 0;
-        };
-        this.#requireSize = (k, v, size, sizeCalculation) => {
-            // provisionally accept background fetches.
-            // actual value size will be checked when they return.
-            if (this.#isBackgroundFetch(v)) {
-                return 0;
-            }
-            if (!isPosInt(size)) {
-                if (sizeCalculation) {
-                    if (typeof sizeCalculation !== 'function') {
-                        throw new TypeError('sizeCalculation must be a function');
-                    }
-                    size = sizeCalculation(v, k);
-                    if (!isPosInt(size)) {
-                        throw new TypeError('sizeCalculation return invalid (expect positive integer)');
-                    }
-                }
-                else {
-                    throw new TypeError('invalid size value (must be positive integer). ' +
-                        'When maxSize or maxEntrySize is used, sizeCalculation ' +
-                        'or size must be set.');
-                }
-            }
-            return size;
-        };
-        this.#addItemSize = (index, size, status) => {
-            sizes[index] = size;
-            if (this.#maxSize) {
-                const maxSize = this.#maxSize - sizes[index];
-                while (this.#calculatedSize > maxSize) {
-                    this.#evict(true);
-                }
-            }
-            this.#calculatedSize += sizes[index];
-            if (status) {
-                status.entrySize = size;
-                status.totalCalculatedSize = this.#calculatedSize;
-            }
-        };
+    if (!this.ttlAutopurge && !this.max && !this.maxSize) {
+      const code = 'LRU_CACHE_UNBOUNDED'
+      if (shouldWarn(code)) {
+        warned.add(code)
+        const msg =
+          'TTL caching without ttlAutopurge, max, or maxSize can ' +
+          'result in unbounded memory consumption.'
+        emitWarning(msg, 'UnboundedCacheWarning', code, LRUCache)
+      }
     }
-    #removeItemSize = _i => { };
-    #addItemSize = (_i, _s, _st) => { };
-    #requireSize = (_k, _v, size, sizeCalculation) => {
-        if (size || sizeCalculation) {
-            throw new TypeError('cannot set size without setting maxSize or maxEntrySize on cache');
+
+    if (stale) {
+      deprecatedOption('stale', 'allowStale')
+    }
+    if (maxAge) {
+      deprecatedOption('maxAge', 'ttl')
+    }
+    if (length) {
+      deprecatedOption('length', 'sizeCalculation')
+    }
+  }
+
+  getRemainingTTL(key) {
+    return this.has(key, { updateAgeOnHas: false }) ? Infinity : 0
+  }
+
+  initializeTTLTracking() {
+    this.ttls = new ZeroArray(this.max)
+    this.starts = new ZeroArray(this.max)
+
+    this.setItemTTL = (index, ttl, start = perf.now()) => {
+      this.starts[index] = ttl !== 0 ? start : 0
+      this.ttls[index] = ttl
+      if (ttl !== 0 && this.ttlAutopurge) {
+        const t = setTimeout(() => {
+          if (this.isStale(index)) {
+            this.delete(this.keyList[index])
+          }
+        }, ttl + 1)
+        /* istanbul ignore else - unref() not supported on all platforms */
+        if (t.unref) {
+          t.unref()
         }
-        return 0;
-    };
-    *#indexes({ allowStale = this.allowStale } = {}) {
-        if (this.#size) {
-            for (let i = this.#tail; true;) {
-                if (!this.#isValidIndex(i)) {
-                    break;
-                }
-                if (allowStale || !this.#isStale(i)) {
-                    yield i;
-                }
-                if (i === this.#head) {
-                    break;
-                }
-                else {
-                    i = this.#prev[i];
-                }
+      }
+    }
+
+    this.updateItemAge = index => {
+      this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0
+    }
+
+    this.statusTTL = (status, index) => {
+      if (status) {
+        status.ttl = this.ttls[index]
+        status.start = this.starts[index]
+        status.now = cachedNow || getNow()
+        status.remainingTTL = status.now + status.ttl - status.start
+      }
+    }
+
+    // debounce calls to perf.now() to 1s so we're not hitting
+    // that costly call repeatedly.
+    let cachedNow = 0
+    const getNow = () => {
+      const n = perf.now()
+      if (this.ttlResolution > 0) {
+        cachedNow = n
+        const t = setTimeout(
+          () => (cachedNow = 0),
+          this.ttlResolution
+        )
+        /* istanbul ignore else - not available on all platforms */
+        if (t.unref) {
+          t.unref()
+        }
+      }
+      return n
+    }
+
+    this.getRemainingTTL = key => {
+      const index = this.keyMap.get(key)
+      if (index === undefined) {
+        return 0
+      }
+      return this.ttls[index] === 0 || this.starts[index] === 0
+        ? Infinity
+        : this.starts[index] +
+            this.ttls[index] -
+            (cachedNow || getNow())
+    }
+
+    this.isStale = index => {
+      return (
+        this.ttls[index] !== 0 &&
+        this.starts[index] !== 0 &&
+        (cachedNow || getNow()) - this.starts[index] >
+          this.ttls[index]
+      )
+    }
+  }
+  updateItemAge(_index) {}
+  statusTTL(_status, _index) {}
+  setItemTTL(_index, _ttl, _start) {}
+  isStale(_index) {
+    return false
+  }
+
+  initializeSizeTracking() {
+    this.calculatedSize = 0
+    this.sizes = new ZeroArray(this.max)
+    this.removeItemSize = index => {
+      this.calculatedSize -= this.sizes[index]
+      this.sizes[index] = 0
+    }
+    this.requireSize = (k, v, size, sizeCalculation) => {
+      // provisionally accept background fetches.
+      // actual value size will be checked when they return.
+      if (this.isBackgroundFetch(v)) {
+        return 0
+      }
+      if (!isPosInt(size)) {
+        if (sizeCalculation) {
+          if (typeof sizeCalculation !== 'function') {
+            throw new TypeError('sizeCalculation must be a function')
+          }
+          size = sizeCalculation(v, k)
+          if (!isPosInt(size)) {
+            throw new TypeError(
+              'sizeCalculation return invalid (expect positive integer)'
+            )
+          }
+        } else {
+          throw new TypeError(
+            'invalid size value (must be positive integer). ' +
+              'When maxSize or maxEntrySize is used, sizeCalculation or size ' +
+              'must be set.'
+          )
+        }
+      }
+      return size
+    }
+    this.addItemSize = (index, size, status) => {
+      this.sizes[index] = size
+      if (this.maxSize) {
+        const maxSize = this.maxSize - this.sizes[index]
+        while (this.calculatedSize > maxSize) {
+          this.evict(true)
+        }
+      }
+      this.calculatedSize += this.sizes[index]
+      if (status) {
+        status.entrySize = size
+        status.totalCalculatedSize = this.calculatedSize
+      }
+    }
+  }
+  removeItemSize(_index) {}
+  addItemSize(_index, _size) {}
+  requireSize(_k, _v, size, sizeCalculation) {
+    if (size || sizeCalculation) {
+      throw new TypeError(
+        'cannot set size without setting maxSize or maxEntrySize on cache'
+      )
+    }
+  }
+
+  *indexes({ allowStale = this.allowStale } = {}) {
+    if (this.size) {
+      for (let i = this.tail; true; ) {
+        if (!this.isValidIndex(i)) {
+          break
+        }
+        if (allowStale || !this.isStale(i)) {
+          yield i
+        }
+        if (i === this.head) {
+          break
+        } else {
+          i = this.prev[i]
+        }
+      }
+    }
+  }
+
+  *rindexes({ allowStale = this.allowStale } = {}) {
+    if (this.size) {
+      for (let i = this.head; true; ) {
+        if (!this.isValidIndex(i)) {
+          break
+        }
+        if (allowStale || !this.isStale(i)) {
+          yield i
+        }
+        if (i === this.tail) {
+          break
+        } else {
+          i = this.next[i]
+        }
+      }
+    }
+  }
+
+  isValidIndex(index) {
+    return (
+      index !== undefined &&
+      this.keyMap.get(this.keyList[index]) === index
+    )
+  }
+
+  *entries() {
+    for (const i of this.indexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield [this.keyList[i], this.valList[i]]
+      }
+    }
+  }
+  *rentries() {
+    for (const i of this.rindexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield [this.keyList[i], this.valList[i]]
+      }
+    }
+  }
+
+  *keys() {
+    for (const i of this.indexes()) {
+      if (
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.keyList[i]
+      }
+    }
+  }
+  *rkeys() {
+    for (const i of this.rindexes()) {
+      if (
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.keyList[i]
+      }
+    }
+  }
+
+  *values() {
+    for (const i of this.indexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.valList[i]
+      }
+    }
+  }
+  *rvalues() {
+    for (const i of this.rindexes()) {
+      if (
+        this.valList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
+        yield this.valList[i]
+      }
+    }
+  }
+
+  [Symbol.iterator]() {
+    return this.entries()
+  }
+
+  find(fn, getOptions) {
+    for (const i of this.indexes()) {
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      if (fn(value, this.keyList[i], this)) {
+        return this.get(this.keyList[i], getOptions)
+      }
+    }
+  }
+
+  forEach(fn, thisp = this) {
+    for (const i of this.indexes()) {
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      fn.call(thisp, value, this.keyList[i], this)
+    }
+  }
+
+  rforEach(fn, thisp = this) {
+    for (const i of this.rindexes()) {
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      fn.call(thisp, value, this.keyList[i], this)
+    }
+  }
+
+  get prune() {
+    deprecatedMethod('prune', 'purgeStale')
+    return this.purgeStale
+  }
+
+  purgeStale() {
+    let deleted = false
+    for (const i of this.rindexes({ allowStale: true })) {
+      if (this.isStale(i)) {
+        this.delete(this.keyList[i])
+        deleted = true
+      }
+    }
+    return deleted
+  }
+
+  dump() {
+    const arr = []
+    for (const i of this.indexes({ allowStale: true })) {
+      const key = this.keyList[i]
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      const entry = { value }
+      if (this.ttls) {
+        entry.ttl = this.ttls[i]
+        // always dump the start relative to a portable timestamp
+        // it's ok for this to be a bit slow, it's a rare operation.
+        const age = perf.now() - this.starts[i]
+        entry.start = Math.floor(Date.now() - age)
+      }
+      if (this.sizes) {
+        entry.size = this.sizes[i]
+      }
+      arr.unshift([key, entry])
+    }
+    return arr
+  }
+
+  load(arr) {
+    this.clear()
+    for (const [key, entry] of arr) {
+      if (entry.start) {
+        // entry.start is a portable timestamp, but we may be using
+        // node's performance.now(), so calculate the offset.
+        // it's ok for this to be a bit slow, it's a rare operation.
+        const age = Date.now() - entry.start
+        entry.start = perf.now() - age
+      }
+      this.set(key, entry.value, entry)
+    }
+  }
+
+  dispose(_v, _k, _reason) {}
+
+  set(
+    k,
+    v,
+    {
+      ttl = this.ttl,
+      start,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      status,
+    } = {}
+  ) {
+    size = this.requireSize(k, v, size, sizeCalculation)
+    // if the item doesn't fit, don't do anything
+    // NB: maxEntrySize set to maxSize by default
+    if (this.maxEntrySize && size > this.maxEntrySize) {
+      if (status) {
+        status.set = 'miss'
+        status.maxEntrySizeExceeded = true
+      }
+      // have to delete, in case a background fetch is there already.
+      // in non-async cases, this is a no-op
+      this.delete(k)
+      return this
+    }
+    let index = this.size === 0 ? undefined : this.keyMap.get(k)
+    if (index === undefined) {
+      // addition
+      index = this.newIndex()
+      this.keyList[index] = k
+      this.valList[index] = v
+      this.keyMap.set(k, index)
+      this.next[this.tail] = index
+      this.prev[index] = this.tail
+      this.tail = index
+      this.size++
+      this.addItemSize(index, size, status)
+      if (status) {
+        status.set = 'add'
+      }
+      noUpdateTTL = false
+    } else {
+      // update
+      this.moveToTail(index)
+      const oldVal = this.valList[index]
+      if (v !== oldVal) {
+        if (this.isBackgroundFetch(oldVal)) {
+          oldVal.__abortController.abort(new Error('replaced'))
+        } else {
+          if (!noDisposeOnSet) {
+            this.dispose(oldVal, k, 'set')
+            if (this.disposeAfter) {
+              this.disposed.push([oldVal, k, 'set'])
             }
+          }
         }
-    }
-    *#rindexes({ allowStale = this.allowStale } = {}) {
-        if (this.#size) {
-            for (let i = this.#head; true;) {
-                if (!this.#isValidIndex(i)) {
-                    break;
-                }
-                if (allowStale || !this.#isStale(i)) {
-                    yield i;
-                }
-                if (i === this.#tail) {
-                    break;
-                }
-                else {
-                    i = this.#next[i];
-                }
-            }
+        this.removeItemSize(index)
+        this.valList[index] = v
+        this.addItemSize(index, size, status)
+        if (status) {
+          status.set = 'replace'
+          const oldValue =
+            oldVal && this.isBackgroundFetch(oldVal)
+              ? oldVal.__staleWhileFetching
+              : oldVal
+          if (oldValue !== undefined) status.oldValue = oldValue
         }
+      } else if (status) {
+        status.set = 'update'
+      }
     }
-    #isValidIndex(index) {
-        return (index !== undefined &&
-            this.#keyMap.get(this.#keyList[index]) === index);
+    if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
+      this.initializeTTLTracking()
     }
-    /**
-     * Return a generator yielding `[key, value]` pairs,
-     * in order from most recently used to least recently used.
-     */
-    *entries() {
-        for (const i of this.#indexes()) {
-            if (this.#valList[i] !== undefined &&
-                this.#keyList[i] !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield [this.#keyList[i], this.#valList[i]];
-            }
+    if (!noUpdateTTL) {
+      this.setItemTTL(index, ttl, start)
+    }
+    this.statusTTL(status, index)
+    if (this.disposeAfter) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
+    }
+    return this
+  }
+
+  newIndex() {
+    if (this.size === 0) {
+      return this.tail
+    }
+    if (this.size === this.max && this.max !== 0) {
+      return this.evict(false)
+    }
+    if (this.free.length !== 0) {
+      return this.free.pop()
+    }
+    // initial fill, just keep writing down the list
+    return this.initialFill++
+  }
+
+  pop() {
+    if (this.size) {
+      const val = this.valList[this.head]
+      this.evict(true)
+      return val
+    }
+  }
+
+  evict(free) {
+    const head = this.head
+    const k = this.keyList[head]
+    const v = this.valList[head]
+    if (this.isBackgroundFetch(v)) {
+      v.__abortController.abort(new Error('evicted'))
+    } else {
+      this.dispose(v, k, 'evict')
+      if (this.disposeAfter) {
+        this.disposed.push([v, k, 'evict'])
+      }
+    }
+    this.removeItemSize(head)
+    // if we aren't about to use the index, then null these out
+    if (free) {
+      this.keyList[head] = null
+      this.valList[head] = null
+      this.free.push(head)
+    }
+    this.head = this.next[head]
+    this.keyMap.delete(k)
+    this.size--
+    return head
+  }
+
+  has(k, { updateAgeOnHas = this.updateAgeOnHas, status } = {}) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined) {
+      if (!this.isStale(index)) {
+        if (updateAgeOnHas) {
+          this.updateItemAge(index)
         }
+        if (status) status.has = 'hit'
+        this.statusTTL(status, index)
+        return true
+      } else if (status) {
+        status.has = 'stale'
+        this.statusTTL(status, index)
+      }
+    } else if (status) {
+      status.has = 'miss'
     }
-    /**
-     * Inverse order version of {@link LRUCache.entries}
-     *
-     * Return a generator yielding `[key, value]` pairs,
-     * in order from least recently used to most recently used.
-     */
-    *rentries() {
-        for (const i of this.#rindexes()) {
-            if (this.#valList[i] !== undefined &&
-                this.#keyList[i] !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield [this.#keyList[i], this.#valList[i]];
-            }
+    return false
+  }
+
+  // like get(), but without any LRU updating or TTL expiration
+  peek(k, { allowStale = this.allowStale } = {}) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined && (allowStale || !this.isStale(index))) {
+      const v = this.valList[index]
+      // either stale and allowed, or forcing a refresh of non-stale value
+      return this.isBackgroundFetch(v) ? v.__staleWhileFetching : v
+    }
+  }
+
+  backgroundFetch(k, index, options, context) {
+    const v = index === undefined ? undefined : this.valList[index]
+    if (this.isBackgroundFetch(v)) {
+      return v
+    }
+    const ac = new AC()
+    if (options.signal) {
+      options.signal.addEventListener('abort', () =>
+        ac.abort(options.signal.reason)
+      )
+    }
+    const fetchOpts = {
+      signal: ac.signal,
+      options,
+      context,
+    }
+    const cb = (v, updateCache = false) => {
+      const { aborted } = ac.signal
+      const ignoreAbort = options.ignoreFetchAbort && v !== undefined
+      if (options.status) {
+        if (aborted && !updateCache) {
+          options.status.fetchAborted = true
+          options.status.fetchError = ac.signal.reason
+          if (ignoreAbort) options.status.fetchAbortIgnored = true
+        } else {
+          options.status.fetchResolved = true
         }
-    }
-    /**
-     * Return a generator yielding the keys in the cache,
-     * in order from most recently used to least recently used.
-     */
-    *keys() {
-        for (const i of this.#indexes()) {
-            const k = this.#keyList[i];
-            if (k !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield k;
-            }
-        }
-    }
-    /**
-     * Inverse order version of {@link LRUCache.keys}
-     *
-     * Return a generator yielding the keys in the cache,
-     * in order from least recently used to most recently used.
-     */
-    *rkeys() {
-        for (const i of this.#rindexes()) {
-            const k = this.#keyList[i];
-            if (k !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield k;
-            }
-        }
-    }
-    /**
-     * Return a generator yielding the values in the cache,
-     * in order from most recently used to least recently used.
-     */
-    *values() {
-        for (const i of this.#indexes()) {
-            const v = this.#valList[i];
-            if (v !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield this.#valList[i];
-            }
-        }
-    }
-    /**
-     * Inverse order version of {@link LRUCache.values}
-     *
-     * Return a generator yielding the values in the cache,
-     * in order from least recently used to most recently used.
-     */
-    *rvalues() {
-        for (const i of this.#rindexes()) {
-            const v = this.#valList[i];
-            if (v !== undefined &&
-                !this.#isBackgroundFetch(this.#valList[i])) {
-                yield this.#valList[i];
-            }
-        }
-    }
-    /**
-     * Iterating over the cache itself yields the same results as
-     * {@link LRUCache.entries}
-     */
-    [Symbol.iterator]() {
-        return this.entries();
-    }
-    /**
-     * Find a value for which the supplied fn method returns a truthy value,
-     * similar to Array.find().  fn is called as fn(value, key, cache).
-     */
-    find(fn, getOptions = {}) {
-        for (const i of this.#indexes()) {
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined)
-                continue;
-            if (fn(value, this.#keyList[i], this)) {
-                return this.get(this.#keyList[i], getOptions);
-            }
-        }
-    }
-    /**
-     * Call the supplied function on each item in the cache, in order from
-     * most recently used to least recently used.  fn is called as
-     * fn(value, key, cache).  Does not update age or recenty of use.
-     * Does not iterate over stale values.
-     */
-    forEach(fn, thisp = this) {
-        for (const i of this.#indexes()) {
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined)
-                continue;
-            fn.call(thisp, value, this.#keyList[i], this);
-        }
-    }
-    /**
-     * The same as {@link LRUCache.forEach} but items are iterated over in
-     * reverse order.  (ie, less recently used items are iterated over first.)
-     */
-    rforEach(fn, thisp = this) {
-        for (const i of this.#rindexes()) {
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined)
-                continue;
-            fn.call(thisp, value, this.#keyList[i], this);
-        }
-    }
-    /**
-     * Delete any stale entries. Returns true if anything was removed,
-     * false otherwise.
-     */
-    purgeStale() {
-        let deleted = false;
-        for (const i of this.#rindexes({ allowStale: true })) {
-            if (this.#isStale(i)) {
-                this.delete(this.#keyList[i]);
-                deleted = true;
-            }
-        }
-        return deleted;
-    }
-    /**
-     * Return an array of [key, {@link LRUCache.Entry}] tuples which can be
-     * passed to cache.load()
-     */
-    dump() {
-        const arr = [];
-        for (const i of this.#indexes({ allowStale: true })) {
-            const key = this.#keyList[i];
-            const v = this.#valList[i];
-            const value = this.#isBackgroundFetch(v)
-                ? v.__staleWhileFetching
-                : v;
-            if (value === undefined || key === undefined)
-                continue;
-            const entry = { value };
-            if (this.#ttls && this.#starts) {
-                entry.ttl = this.#ttls[i];
-                // always dump the start relative to a portable timestamp
-                // it's ok for this to be a bit slow, it's a rare operation.
-                const age = perf.now() - this.#starts[i];
-                entry.start = Math.floor(Date.now() - age);
-            }
-            if (this.#sizes) {
-                entry.size = this.#sizes[i];
-            }
-            arr.unshift([key, entry]);
-        }
-        return arr;
-    }
-    /**
-     * Reset the cache and load in the items in entries in the order listed.
-     * Note that the shape of the resulting cache may be different if the
-     * same options are not used in both caches.
-     */
-    load(arr) {
-        this.clear();
-        for (const [key, entry] of arr) {
-            if (entry.start) {
-                // entry.start is a portable timestamp, but we may be using
-                // node's performance.now(), so calculate the offset, so that
-                // we get the intended remaining TTL, no matter how long it's
-                // been on ice.
-                //
-                // it's ok for this to be a bit slow, it's a rare operation.
-                const age = Date.now() - entry.start;
-                entry.start = perf.now() - age;
-            }
-            this.set(key, entry.value, entry);
-        }
-    }
-    /**
-     * Add a value to the cache.
-     *
-     * Note: if `undefined` is specified as a value, this is an alias for
-     * {@link LRUCache#delete}
-     */
-    set(k, v, setOptions = {}) {
+      }
+      if (aborted && !ignoreAbort && !updateCache) {
+        return fetchFail(ac.signal.reason)
+      }
+      // either we didn't abort, and are still here, or we did, and ignored
+      if (this.valList[index] === p) {
         if (v === undefined) {
-            this.delete(k);
-            return this;
+          if (p.__staleWhileFetching) {
+            this.valList[index] = p.__staleWhileFetching
+          } else {
+            this.delete(k)
+          }
+        } else {
+          if (options.status) options.status.fetchUpdated = true
+          this.set(k, v, fetchOpts.options)
         }
-        const { ttl = this.ttl, start, noDisposeOnSet = this.noDisposeOnSet, sizeCalculation = this.sizeCalculation, status, } = setOptions;
-        let { noUpdateTTL = this.noUpdateTTL } = setOptions;
-        const size = this.#requireSize(k, v, setOptions.size || 0, sizeCalculation);
-        // if the item doesn't fit, don't do anything
-        // NB: maxEntrySize set to maxSize by default
-        if (this.maxEntrySize && size > this.maxEntrySize) {
-            if (status) {
-                status.set = 'miss';
-                status.maxEntrySizeExceeded = true;
-            }
-            // have to delete, in case something is there already.
-            this.delete(k);
-            return this;
-        }
-        let index = this.#size === 0 ? undefined : this.#keyMap.get(k);
-        if (index === undefined) {
-            // addition
-            index = (this.#size === 0
-                ? this.#tail
-                : this.#free.length !== 0
-                    ? this.#free.pop()
-                    : this.#size === this.#max
-                        ? this.#evict(false)
-                        : this.#size);
-            this.#keyList[index] = k;
-            this.#valList[index] = v;
-            this.#keyMap.set(k, index);
-            this.#next[this.#tail] = index;
-            this.#prev[index] = this.#tail;
-            this.#tail = index;
-            this.#size++;
-            this.#addItemSize(index, size, status);
-            if (status)
-                status.set = 'add';
-            noUpdateTTL = false;
-        }
-        else {
-            // update
-            this.#moveToTail(index);
-            const oldVal = this.#valList[index];
-            if (v !== oldVal) {
-                if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
-                    oldVal.__abortController.abort(new Error('replaced'));
-                    const { __staleWhileFetching: s } = oldVal;
-                    if (s !== undefined && !noDisposeOnSet) {
-                        if (this.#hasDispose) {
-                            this.#dispose?.(s, k, 'set');
-                        }
-                        if (this.#hasDisposeAfter) {
-                            this.#disposed?.push([s, k, 'set']);
-                        }
-                    }
-                }
-                else if (!noDisposeOnSet) {
-                    if (this.#hasDispose) {
-                        this.#dispose?.(oldVal, k, 'set');
-                    }
-                    if (this.#hasDisposeAfter) {
-                        this.#disposed?.push([oldVal, k, 'set']);
-                    }
-                }
-                this.#removeItemSize(index);
-                this.#addItemSize(index, size, status);
-                this.#valList[index] = v;
-                if (status) {
-                    status.set = 'replace';
-                    const oldValue = oldVal && this.#isBackgroundFetch(oldVal)
-                        ? oldVal.__staleWhileFetching
-                        : oldVal;
-                    if (oldValue !== undefined)
-                        status.oldValue = oldValue;
-                }
-            }
-            else if (status) {
-                status.set = 'update';
-            }
-        }
-        if (ttl !== 0 && !this.#ttls) {
-            this.#initializeTTLTracking();
-        }
-        if (this.#ttls) {
-            if (!noUpdateTTL) {
-                this.#setItemTTL(index, ttl, start);
-            }
-            if (status)
-                this.#statusTTL(status, index);
-        }
-        if (!noDisposeOnSet && this.#hasDisposeAfter && this.#disposed) {
-            const dt = this.#disposed;
-            let task;
-            while ((task = dt?.shift())) {
-                this.#disposeAfter?.(...task);
-            }
-        }
-        return this;
+      }
+      return v
     }
-    /**
-     * Evict the least recently used item, returning its value or
-     * `undefined` if cache is empty.
-     */
-    pop() {
-        try {
-            while (this.#size) {
-                const val = this.#valList[this.#head];
-                this.#evict(true);
-                if (this.#isBackgroundFetch(val)) {
-                    if (val.__staleWhileFetching) {
-                        return val.__staleWhileFetching;
-                    }
-                }
-                else if (val !== undefined) {
-                    return val;
-                }
-            }
-        }
-        finally {
-            if (this.#hasDisposeAfter && this.#disposed) {
-                const dt = this.#disposed;
-                let task;
-                while ((task = dt?.shift())) {
-                    this.#disposeAfter?.(...task);
-                }
-            }
-        }
+    const eb = er => {
+      if (options.status) {
+        options.status.fetchRejected = true
+        options.status.fetchError = er
+      }
+      return fetchFail(er)
     }
-    #evict(free) {
-        const head = this.#head;
-        const k = this.#keyList[head];
-        const v = this.#valList[head];
-        if (this.#hasFetchMethod && this.#isBackgroundFetch(v)) {
-            v.__abortController.abort(new Error('evicted'));
+    const fetchFail = er => {
+      const { aborted } = ac.signal
+      const allowStaleAborted =
+        aborted && options.allowStaleOnFetchAbort
+      const allowStale =
+        allowStaleAborted || options.allowStaleOnFetchRejection
+      const noDelete = allowStale || options.noDeleteOnFetchRejection
+      if (this.valList[index] === p) {
+        // if we allow stale on fetch rejections, then we need to ensure that
+        // the stale value is not removed from the cache when the fetch fails.
+        const del = !noDelete || p.__staleWhileFetching === undefined
+        if (del) {
+          this.delete(k)
+        } else if (!allowStaleAborted) {
+          // still replace the *promise* with the stale value,
+          // since we are done with the promise at this point.
+          // leave it untouched if we're still waiting for an
+          // aborted background fetch that hasn't yet returned.
+          this.valList[index] = p.__staleWhileFetching
         }
-        else if (this.#hasDispose || this.#hasDisposeAfter) {
-            if (this.#hasDispose) {
-                this.#dispose?.(v, k, 'evict');
-            }
-            if (this.#hasDisposeAfter) {
-                this.#disposed?.push([v, k, 'evict']);
-            }
+      }
+      if (allowStale) {
+        if (options.status && p.__staleWhileFetching !== undefined) {
+          options.status.returnedStale = true
         }
-        this.#removeItemSize(head);
-        // if we aren't about to use the index, then null these out
-        if (free) {
-            this.#keyList[head] = undefined;
-            this.#valList[head] = undefined;
-            this.#free.push(head);
-        }
-        if (this.#size === 1) {
-            this.#head = this.#tail = 0;
-            this.#free.length = 0;
-        }
-        else {
-            this.#head = this.#next[head];
-        }
-        this.#keyMap.delete(k);
-        this.#size--;
-        return head;
+        return p.__staleWhileFetching
+      } else if (p.__returned === p) {
+        throw er
+      }
     }
-    /**
-     * Check if a key is in the cache, without updating the recency of use.
-     * Will return false if the item is stale, even though it is technically
-     * in the cache.
-     *
-     * Will not update item age unless
-     * {@link LRUCache.OptionsBase.updateAgeOnHas} is set.
-     */
-    has(k, hasOptions = {}) {
-        const { updateAgeOnHas = this.updateAgeOnHas, status } = hasOptions;
-        const index = this.#keyMap.get(k);
-        if (index !== undefined) {
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v) &&
-                v.__staleWhileFetching === undefined) {
-                return false;
-            }
-            if (!this.#isStale(index)) {
-                if (updateAgeOnHas) {
-                    this.#updateItemAge(index);
-                }
-                if (status) {
-                    status.has = 'hit';
-                    this.#statusTTL(status, index);
-                }
-                return true;
-            }
-            else if (status) {
-                status.has = 'stale';
-                this.#statusTTL(status, index);
-            }
+    const pcall = (res, rej) => {
+      this.fetchMethod(k, v, fetchOpts).then(v => res(v), rej)
+      // ignored, we go until we finish, regardless.
+      // defer check until we are actually aborting,
+      // so fetchMethod can override.
+      ac.signal.addEventListener('abort', () => {
+        if (
+          !options.ignoreFetchAbort ||
+          options.allowStaleOnFetchAbort
+        ) {
+          res()
+          // when it eventually resolves, update the cache.
+          if (options.allowStaleOnFetchAbort) {
+            res = v => cb(v, true)
+          }
         }
-        else if (status) {
-            status.has = 'miss';
-        }
-        return false;
+      })
     }
-    /**
-     * Like {@link LRUCache#get} but doesn't update recency or delete stale
-     * items.
-     *
-     * Returns `undefined` if the item is stale, unless
-     * {@link LRUCache.OptionsBase.allowStale} is set.
-     */
-    peek(k, peekOptions = {}) {
-        const { allowStale = this.allowStale } = peekOptions;
-        const index = this.#keyMap.get(k);
-        if (index !== undefined &&
-            (allowStale || !this.#isStale(index))) {
-            const v = this.#valList[index];
-            // either stale and allowed, or forcing a refresh of non-stale value
-            return this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
-        }
+    if (options.status) options.status.fetchDispatched = true
+    const p = new Promise(pcall).then(cb, eb)
+    p.__abortController = ac
+    p.__staleWhileFetching = v
+    p.__returned = null
+    if (index === undefined) {
+      // internal, don't expose status.
+      this.set(k, p, { ...fetchOpts.options, status: undefined })
+      index = this.keyMap.get(k)
+    } else {
+      this.valList[index] = p
     }
-    #backgroundFetch(k, index, options, context) {
-        const v = index === undefined ? undefined : this.#valList[index];
-        if (this.#isBackgroundFetch(v)) {
-            return v;
-        }
-        const ac = new AC();
-        const { signal } = options;
-        // when/if our AC signals, then stop listening to theirs.
-        signal?.addEventListener('abort', () => ac.abort(signal.reason), {
-            signal: ac.signal,
-        });
-        const fetchOpts = {
-            signal: ac.signal,
-            options,
-            context,
-        };
-        const cb = (v, updateCache = false) => {
-            const { aborted } = ac.signal;
-            const ignoreAbort = options.ignoreFetchAbort && v !== undefined;
-            if (options.status) {
-                if (aborted && !updateCache) {
-                    options.status.fetchAborted = true;
-                    options.status.fetchError = ac.signal.reason;
-                    if (ignoreAbort)
-                        options.status.fetchAbortIgnored = true;
-                }
-                else {
-                    options.status.fetchResolved = true;
-                }
-            }
-            if (aborted && !ignoreAbort && !updateCache) {
-                return fetchFail(ac.signal.reason);
-            }
-            // either we didn't abort, and are still here, or we did, and ignored
-            const bf = p;
-            if (this.#valList[index] === p) {
-                if (v === undefined) {
-                    if (bf.__staleWhileFetching) {
-                        this.#valList[index] = bf.__staleWhileFetching;
-                    }
-                    else {
-                        this.delete(k);
-                    }
-                }
-                else {
-                    if (options.status)
-                        options.status.fetchUpdated = true;
-                    this.set(k, v, fetchOpts.options);
-                }
-            }
-            return v;
-        };
-        const eb = (er) => {
-            if (options.status) {
-                options.status.fetchRejected = true;
-                options.status.fetchError = er;
-            }
-            return fetchFail(er);
-        };
-        const fetchFail = (er) => {
-            const { aborted } = ac.signal;
-            const allowStaleAborted = aborted && options.allowStaleOnFetchAbort;
-            const allowStale = allowStaleAborted || options.allowStaleOnFetchRejection;
-            const noDelete = allowStale || options.noDeleteOnFetchRejection;
-            const bf = p;
-            if (this.#valList[index] === p) {
-                // if we allow stale on fetch rejections, then we need to ensure that
-                // the stale value is not removed from the cache when the fetch fails.
-                const del = !noDelete || bf.__staleWhileFetching === undefined;
-                if (del) {
-                    this.delete(k);
-                }
-                else if (!allowStaleAborted) {
-                    // still replace the *promise* with the stale value,
-                    // since we are done with the promise at this point.
-                    // leave it untouched if we're still waiting for an
-                    // aborted background fetch that hasn't yet returned.
-                    this.#valList[index] = bf.__staleWhileFetching;
-                }
-            }
-            if (allowStale) {
-                if (options.status && bf.__staleWhileFetching !== undefined) {
-                    options.status.returnedStale = true;
-                }
-                return bf.__staleWhileFetching;
-            }
-            else if (bf.__returned === bf) {
-                throw er;
-            }
-        };
-        const pcall = (res, rej) => {
-            const fmp = this.#fetchMethod?.(k, v, fetchOpts);
-            if (fmp && fmp instanceof Promise) {
-                fmp.then(v => res(v === undefined ? undefined : v), rej);
-            }
-            // ignored, we go until we finish, regardless.
-            // defer check until we are actually aborting,
-            // so fetchMethod can override.
-            ac.signal.addEventListener('abort', () => {
-                if (!options.ignoreFetchAbort ||
-                    options.allowStaleOnFetchAbort) {
-                    res(undefined);
-                    // when it eventually resolves, update the cache.
-                    if (options.allowStaleOnFetchAbort) {
-                        res = v => cb(v, true);
-                    }
-                }
-            });
-        };
-        if (options.status)
-            options.status.fetchDispatched = true;
-        const p = new Promise(pcall).then(cb, eb);
-        const bf = Object.assign(p, {
-            __abortController: ac,
-            __staleWhileFetching: v,
-            __returned: undefined,
-        });
-        if (index === undefined) {
-            // internal, don't expose status.
-            this.set(k, bf, { ...fetchOpts.options, status: undefined });
-            index = this.#keyMap.get(k);
-        }
-        else {
-            this.#valList[index] = bf;
-        }
-        return bf;
+    return p
+  }
+
+  isBackgroundFetch(p) {
+    return (
+      p &&
+      typeof p === 'object' &&
+      typeof p.then === 'function' &&
+      Object.prototype.hasOwnProperty.call(
+        p,
+        '__staleWhileFetching'
+      ) &&
+      Object.prototype.hasOwnProperty.call(p, '__returned') &&
+      (p.__returned === p || p.__returned === null)
+    )
+  }
+
+  // this takes the union of get() and set() opts, because it does both
+  async fetch(
+    k,
+    {
+      // get options
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      // set options
+      ttl = this.ttl,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      // fetch exclusive options
+      noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
+      ignoreFetchAbort = this.ignoreFetchAbort,
+      allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
+      fetchContext = this.fetchContext,
+      forceRefresh = false,
+      status,
+      signal,
+    } = {}
+  ) {
+    if (!this.fetchMethod) {
+      if (status) status.fetch = 'get'
+      return this.get(k, {
+        allowStale,
+        updateAgeOnGet,
+        noDeleteOnStaleGet,
+        status,
+      })
     }
-    #isBackgroundFetch(p) {
-        if (!this.#hasFetchMethod)
-            return false;
-        const b = p;
-        return (!!b &&
-            b instanceof Promise &&
-            b.hasOwnProperty('__staleWhileFetching') &&
-            b.__abortController instanceof AC);
+
+    const options = {
+      allowStale,
+      updateAgeOnGet,
+      noDeleteOnStaleGet,
+      ttl,
+      noDisposeOnSet,
+      size,
+      sizeCalculation,
+      noUpdateTTL,
+      noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection,
+      allowStaleOnFetchAbort,
+      ignoreFetchAbort,
+      status,
+      signal,
     }
-    async fetch(k, fetchOptions = {}) {
-        const { 
-        // get options
-        allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, 
-        // set options
-        ttl = this.ttl, noDisposeOnSet = this.noDisposeOnSet, size = 0, sizeCalculation = this.sizeCalculation, noUpdateTTL = this.noUpdateTTL, 
-        // fetch exclusive options
-        noDeleteOnFetchRejection = this.noDeleteOnFetchRejection, allowStaleOnFetchRejection = this.allowStaleOnFetchRejection, ignoreFetchAbort = this.ignoreFetchAbort, allowStaleOnFetchAbort = this.allowStaleOnFetchAbort, context, forceRefresh = false, status, signal, } = fetchOptions;
-        if (!this.#hasFetchMethod) {
-            if (status)
-                status.fetch = 'get';
-            return this.get(k, {
-                allowStale,
-                updateAgeOnGet,
-                noDeleteOnStaleGet,
-                status,
-            });
+
+    let index = this.keyMap.get(k)
+    if (index === undefined) {
+      if (status) status.fetch = 'miss'
+      const p = this.backgroundFetch(k, index, options, fetchContext)
+      return (p.__returned = p)
+    } else {
+      // in cache, maybe already fetching
+      const v = this.valList[index]
+      if (this.isBackgroundFetch(v)) {
+        const stale =
+          allowStale && v.__staleWhileFetching !== undefined
+        if (status) {
+          status.fetch = 'inflight'
+          if (stale) status.returnedStale = true
         }
-        const options = {
-            allowStale,
-            updateAgeOnGet,
-            noDeleteOnStaleGet,
-            ttl,
-            noDisposeOnSet,
-            size,
-            sizeCalculation,
-            noUpdateTTL,
-            noDeleteOnFetchRejection,
-            allowStaleOnFetchRejection,
-            allowStaleOnFetchAbort,
-            ignoreFetchAbort,
-            status,
-            signal,
-        };
-        let index = this.#keyMap.get(k);
-        if (index === undefined) {
-            if (status)
-                status.fetch = 'miss';
-            const p = this.#backgroundFetch(k, index, options, context);
-            return (p.__returned = p);
+        return stale ? v.__staleWhileFetching : (v.__returned = v)
+      }
+
+      // if we force a refresh, that means do NOT serve the cached value,
+      // unless we are already in the process of refreshing the cache.
+      const isStale = this.isStale(index)
+      if (!forceRefresh && !isStale) {
+        if (status) status.fetch = 'hit'
+        this.moveToTail(index)
+        if (updateAgeOnGet) {
+          this.updateItemAge(index)
         }
-        else {
-            // in cache, maybe already fetching
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v)) {
-                const stale = allowStale && v.__staleWhileFetching !== undefined;
-                if (status) {
-                    status.fetch = 'inflight';
-                    if (stale)
-                        status.returnedStale = true;
-                }
-                return stale ? v.__staleWhileFetching : (v.__returned = v);
-            }
-            // if we force a refresh, that means do NOT serve the cached value,
-            // unless we are already in the process of refreshing the cache.
-            const isStale = this.#isStale(index);
-            if (!forceRefresh && !isStale) {
-                if (status)
-                    status.fetch = 'hit';
-                this.#moveToTail(index);
-                if (updateAgeOnGet) {
-                    this.#updateItemAge(index);
-                }
-                if (status)
-                    this.#statusTTL(status, index);
-                return v;
-            }
-            // ok, it is stale or a forced refresh, and not already fetching.
-            // refresh the cache.
-            const p = this.#backgroundFetch(k, index, options, context);
-            const hasStale = p.__staleWhileFetching !== undefined;
-            const staleVal = hasStale && allowStale;
-            if (status) {
-                status.fetch = isStale ? 'stale' : 'refresh';
-                if (staleVal && isStale)
-                    status.returnedStale = true;
-            }
-            return staleVal ? p.__staleWhileFetching : (p.__returned = p);
-        }
+        this.statusTTL(status, index)
+        return v
+      }
+
+      // ok, it is stale or a forced refresh, and not already fetching.
+      // refresh the cache.
+      const p = this.backgroundFetch(k, index, options, fetchContext)
+      const hasStale = p.__staleWhileFetching !== undefined
+      const staleVal = hasStale && allowStale
+      if (status) {
+        status.fetch = hasStale && isStale ? 'stale' : 'refresh'
+        if (staleVal && isStale) status.returnedStale = true
+      }
+      return staleVal ? p.__staleWhileFetching : (p.__returned = p)
     }
-    /**
-     * Return a value from the cache. Will update the recency of the cache
-     * entry found.
-     *
-     * If the key is not found, get() will return `undefined`.
-     */
-    get(k, getOptions = {}) {
-        const { allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, status, } = getOptions;
-        const index = this.#keyMap.get(k);
-        if (index !== undefined) {
-            const value = this.#valList[index];
-            const fetching = this.#isBackgroundFetch(value);
-            if (status)
-                this.#statusTTL(status, index);
-            if (this.#isStale(index)) {
-                if (status)
-                    status.get = 'stale';
-                // delete only if not an in-flight background fetch
-                if (!fetching) {
-                    if (!noDeleteOnStaleGet) {
-                        this.delete(k);
-                    }
-                    if (status && allowStale)
-                        status.returnedStale = true;
-                    return allowStale ? value : undefined;
-                }
-                else {
-                    if (status &&
-                        allowStale &&
-                        value.__staleWhileFetching !== undefined) {
-                        status.returnedStale = true;
-                    }
-                    return allowStale ? value.__staleWhileFetching : undefined;
-                }
-            }
-            else {
-                if (status)
-                    status.get = 'hit';
-                // if we're currently fetching it, we don't actually have it yet
-                // it's not stale, which means this isn't a staleWhileRefetching.
-                // If it's not stale, and fetching, AND has a __staleWhileFetching
-                // value, then that means the user fetched with {forceRefresh:true},
-                // so it's safe to return that value.
-                if (fetching) {
-                    return value.__staleWhileFetching;
-                }
-                this.#moveToTail(index);
-                if (updateAgeOnGet) {
-                    this.#updateItemAge(index);
-                }
-                return value;
-            }
+  }
+
+  get(
+    k,
+    {
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      status,
+    } = {}
+  ) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined) {
+      const value = this.valList[index]
+      const fetching = this.isBackgroundFetch(value)
+      this.statusTTL(status, index)
+      if (this.isStale(index)) {
+        if (status) status.get = 'stale'
+        // delete only if not an in-flight background fetch
+        if (!fetching) {
+          if (!noDeleteOnStaleGet) {
+            this.delete(k)
+          }
+          if (status) status.returnedStale = allowStale
+          return allowStale ? value : undefined
+        } else {
+          if (status) {
+            status.returnedStale =
+              allowStale && value.__staleWhileFetching !== undefined
+          }
+          return allowStale ? value.__staleWhileFetching : undefined
         }
-        else if (status) {
-            status.get = 'miss';
+      } else {
+        if (status) status.get = 'hit'
+        // if we're currently fetching it, we don't actually have it yet
+        // it's not stale, which means this isn't a staleWhileRefetching.
+        // If it's not stale, and fetching, AND has a __staleWhileFetching
+        // value, then that means the user fetched with {forceRefresh:true},
+        // so it's safe to return that value.
+        if (fetching) {
+          return value.__staleWhileFetching
         }
+        this.moveToTail(index)
+        if (updateAgeOnGet) {
+          this.updateItemAge(index)
+        }
+        return value
+      }
+    } else if (status) {
+      status.get = 'miss'
     }
-    #connect(p, n) {
-        this.#prev[n] = p;
-        this.#next[p] = n;
+  }
+
+  connect(p, n) {
+    this.prev[n] = p
+    this.next[p] = n
+  }
+
+  moveToTail(index) {
+    // if tail already, nothing to do
+    // if head, move head to next[index]
+    // else
+    //   move next[prev[index]] to next[index] (head has no prev)
+    //   move prev[next[index]] to prev[index]
+    // prev[index] = tail
+    // next[tail] = index
+    // tail = index
+    if (index !== this.tail) {
+      if (index === this.head) {
+        this.head = this.next[index]
+      } else {
+        this.connect(this.prev[index], this.next[index])
+      }
+      this.connect(this.tail, index)
+      this.tail = index
     }
-    #moveToTail(index) {
-        // if tail already, nothing to do
-        // if head, move head to next[index]
-        // else
-        //   move next[prev[index]] to next[index] (head has no prev)
-        //   move prev[next[index]] to prev[index]
-        // prev[index] = tail
-        // next[tail] = index
-        // tail = index
-        if (index !== this.#tail) {
-            if (index === this.#head) {
-                this.#head = this.#next[index];
+  }
+
+  get del() {
+    deprecatedMethod('del', 'delete')
+    return this.delete
+  }
+
+  delete(k) {
+    let deleted = false
+    if (this.size !== 0) {
+      const index = this.keyMap.get(k)
+      if (index !== undefined) {
+        deleted = true
+        if (this.size === 1) {
+          this.clear()
+        } else {
+          this.removeItemSize(index)
+          const v = this.valList[index]
+          if (this.isBackgroundFetch(v)) {
+            v.__abortController.abort(new Error('deleted'))
+          } else {
+            this.dispose(v, k, 'delete')
+            if (this.disposeAfter) {
+              this.disposed.push([v, k, 'delete'])
             }
-            else {
-                this.#connect(this.#prev[index], this.#next[index]);
-            }
-            this.#connect(this.#tail, index);
-            this.#tail = index;
+          }
+          this.keyMap.delete(k)
+          this.keyList[index] = null
+          this.valList[index] = null
+          if (index === this.tail) {
+            this.tail = this.prev[index]
+          } else if (index === this.head) {
+            this.head = this.next[index]
+          } else {
+            this.next[this.prev[index]] = this.next[index]
+            this.prev[this.next[index]] = this.prev[index]
+          }
+          this.size--
+          this.free.push(index)
         }
+      }
     }
-    /**
-     * Deletes a key out of the cache.
-     * Returns true if the key was deleted, false otherwise.
-     */
-    delete(k) {
-        let deleted = false;
-        if (this.#size !== 0) {
-            const index = this.#keyMap.get(k);
-            if (index !== undefined) {
-                deleted = true;
-                if (this.#size === 1) {
-                    this.clear();
-                }
-                else {
-                    this.#removeItemSize(index);
-                    const v = this.#valList[index];
-                    if (this.#isBackgroundFetch(v)) {
-                        v.__abortController.abort(new Error('deleted'));
-                    }
-                    else if (this.#hasDispose || this.#hasDisposeAfter) {
-                        if (this.#hasDispose) {
-                            this.#dispose?.(v, k, 'delete');
-                        }
-                        if (this.#hasDisposeAfter) {
-                            this.#disposed?.push([v, k, 'delete']);
-                        }
-                    }
-                    this.#keyMap.delete(k);
-                    this.#keyList[index] = undefined;
-                    this.#valList[index] = undefined;
-                    if (index === this.#tail) {
-                        this.#tail = this.#prev[index];
-                    }
-                    else if (index === this.#head) {
-                        this.#head = this.#next[index];
-                    }
-                    else {
-                        this.#next[this.#prev[index]] = this.#next[index];
-                        this.#prev[this.#next[index]] = this.#prev[index];
-                    }
-                    this.#size--;
-                    this.#free.push(index);
-                }
-            }
-        }
-        if (this.#hasDisposeAfter && this.#disposed?.length) {
-            const dt = this.#disposed;
-            let task;
-            while ((task = dt?.shift())) {
-                this.#disposeAfter?.(...task);
-            }
-        }
-        return deleted;
+    if (this.disposed) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
     }
-    /**
-     * Clear the cache entirely, throwing away all values.
-     */
-    clear() {
-        for (const index of this.#rindexes({ allowStale: true })) {
-            const v = this.#valList[index];
-            if (this.#isBackgroundFetch(v)) {
-                v.__abortController.abort(new Error('deleted'));
-            }
-            else {
-                const k = this.#keyList[index];
-                if (this.#hasDispose) {
-                    this.#dispose?.(v, k, 'delete');
-                }
-                if (this.#hasDisposeAfter) {
-                    this.#disposed?.push([v, k, 'delete']);
-                }
-            }
+    return deleted
+  }
+
+  clear() {
+    for (const index of this.rindexes({ allowStale: true })) {
+      const v = this.valList[index]
+      if (this.isBackgroundFetch(v)) {
+        v.__abortController.abort(new Error('deleted'))
+      } else {
+        const k = this.keyList[index]
+        this.dispose(v, k, 'delete')
+        if (this.disposeAfter) {
+          this.disposed.push([v, k, 'delete'])
         }
-        this.#keyMap.clear();
-        this.#valList.fill(undefined);
-        this.#keyList.fill(undefined);
-        if (this.#ttls && this.#starts) {
-            this.#ttls.fill(0);
-            this.#starts.fill(0);
-        }
-        if (this.#sizes) {
-            this.#sizes.fill(0);
-        }
-        this.#head = 0;
-        this.#tail = 0;
-        this.#free.length = 0;
-        this.#calculatedSize = 0;
-        this.#size = 0;
-        if (this.#hasDisposeAfter && this.#disposed) {
-            const dt = this.#disposed;
-            let task;
-            while ((task = dt?.shift())) {
-                this.#disposeAfter?.(...task);
-            }
-        }
+      }
     }
+
+    this.keyMap.clear()
+    this.valList.fill(null)
+    this.keyList.fill(null)
+    if (this.ttls) {
+      this.ttls.fill(0)
+      this.starts.fill(0)
+    }
+    if (this.sizes) {
+      this.sizes.fill(0)
+    }
+    this.head = 0
+    this.tail = 0
+    this.initialFill = 1
+    this.free.length = 0
+    this.calculatedSize = 0
+    this.size = 0
+    if (this.disposed) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
+    }
+  }
+
+  get reset() {
+    deprecatedMethod('reset', 'clear')
+    return this.clear
+  }
+
+  get length() {
+    deprecatedProperty('length', 'size')
+    return this.size
+  }
+
+  static get AbortController() {
+    return AC
+  }
+  static get AbortSignal() {
+    return AS
+  }
 }
-exports.LRUCache = LRUCache;
-//# sourceMappingURL=index.js.map
+
+module.exports = LRUCache
+
 
 /***/ }),
 
@@ -31934,6 +31367,4014 @@ var core = __nccwpck_require__(2186);
 var github = __nccwpck_require__(5438);
 // EXTERNAL MODULE: ./node_modules/@npmcli/package-json/lib/index.js
 var lib = __nccwpck_require__(1899);
+;// CONCATENATED MODULE: ./node_modules/zod/lib/index.mjs
+var util;
+(function (util) {
+    util.assertEqual = (val) => val;
+    function assertIs(_arg) { }
+    util.assertIs = assertIs;
+    function assertNever(_x) {
+        throw new Error();
+    }
+    util.assertNever = assertNever;
+    util.arrayToEnum = (items) => {
+        const obj = {};
+        for (const item of items) {
+            obj[item] = item;
+        }
+        return obj;
+    };
+    util.getValidEnumValues = (obj) => {
+        const validKeys = util.objectKeys(obj).filter((k) => typeof obj[obj[k]] !== "number");
+        const filtered = {};
+        for (const k of validKeys) {
+            filtered[k] = obj[k];
+        }
+        return util.objectValues(filtered);
+    };
+    util.objectValues = (obj) => {
+        return util.objectKeys(obj).map(function (e) {
+            return obj[e];
+        });
+    };
+    util.objectKeys = typeof Object.keys === "function" // eslint-disable-line ban/ban
+        ? (obj) => Object.keys(obj) // eslint-disable-line ban/ban
+        : (object) => {
+            const keys = [];
+            for (const key in object) {
+                if (Object.prototype.hasOwnProperty.call(object, key)) {
+                    keys.push(key);
+                }
+            }
+            return keys;
+        };
+    util.find = (arr, checker) => {
+        for (const item of arr) {
+            if (checker(item))
+                return item;
+        }
+        return undefined;
+    };
+    util.isInteger = typeof Number.isInteger === "function"
+        ? (val) => Number.isInteger(val) // eslint-disable-line ban/ban
+        : (val) => typeof val === "number" && isFinite(val) && Math.floor(val) === val;
+    function joinValues(array, separator = " | ") {
+        return array
+            .map((val) => (typeof val === "string" ? `'${val}'` : val))
+            .join(separator);
+    }
+    util.joinValues = joinValues;
+    util.jsonStringifyReplacer = (_, value) => {
+        if (typeof value === "bigint") {
+            return value.toString();
+        }
+        return value;
+    };
+})(util || (util = {}));
+var objectUtil;
+(function (objectUtil) {
+    objectUtil.mergeShapes = (first, second) => {
+        return {
+            ...first,
+            ...second, // second overwrites first
+        };
+    };
+})(objectUtil || (objectUtil = {}));
+const ZodParsedType = util.arrayToEnum([
+    "string",
+    "nan",
+    "number",
+    "integer",
+    "float",
+    "boolean",
+    "date",
+    "bigint",
+    "symbol",
+    "function",
+    "undefined",
+    "null",
+    "array",
+    "object",
+    "unknown",
+    "promise",
+    "void",
+    "never",
+    "map",
+    "set",
+]);
+const getParsedType = (data) => {
+    const t = typeof data;
+    switch (t) {
+        case "undefined":
+            return ZodParsedType.undefined;
+        case "string":
+            return ZodParsedType.string;
+        case "number":
+            return isNaN(data) ? ZodParsedType.nan : ZodParsedType.number;
+        case "boolean":
+            return ZodParsedType.boolean;
+        case "function":
+            return ZodParsedType.function;
+        case "bigint":
+            return ZodParsedType.bigint;
+        case "symbol":
+            return ZodParsedType.symbol;
+        case "object":
+            if (Array.isArray(data)) {
+                return ZodParsedType.array;
+            }
+            if (data === null) {
+                return ZodParsedType.null;
+            }
+            if (data.then &&
+                typeof data.then === "function" &&
+                data.catch &&
+                typeof data.catch === "function") {
+                return ZodParsedType.promise;
+            }
+            if (typeof Map !== "undefined" && data instanceof Map) {
+                return ZodParsedType.map;
+            }
+            if (typeof Set !== "undefined" && data instanceof Set) {
+                return ZodParsedType.set;
+            }
+            if (typeof Date !== "undefined" && data instanceof Date) {
+                return ZodParsedType.date;
+            }
+            return ZodParsedType.object;
+        default:
+            return ZodParsedType.unknown;
+    }
+};
+
+const ZodIssueCode = util.arrayToEnum([
+    "invalid_type",
+    "invalid_literal",
+    "custom",
+    "invalid_union",
+    "invalid_union_discriminator",
+    "invalid_enum_value",
+    "unrecognized_keys",
+    "invalid_arguments",
+    "invalid_return_type",
+    "invalid_date",
+    "invalid_string",
+    "too_small",
+    "too_big",
+    "invalid_intersection_types",
+    "not_multiple_of",
+    "not_finite",
+]);
+const quotelessJson = (obj) => {
+    const json = JSON.stringify(obj, null, 2);
+    return json.replace(/"([^"]+)":/g, "$1:");
+};
+class ZodError extends Error {
+    constructor(issues) {
+        super();
+        this.issues = [];
+        this.addIssue = (sub) => {
+            this.issues = [...this.issues, sub];
+        };
+        this.addIssues = (subs = []) => {
+            this.issues = [...this.issues, ...subs];
+        };
+        const actualProto = new.target.prototype;
+        if (Object.setPrototypeOf) {
+            // eslint-disable-next-line ban/ban
+            Object.setPrototypeOf(this, actualProto);
+        }
+        else {
+            this.__proto__ = actualProto;
+        }
+        this.name = "ZodError";
+        this.issues = issues;
+    }
+    get errors() {
+        return this.issues;
+    }
+    format(_mapper) {
+        const mapper = _mapper ||
+            function (issue) {
+                return issue.message;
+            };
+        const fieldErrors = { _errors: [] };
+        const processError = (error) => {
+            for (const issue of error.issues) {
+                if (issue.code === "invalid_union") {
+                    issue.unionErrors.map(processError);
+                }
+                else if (issue.code === "invalid_return_type") {
+                    processError(issue.returnTypeError);
+                }
+                else if (issue.code === "invalid_arguments") {
+                    processError(issue.argumentsError);
+                }
+                else if (issue.path.length === 0) {
+                    fieldErrors._errors.push(mapper(issue));
+                }
+                else {
+                    let curr = fieldErrors;
+                    let i = 0;
+                    while (i < issue.path.length) {
+                        const el = issue.path[i];
+                        const terminal = i === issue.path.length - 1;
+                        if (!terminal) {
+                            curr[el] = curr[el] || { _errors: [] };
+                            // if (typeof el === "string") {
+                            //   curr[el] = curr[el] || { _errors: [] };
+                            // } else if (typeof el === "number") {
+                            //   const errorArray: any = [];
+                            //   errorArray._errors = [];
+                            //   curr[el] = curr[el] || errorArray;
+                            // }
+                        }
+                        else {
+                            curr[el] = curr[el] || { _errors: [] };
+                            curr[el]._errors.push(mapper(issue));
+                        }
+                        curr = curr[el];
+                        i++;
+                    }
+                }
+            }
+        };
+        processError(this);
+        return fieldErrors;
+    }
+    toString() {
+        return this.message;
+    }
+    get message() {
+        return JSON.stringify(this.issues, util.jsonStringifyReplacer, 2);
+    }
+    get isEmpty() {
+        return this.issues.length === 0;
+    }
+    flatten(mapper = (issue) => issue.message) {
+        const fieldErrors = {};
+        const formErrors = [];
+        for (const sub of this.issues) {
+            if (sub.path.length > 0) {
+                fieldErrors[sub.path[0]] = fieldErrors[sub.path[0]] || [];
+                fieldErrors[sub.path[0]].push(mapper(sub));
+            }
+            else {
+                formErrors.push(mapper(sub));
+            }
+        }
+        return { formErrors, fieldErrors };
+    }
+    get formErrors() {
+        return this.flatten();
+    }
+}
+ZodError.create = (issues) => {
+    const error = new ZodError(issues);
+    return error;
+};
+
+const errorMap = (issue, _ctx) => {
+    let message;
+    switch (issue.code) {
+        case ZodIssueCode.invalid_type:
+            if (issue.received === ZodParsedType.undefined) {
+                message = "Required";
+            }
+            else {
+                message = `Expected ${issue.expected}, received ${issue.received}`;
+            }
+            break;
+        case ZodIssueCode.invalid_literal:
+            message = `Invalid literal value, expected ${JSON.stringify(issue.expected, util.jsonStringifyReplacer)}`;
+            break;
+        case ZodIssueCode.unrecognized_keys:
+            message = `Unrecognized key(s) in object: ${util.joinValues(issue.keys, ", ")}`;
+            break;
+        case ZodIssueCode.invalid_union:
+            message = `Invalid input`;
+            break;
+        case ZodIssueCode.invalid_union_discriminator:
+            message = `Invalid discriminator value. Expected ${util.joinValues(issue.options)}`;
+            break;
+        case ZodIssueCode.invalid_enum_value:
+            message = `Invalid enum value. Expected ${util.joinValues(issue.options)}, received '${issue.received}'`;
+            break;
+        case ZodIssueCode.invalid_arguments:
+            message = `Invalid function arguments`;
+            break;
+        case ZodIssueCode.invalid_return_type:
+            message = `Invalid function return type`;
+            break;
+        case ZodIssueCode.invalid_date:
+            message = `Invalid date`;
+            break;
+        case ZodIssueCode.invalid_string:
+            if (typeof issue.validation === "object") {
+                if ("includes" in issue.validation) {
+                    message = `Invalid input: must include "${issue.validation.includes}"`;
+                    if (typeof issue.validation.position === "number") {
+                        message = `${message} at one or more positions greater than or equal to ${issue.validation.position}`;
+                    }
+                }
+                else if ("startsWith" in issue.validation) {
+                    message = `Invalid input: must start with "${issue.validation.startsWith}"`;
+                }
+                else if ("endsWith" in issue.validation) {
+                    message = `Invalid input: must end with "${issue.validation.endsWith}"`;
+                }
+                else {
+                    util.assertNever(issue.validation);
+                }
+            }
+            else if (issue.validation !== "regex") {
+                message = `Invalid ${issue.validation}`;
+            }
+            else {
+                message = "Invalid";
+            }
+            break;
+        case ZodIssueCode.too_small:
+            if (issue.type === "array")
+                message = `Array must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `more than`} ${issue.minimum} element(s)`;
+            else if (issue.type === "string")
+                message = `String must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `over`} ${issue.minimum} character(s)`;
+            else if (issue.type === "number")
+                message = `Number must be ${issue.exact
+                    ? `exactly equal to `
+                    : issue.inclusive
+                        ? `greater than or equal to `
+                        : `greater than `}${issue.minimum}`;
+            else if (issue.type === "date")
+                message = `Date must be ${issue.exact
+                    ? `exactly equal to `
+                    : issue.inclusive
+                        ? `greater than or equal to `
+                        : `greater than `}${new Date(Number(issue.minimum))}`;
+            else
+                message = "Invalid input";
+            break;
+        case ZodIssueCode.too_big:
+            if (issue.type === "array")
+                message = `Array must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `less than`} ${issue.maximum} element(s)`;
+            else if (issue.type === "string")
+                message = `String must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `under`} ${issue.maximum} character(s)`;
+            else if (issue.type === "number")
+                message = `Number must be ${issue.exact
+                    ? `exactly`
+                    : issue.inclusive
+                        ? `less than or equal to`
+                        : `less than`} ${issue.maximum}`;
+            else if (issue.type === "bigint")
+                message = `BigInt must be ${issue.exact
+                    ? `exactly`
+                    : issue.inclusive
+                        ? `less than or equal to`
+                        : `less than`} ${issue.maximum}`;
+            else if (issue.type === "date")
+                message = `Date must be ${issue.exact
+                    ? `exactly`
+                    : issue.inclusive
+                        ? `smaller than or equal to`
+                        : `smaller than`} ${new Date(Number(issue.maximum))}`;
+            else
+                message = "Invalid input";
+            break;
+        case ZodIssueCode.custom:
+            message = `Invalid input`;
+            break;
+        case ZodIssueCode.invalid_intersection_types:
+            message = `Intersection results could not be merged`;
+            break;
+        case ZodIssueCode.not_multiple_of:
+            message = `Number must be a multiple of ${issue.multipleOf}`;
+            break;
+        case ZodIssueCode.not_finite:
+            message = "Number must be finite";
+            break;
+        default:
+            message = _ctx.defaultError;
+            util.assertNever(issue);
+    }
+    return { message };
+};
+
+let overrideErrorMap = errorMap;
+function setErrorMap(map) {
+    overrideErrorMap = map;
+}
+function getErrorMap() {
+    return overrideErrorMap;
+}
+
+const makeIssue = (params) => {
+    const { data, path, errorMaps, issueData } = params;
+    const fullPath = [...path, ...(issueData.path || [])];
+    const fullIssue = {
+        ...issueData,
+        path: fullPath,
+    };
+    let errorMessage = "";
+    const maps = errorMaps
+        .filter((m) => !!m)
+        .slice()
+        .reverse();
+    for (const map of maps) {
+        errorMessage = map(fullIssue, { data, defaultError: errorMessage }).message;
+    }
+    return {
+        ...issueData,
+        path: fullPath,
+        message: issueData.message || errorMessage,
+    };
+};
+const EMPTY_PATH = [];
+function addIssueToContext(ctx, issueData) {
+    const issue = makeIssue({
+        issueData: issueData,
+        data: ctx.data,
+        path: ctx.path,
+        errorMaps: [
+            ctx.common.contextualErrorMap,
+            ctx.schemaErrorMap,
+            getErrorMap(),
+            errorMap, // then global default map
+        ].filter((x) => !!x),
+    });
+    ctx.common.issues.push(issue);
+}
+class ParseStatus {
+    constructor() {
+        this.value = "valid";
+    }
+    dirty() {
+        if (this.value === "valid")
+            this.value = "dirty";
+    }
+    abort() {
+        if (this.value !== "aborted")
+            this.value = "aborted";
+    }
+    static mergeArray(status, results) {
+        const arrayValue = [];
+        for (const s of results) {
+            if (s.status === "aborted")
+                return INVALID;
+            if (s.status === "dirty")
+                status.dirty();
+            arrayValue.push(s.value);
+        }
+        return { status: status.value, value: arrayValue };
+    }
+    static async mergeObjectAsync(status, pairs) {
+        const syncPairs = [];
+        for (const pair of pairs) {
+            syncPairs.push({
+                key: await pair.key,
+                value: await pair.value,
+            });
+        }
+        return ParseStatus.mergeObjectSync(status, syncPairs);
+    }
+    static mergeObjectSync(status, pairs) {
+        const finalObject = {};
+        for (const pair of pairs) {
+            const { key, value } = pair;
+            if (key.status === "aborted")
+                return INVALID;
+            if (value.status === "aborted")
+                return INVALID;
+            if (key.status === "dirty")
+                status.dirty();
+            if (value.status === "dirty")
+                status.dirty();
+            if (key.value !== "__proto__" &&
+                (typeof value.value !== "undefined" || pair.alwaysSet)) {
+                finalObject[key.value] = value.value;
+            }
+        }
+        return { status: status.value, value: finalObject };
+    }
+}
+const INVALID = Object.freeze({
+    status: "aborted",
+});
+const DIRTY = (value) => ({ status: "dirty", value });
+const OK = (value) => ({ status: "valid", value });
+const isAborted = (x) => x.status === "aborted";
+const isDirty = (x) => x.status === "dirty";
+const isValid = (x) => x.status === "valid";
+const isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
+
+var errorUtil;
+(function (errorUtil) {
+    errorUtil.errToObj = (message) => typeof message === "string" ? { message } : message || {};
+    errorUtil.toString = (message) => typeof message === "string" ? message : message === null || message === void 0 ? void 0 : message.message;
+})(errorUtil || (errorUtil = {}));
+
+class ParseInputLazyPath {
+    constructor(parent, value, path, key) {
+        this._cachedPath = [];
+        this.parent = parent;
+        this.data = value;
+        this._path = path;
+        this._key = key;
+    }
+    get path() {
+        if (!this._cachedPath.length) {
+            if (this._key instanceof Array) {
+                this._cachedPath.push(...this._path, ...this._key);
+            }
+            else {
+                this._cachedPath.push(...this._path, this._key);
+            }
+        }
+        return this._cachedPath;
+    }
+}
+const handleResult = (ctx, result) => {
+    if (isValid(result)) {
+        return { success: true, data: result.value };
+    }
+    else {
+        if (!ctx.common.issues.length) {
+            throw new Error("Validation failed but no issues detected.");
+        }
+        return {
+            success: false,
+            get error() {
+                if (this._error)
+                    return this._error;
+                const error = new ZodError(ctx.common.issues);
+                this._error = error;
+                return this._error;
+            },
+        };
+    }
+};
+function processCreateParams(params) {
+    if (!params)
+        return {};
+    const { errorMap, invalid_type_error, required_error, description } = params;
+    if (errorMap && (invalid_type_error || required_error)) {
+        throw new Error(`Can't use "invalid_type_error" or "required_error" in conjunction with custom error map.`);
+    }
+    if (errorMap)
+        return { errorMap: errorMap, description };
+    const customMap = (iss, ctx) => {
+        if (iss.code !== "invalid_type")
+            return { message: ctx.defaultError };
+        if (typeof ctx.data === "undefined") {
+            return { message: required_error !== null && required_error !== void 0 ? required_error : ctx.defaultError };
+        }
+        return { message: invalid_type_error !== null && invalid_type_error !== void 0 ? invalid_type_error : ctx.defaultError };
+    };
+    return { errorMap: customMap, description };
+}
+class ZodType {
+    constructor(def) {
+        /** Alias of safeParseAsync */
+        this.spa = this.safeParseAsync;
+        this._def = def;
+        this.parse = this.parse.bind(this);
+        this.safeParse = this.safeParse.bind(this);
+        this.parseAsync = this.parseAsync.bind(this);
+        this.safeParseAsync = this.safeParseAsync.bind(this);
+        this.spa = this.spa.bind(this);
+        this.refine = this.refine.bind(this);
+        this.refinement = this.refinement.bind(this);
+        this.superRefine = this.superRefine.bind(this);
+        this.optional = this.optional.bind(this);
+        this.nullable = this.nullable.bind(this);
+        this.nullish = this.nullish.bind(this);
+        this.array = this.array.bind(this);
+        this.promise = this.promise.bind(this);
+        this.or = this.or.bind(this);
+        this.and = this.and.bind(this);
+        this.transform = this.transform.bind(this);
+        this.brand = this.brand.bind(this);
+        this.default = this.default.bind(this);
+        this.catch = this.catch.bind(this);
+        this.describe = this.describe.bind(this);
+        this.pipe = this.pipe.bind(this);
+        this.readonly = this.readonly.bind(this);
+        this.isNullable = this.isNullable.bind(this);
+        this.isOptional = this.isOptional.bind(this);
+    }
+    get description() {
+        return this._def.description;
+    }
+    _getType(input) {
+        return getParsedType(input.data);
+    }
+    _getOrReturnCtx(input, ctx) {
+        return (ctx || {
+            common: input.parent.common,
+            data: input.data,
+            parsedType: getParsedType(input.data),
+            schemaErrorMap: this._def.errorMap,
+            path: input.path,
+            parent: input.parent,
+        });
+    }
+    _processInputParams(input) {
+        return {
+            status: new ParseStatus(),
+            ctx: {
+                common: input.parent.common,
+                data: input.data,
+                parsedType: getParsedType(input.data),
+                schemaErrorMap: this._def.errorMap,
+                path: input.path,
+                parent: input.parent,
+            },
+        };
+    }
+    _parseSync(input) {
+        const result = this._parse(input);
+        if (isAsync(result)) {
+            throw new Error("Synchronous parse encountered promise.");
+        }
+        return result;
+    }
+    _parseAsync(input) {
+        const result = this._parse(input);
+        return Promise.resolve(result);
+    }
+    parse(data, params) {
+        const result = this.safeParse(data, params);
+        if (result.success)
+            return result.data;
+        throw result.error;
+    }
+    safeParse(data, params) {
+        var _a;
+        const ctx = {
+            common: {
+                issues: [],
+                async: (_a = params === null || params === void 0 ? void 0 : params.async) !== null && _a !== void 0 ? _a : false,
+                contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap,
+            },
+            path: (params === null || params === void 0 ? void 0 : params.path) || [],
+            schemaErrorMap: this._def.errorMap,
+            parent: null,
+            data,
+            parsedType: getParsedType(data),
+        };
+        const result = this._parseSync({ data, path: ctx.path, parent: ctx });
+        return handleResult(ctx, result);
+    }
+    async parseAsync(data, params) {
+        const result = await this.safeParseAsync(data, params);
+        if (result.success)
+            return result.data;
+        throw result.error;
+    }
+    async safeParseAsync(data, params) {
+        const ctx = {
+            common: {
+                issues: [],
+                contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap,
+                async: true,
+            },
+            path: (params === null || params === void 0 ? void 0 : params.path) || [],
+            schemaErrorMap: this._def.errorMap,
+            parent: null,
+            data,
+            parsedType: getParsedType(data),
+        };
+        const maybeAsyncResult = this._parse({ data, path: ctx.path, parent: ctx });
+        const result = await (isAsync(maybeAsyncResult)
+            ? maybeAsyncResult
+            : Promise.resolve(maybeAsyncResult));
+        return handleResult(ctx, result);
+    }
+    refine(check, message) {
+        const getIssueProperties = (val) => {
+            if (typeof message === "string" || typeof message === "undefined") {
+                return { message };
+            }
+            else if (typeof message === "function") {
+                return message(val);
+            }
+            else {
+                return message;
+            }
+        };
+        return this._refinement((val, ctx) => {
+            const result = check(val);
+            const setError = () => ctx.addIssue({
+                code: ZodIssueCode.custom,
+                ...getIssueProperties(val),
+            });
+            if (typeof Promise !== "undefined" && result instanceof Promise) {
+                return result.then((data) => {
+                    if (!data) {
+                        setError();
+                        return false;
+                    }
+                    else {
+                        return true;
+                    }
+                });
+            }
+            if (!result) {
+                setError();
+                return false;
+            }
+            else {
+                return true;
+            }
+        });
+    }
+    refinement(check, refinementData) {
+        return this._refinement((val, ctx) => {
+            if (!check(val)) {
+                ctx.addIssue(typeof refinementData === "function"
+                    ? refinementData(val, ctx)
+                    : refinementData);
+                return false;
+            }
+            else {
+                return true;
+            }
+        });
+    }
+    _refinement(refinement) {
+        return new ZodEffects({
+            schema: this,
+            typeName: ZodFirstPartyTypeKind.ZodEffects,
+            effect: { type: "refinement", refinement },
+        });
+    }
+    superRefine(refinement) {
+        return this._refinement(refinement);
+    }
+    optional() {
+        return ZodOptional.create(this, this._def);
+    }
+    nullable() {
+        return ZodNullable.create(this, this._def);
+    }
+    nullish() {
+        return this.nullable().optional();
+    }
+    array() {
+        return ZodArray.create(this, this._def);
+    }
+    promise() {
+        return ZodPromise.create(this, this._def);
+    }
+    or(option) {
+        return ZodUnion.create([this, option], this._def);
+    }
+    and(incoming) {
+        return ZodIntersection.create(this, incoming, this._def);
+    }
+    transform(transform) {
+        return new ZodEffects({
+            ...processCreateParams(this._def),
+            schema: this,
+            typeName: ZodFirstPartyTypeKind.ZodEffects,
+            effect: { type: "transform", transform },
+        });
+    }
+    default(def) {
+        const defaultValueFunc = typeof def === "function" ? def : () => def;
+        return new ZodDefault({
+            ...processCreateParams(this._def),
+            innerType: this,
+            defaultValue: defaultValueFunc,
+            typeName: ZodFirstPartyTypeKind.ZodDefault,
+        });
+    }
+    brand() {
+        return new ZodBranded({
+            typeName: ZodFirstPartyTypeKind.ZodBranded,
+            type: this,
+            ...processCreateParams(this._def),
+        });
+    }
+    catch(def) {
+        const catchValueFunc = typeof def === "function" ? def : () => def;
+        return new ZodCatch({
+            ...processCreateParams(this._def),
+            innerType: this,
+            catchValue: catchValueFunc,
+            typeName: ZodFirstPartyTypeKind.ZodCatch,
+        });
+    }
+    describe(description) {
+        const This = this.constructor;
+        return new This({
+            ...this._def,
+            description,
+        });
+    }
+    pipe(target) {
+        return ZodPipeline.create(this, target);
+    }
+    readonly() {
+        return ZodReadonly.create(this);
+    }
+    isOptional() {
+        return this.safeParse(undefined).success;
+    }
+    isNullable() {
+        return this.safeParse(null).success;
+    }
+}
+const cuidRegex = /^c[^\s-]{8,}$/i;
+const cuid2Regex = /^[a-z][a-z0-9]*$/;
+const ulidRegex = /[0-9A-HJKMNP-TV-Z]{26}/;
+// const uuidRegex =
+//   /^([a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[a-f0-9]{4}-[a-f0-9]{12}|00000000-0000-0000-0000-000000000000)$/i;
+const uuidRegex = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
+// from https://stackoverflow.com/a/46181/1550155
+// old version: too slow, didn't support unicode
+// const emailRegex = /^((([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+(\.([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+)*)|((\x22)((((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(([\x01-\x08\x0b\x0c\x0e-\x1f\x7f]|\x21|[\x23-\x5b]|[\x5d-\x7e]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(\\([\x01-\x09\x0b\x0c\x0d-\x7f]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]))))*(((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(\x22)))@((([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.)+(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))$/i;
+//old email regex
+// const emailRegex = /^(([^<>()[\].,;:\s@"]+(\.[^<>()[\].,;:\s@"]+)*)|(".+"))@((?!-)([^<>()[\].,;:\s@"]+\.)+[^<>()[\].,;:\s@"]{1,})[^-<>()[\].,;:\s@"]$/i;
+// eslint-disable-next-line
+// const emailRegex =
+//   /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[(((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2}))\.){3}((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2}))\])|(\[IPv6:(([a-f0-9]{1,4}:){7}|::([a-f0-9]{1,4}:){0,6}|([a-f0-9]{1,4}:){1}:([a-f0-9]{1,4}:){0,5}|([a-f0-9]{1,4}:){2}:([a-f0-9]{1,4}:){0,4}|([a-f0-9]{1,4}:){3}:([a-f0-9]{1,4}:){0,3}|([a-f0-9]{1,4}:){4}:([a-f0-9]{1,4}:){0,2}|([a-f0-9]{1,4}:){5}:([a-f0-9]{1,4}:){0,1})([a-f0-9]{1,4}|(((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2}))\.){3}((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2})))\])|([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])*(\.[A-Za-z]{2,})+))$/;
+// const emailRegex =
+//   /^[a-zA-Z0-9\.\!\#\$\%\&\'\*\+\/\=\?\^\_\`\{\|\}\~\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+// const emailRegex =
+//   /^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$/i;
+const emailRegex = /^([A-Z0-9_+-]+\.?)*[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
+// const emailRegex =
+//   /^[a-z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9\-]+)*$/i;
+// from https://thekevinscott.com/emojis-in-javascript/#writing-a-regular-expression
+const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Component})+$/u;
+const ipv4Regex = /^(((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2}))\.){3}((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2}))$/;
+const ipv6Regex = /^(([a-f0-9]{1,4}:){7}|::([a-f0-9]{1,4}:){0,6}|([a-f0-9]{1,4}:){1}:([a-f0-9]{1,4}:){0,5}|([a-f0-9]{1,4}:){2}:([a-f0-9]{1,4}:){0,4}|([a-f0-9]{1,4}:){3}:([a-f0-9]{1,4}:){0,3}|([a-f0-9]{1,4}:){4}:([a-f0-9]{1,4}:){0,2}|([a-f0-9]{1,4}:){5}:([a-f0-9]{1,4}:){0,1})([a-f0-9]{1,4}|(((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2}))\.){3}((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2})))$/;
+// Adapted from https://stackoverflow.com/a/3143231
+const datetimeRegex = (args) => {
+    if (args.precision) {
+        if (args.offset) {
+            return new RegExp(`^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{${args.precision}}(([+-]\\d{2}(:?\\d{2})?)|Z)$`);
+        }
+        else {
+            return new RegExp(`^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{${args.precision}}Z$`);
+        }
+    }
+    else if (args.precision === 0) {
+        if (args.offset) {
+            return new RegExp(`^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(([+-]\\d{2}(:?\\d{2})?)|Z)$`);
+        }
+        else {
+            return new RegExp(`^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$`);
+        }
+    }
+    else {
+        if (args.offset) {
+            return new RegExp(`^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(([+-]\\d{2}(:?\\d{2})?)|Z)$`);
+        }
+        else {
+            return new RegExp(`^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$`);
+        }
+    }
+};
+function isValidIP(ip, version) {
+    if ((version === "v4" || !version) && ipv4Regex.test(ip)) {
+        return true;
+    }
+    if ((version === "v6" || !version) && ipv6Regex.test(ip)) {
+        return true;
+    }
+    return false;
+}
+class ZodString extends ZodType {
+    constructor() {
+        super(...arguments);
+        this._regex = (regex, validation, message) => this.refinement((data) => regex.test(data), {
+            validation,
+            code: ZodIssueCode.invalid_string,
+            ...errorUtil.errToObj(message),
+        });
+        /**
+         * @deprecated Use z.string().min(1) instead.
+         * @see {@link ZodString.min}
+         */
+        this.nonempty = (message) => this.min(1, errorUtil.errToObj(message));
+        this.trim = () => new ZodString({
+            ...this._def,
+            checks: [...this._def.checks, { kind: "trim" }],
+        });
+        this.toLowerCase = () => new ZodString({
+            ...this._def,
+            checks: [...this._def.checks, { kind: "toLowerCase" }],
+        });
+        this.toUpperCase = () => new ZodString({
+            ...this._def,
+            checks: [...this._def.checks, { kind: "toUpperCase" }],
+        });
+    }
+    _parse(input) {
+        if (this._def.coerce) {
+            input.data = String(input.data);
+        }
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.string) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.string,
+                received: ctx.parsedType,
+            }
+            //
+            );
+            return INVALID;
+        }
+        const status = new ParseStatus();
+        let ctx = undefined;
+        for (const check of this._def.checks) {
+            if (check.kind === "min") {
+                if (input.data.length < check.value) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_small,
+                        minimum: check.value,
+                        type: "string",
+                        inclusive: true,
+                        exact: false,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "max") {
+                if (input.data.length > check.value) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_big,
+                        maximum: check.value,
+                        type: "string",
+                        inclusive: true,
+                        exact: false,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "length") {
+                const tooBig = input.data.length > check.value;
+                const tooSmall = input.data.length < check.value;
+                if (tooBig || tooSmall) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    if (tooBig) {
+                        addIssueToContext(ctx, {
+                            code: ZodIssueCode.too_big,
+                            maximum: check.value,
+                            type: "string",
+                            inclusive: true,
+                            exact: true,
+                            message: check.message,
+                        });
+                    }
+                    else if (tooSmall) {
+                        addIssueToContext(ctx, {
+                            code: ZodIssueCode.too_small,
+                            minimum: check.value,
+                            type: "string",
+                            inclusive: true,
+                            exact: true,
+                            message: check.message,
+                        });
+                    }
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "email") {
+                if (!emailRegex.test(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "email",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "emoji") {
+                if (!emojiRegex.test(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "emoji",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "uuid") {
+                if (!uuidRegex.test(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "uuid",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "cuid") {
+                if (!cuidRegex.test(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "cuid",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "cuid2") {
+                if (!cuid2Regex.test(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "cuid2",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "ulid") {
+                if (!ulidRegex.test(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "ulid",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "url") {
+                try {
+                    new URL(input.data);
+                }
+                catch (_a) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "url",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "regex") {
+                check.regex.lastIndex = 0;
+                const testResult = check.regex.test(input.data);
+                if (!testResult) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "regex",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "trim") {
+                input.data = input.data.trim();
+            }
+            else if (check.kind === "includes") {
+                if (!input.data.includes(check.value, check.position)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.invalid_string,
+                        validation: { includes: check.value, position: check.position },
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "toLowerCase") {
+                input.data = input.data.toLowerCase();
+            }
+            else if (check.kind === "toUpperCase") {
+                input.data = input.data.toUpperCase();
+            }
+            else if (check.kind === "startsWith") {
+                if (!input.data.startsWith(check.value)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.invalid_string,
+                        validation: { startsWith: check.value },
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "endsWith") {
+                if (!input.data.endsWith(check.value)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.invalid_string,
+                        validation: { endsWith: check.value },
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "datetime") {
+                const regex = datetimeRegex(check);
+                if (!regex.test(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.invalid_string,
+                        validation: "datetime",
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "ip") {
+                if (!isValidIP(input.data, check.version)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        validation: "ip",
+                        code: ZodIssueCode.invalid_string,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else {
+                util.assertNever(check);
+            }
+        }
+        return { status: status.value, value: input.data };
+    }
+    _addCheck(check) {
+        return new ZodString({
+            ...this._def,
+            checks: [...this._def.checks, check],
+        });
+    }
+    email(message) {
+        return this._addCheck({ kind: "email", ...errorUtil.errToObj(message) });
+    }
+    url(message) {
+        return this._addCheck({ kind: "url", ...errorUtil.errToObj(message) });
+    }
+    emoji(message) {
+        return this._addCheck({ kind: "emoji", ...errorUtil.errToObj(message) });
+    }
+    uuid(message) {
+        return this._addCheck({ kind: "uuid", ...errorUtil.errToObj(message) });
+    }
+    cuid(message) {
+        return this._addCheck({ kind: "cuid", ...errorUtil.errToObj(message) });
+    }
+    cuid2(message) {
+        return this._addCheck({ kind: "cuid2", ...errorUtil.errToObj(message) });
+    }
+    ulid(message) {
+        return this._addCheck({ kind: "ulid", ...errorUtil.errToObj(message) });
+    }
+    ip(options) {
+        return this._addCheck({ kind: "ip", ...errorUtil.errToObj(options) });
+    }
+    datetime(options) {
+        var _a;
+        if (typeof options === "string") {
+            return this._addCheck({
+                kind: "datetime",
+                precision: null,
+                offset: false,
+                message: options,
+            });
+        }
+        return this._addCheck({
+            kind: "datetime",
+            precision: typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined" ? null : options === null || options === void 0 ? void 0 : options.precision,
+            offset: (_a = options === null || options === void 0 ? void 0 : options.offset) !== null && _a !== void 0 ? _a : false,
+            ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message),
+        });
+    }
+    regex(regex, message) {
+        return this._addCheck({
+            kind: "regex",
+            regex: regex,
+            ...errorUtil.errToObj(message),
+        });
+    }
+    includes(value, options) {
+        return this._addCheck({
+            kind: "includes",
+            value: value,
+            position: options === null || options === void 0 ? void 0 : options.position,
+            ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message),
+        });
+    }
+    startsWith(value, message) {
+        return this._addCheck({
+            kind: "startsWith",
+            value: value,
+            ...errorUtil.errToObj(message),
+        });
+    }
+    endsWith(value, message) {
+        return this._addCheck({
+            kind: "endsWith",
+            value: value,
+            ...errorUtil.errToObj(message),
+        });
+    }
+    min(minLength, message) {
+        return this._addCheck({
+            kind: "min",
+            value: minLength,
+            ...errorUtil.errToObj(message),
+        });
+    }
+    max(maxLength, message) {
+        return this._addCheck({
+            kind: "max",
+            value: maxLength,
+            ...errorUtil.errToObj(message),
+        });
+    }
+    length(len, message) {
+        return this._addCheck({
+            kind: "length",
+            value: len,
+            ...errorUtil.errToObj(message),
+        });
+    }
+    get isDatetime() {
+        return !!this._def.checks.find((ch) => ch.kind === "datetime");
+    }
+    get isEmail() {
+        return !!this._def.checks.find((ch) => ch.kind === "email");
+    }
+    get isURL() {
+        return !!this._def.checks.find((ch) => ch.kind === "url");
+    }
+    get isEmoji() {
+        return !!this._def.checks.find((ch) => ch.kind === "emoji");
+    }
+    get isUUID() {
+        return !!this._def.checks.find((ch) => ch.kind === "uuid");
+    }
+    get isCUID() {
+        return !!this._def.checks.find((ch) => ch.kind === "cuid");
+    }
+    get isCUID2() {
+        return !!this._def.checks.find((ch) => ch.kind === "cuid2");
+    }
+    get isULID() {
+        return !!this._def.checks.find((ch) => ch.kind === "ulid");
+    }
+    get isIP() {
+        return !!this._def.checks.find((ch) => ch.kind === "ip");
+    }
+    get minLength() {
+        let min = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "min") {
+                if (min === null || ch.value > min)
+                    min = ch.value;
+            }
+        }
+        return min;
+    }
+    get maxLength() {
+        let max = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "max") {
+                if (max === null || ch.value < max)
+                    max = ch.value;
+            }
+        }
+        return max;
+    }
+}
+ZodString.create = (params) => {
+    var _a;
+    return new ZodString({
+        checks: [],
+        typeName: ZodFirstPartyTypeKind.ZodString,
+        coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+        ...processCreateParams(params),
+    });
+};
+// https://stackoverflow.com/questions/3966484/why-does-modulus-operator-return-fractional-number-in-javascript/31711034#31711034
+function floatSafeRemainder(val, step) {
+    const valDecCount = (val.toString().split(".")[1] || "").length;
+    const stepDecCount = (step.toString().split(".")[1] || "").length;
+    const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
+    const valInt = parseInt(val.toFixed(decCount).replace(".", ""));
+    const stepInt = parseInt(step.toFixed(decCount).replace(".", ""));
+    return (valInt % stepInt) / Math.pow(10, decCount);
+}
+class ZodNumber extends ZodType {
+    constructor() {
+        super(...arguments);
+        this.min = this.gte;
+        this.max = this.lte;
+        this.step = this.multipleOf;
+    }
+    _parse(input) {
+        if (this._def.coerce) {
+            input.data = Number(input.data);
+        }
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.number) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.number,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        let ctx = undefined;
+        const status = new ParseStatus();
+        for (const check of this._def.checks) {
+            if (check.kind === "int") {
+                if (!util.isInteger(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.invalid_type,
+                        expected: "integer",
+                        received: "float",
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "min") {
+                const tooSmall = check.inclusive
+                    ? input.data < check.value
+                    : input.data <= check.value;
+                if (tooSmall) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_small,
+                        minimum: check.value,
+                        type: "number",
+                        inclusive: check.inclusive,
+                        exact: false,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "max") {
+                const tooBig = check.inclusive
+                    ? input.data > check.value
+                    : input.data >= check.value;
+                if (tooBig) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_big,
+                        maximum: check.value,
+                        type: "number",
+                        inclusive: check.inclusive,
+                        exact: false,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "multipleOf") {
+                if (floatSafeRemainder(input.data, check.value) !== 0) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.not_multiple_of,
+                        multipleOf: check.value,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "finite") {
+                if (!Number.isFinite(input.data)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.not_finite,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else {
+                util.assertNever(check);
+            }
+        }
+        return { status: status.value, value: input.data };
+    }
+    gte(value, message) {
+        return this.setLimit("min", value, true, errorUtil.toString(message));
+    }
+    gt(value, message) {
+        return this.setLimit("min", value, false, errorUtil.toString(message));
+    }
+    lte(value, message) {
+        return this.setLimit("max", value, true, errorUtil.toString(message));
+    }
+    lt(value, message) {
+        return this.setLimit("max", value, false, errorUtil.toString(message));
+    }
+    setLimit(kind, value, inclusive, message) {
+        return new ZodNumber({
+            ...this._def,
+            checks: [
+                ...this._def.checks,
+                {
+                    kind,
+                    value,
+                    inclusive,
+                    message: errorUtil.toString(message),
+                },
+            ],
+        });
+    }
+    _addCheck(check) {
+        return new ZodNumber({
+            ...this._def,
+            checks: [...this._def.checks, check],
+        });
+    }
+    int(message) {
+        return this._addCheck({
+            kind: "int",
+            message: errorUtil.toString(message),
+        });
+    }
+    positive(message) {
+        return this._addCheck({
+            kind: "min",
+            value: 0,
+            inclusive: false,
+            message: errorUtil.toString(message),
+        });
+    }
+    negative(message) {
+        return this._addCheck({
+            kind: "max",
+            value: 0,
+            inclusive: false,
+            message: errorUtil.toString(message),
+        });
+    }
+    nonpositive(message) {
+        return this._addCheck({
+            kind: "max",
+            value: 0,
+            inclusive: true,
+            message: errorUtil.toString(message),
+        });
+    }
+    nonnegative(message) {
+        return this._addCheck({
+            kind: "min",
+            value: 0,
+            inclusive: true,
+            message: errorUtil.toString(message),
+        });
+    }
+    multipleOf(value, message) {
+        return this._addCheck({
+            kind: "multipleOf",
+            value: value,
+            message: errorUtil.toString(message),
+        });
+    }
+    finite(message) {
+        return this._addCheck({
+            kind: "finite",
+            message: errorUtil.toString(message),
+        });
+    }
+    safe(message) {
+        return this._addCheck({
+            kind: "min",
+            inclusive: true,
+            value: Number.MIN_SAFE_INTEGER,
+            message: errorUtil.toString(message),
+        })._addCheck({
+            kind: "max",
+            inclusive: true,
+            value: Number.MAX_SAFE_INTEGER,
+            message: errorUtil.toString(message),
+        });
+    }
+    get minValue() {
+        let min = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "min") {
+                if (min === null || ch.value > min)
+                    min = ch.value;
+            }
+        }
+        return min;
+    }
+    get maxValue() {
+        let max = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "max") {
+                if (max === null || ch.value < max)
+                    max = ch.value;
+            }
+        }
+        return max;
+    }
+    get isInt() {
+        return !!this._def.checks.find((ch) => ch.kind === "int" ||
+            (ch.kind === "multipleOf" && util.isInteger(ch.value)));
+    }
+    get isFinite() {
+        let max = null, min = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "finite" ||
+                ch.kind === "int" ||
+                ch.kind === "multipleOf") {
+                return true;
+            }
+            else if (ch.kind === "min") {
+                if (min === null || ch.value > min)
+                    min = ch.value;
+            }
+            else if (ch.kind === "max") {
+                if (max === null || ch.value < max)
+                    max = ch.value;
+            }
+        }
+        return Number.isFinite(min) && Number.isFinite(max);
+    }
+}
+ZodNumber.create = (params) => {
+    return new ZodNumber({
+        checks: [],
+        typeName: ZodFirstPartyTypeKind.ZodNumber,
+        coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+        ...processCreateParams(params),
+    });
+};
+class ZodBigInt extends ZodType {
+    constructor() {
+        super(...arguments);
+        this.min = this.gte;
+        this.max = this.lte;
+    }
+    _parse(input) {
+        if (this._def.coerce) {
+            input.data = BigInt(input.data);
+        }
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.bigint) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.bigint,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        let ctx = undefined;
+        const status = new ParseStatus();
+        for (const check of this._def.checks) {
+            if (check.kind === "min") {
+                const tooSmall = check.inclusive
+                    ? input.data < check.value
+                    : input.data <= check.value;
+                if (tooSmall) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_small,
+                        type: "bigint",
+                        minimum: check.value,
+                        inclusive: check.inclusive,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "max") {
+                const tooBig = check.inclusive
+                    ? input.data > check.value
+                    : input.data >= check.value;
+                if (tooBig) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_big,
+                        type: "bigint",
+                        maximum: check.value,
+                        inclusive: check.inclusive,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "multipleOf") {
+                if (input.data % check.value !== BigInt(0)) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.not_multiple_of,
+                        multipleOf: check.value,
+                        message: check.message,
+                    });
+                    status.dirty();
+                }
+            }
+            else {
+                util.assertNever(check);
+            }
+        }
+        return { status: status.value, value: input.data };
+    }
+    gte(value, message) {
+        return this.setLimit("min", value, true, errorUtil.toString(message));
+    }
+    gt(value, message) {
+        return this.setLimit("min", value, false, errorUtil.toString(message));
+    }
+    lte(value, message) {
+        return this.setLimit("max", value, true, errorUtil.toString(message));
+    }
+    lt(value, message) {
+        return this.setLimit("max", value, false, errorUtil.toString(message));
+    }
+    setLimit(kind, value, inclusive, message) {
+        return new ZodBigInt({
+            ...this._def,
+            checks: [
+                ...this._def.checks,
+                {
+                    kind,
+                    value,
+                    inclusive,
+                    message: errorUtil.toString(message),
+                },
+            ],
+        });
+    }
+    _addCheck(check) {
+        return new ZodBigInt({
+            ...this._def,
+            checks: [...this._def.checks, check],
+        });
+    }
+    positive(message) {
+        return this._addCheck({
+            kind: "min",
+            value: BigInt(0),
+            inclusive: false,
+            message: errorUtil.toString(message),
+        });
+    }
+    negative(message) {
+        return this._addCheck({
+            kind: "max",
+            value: BigInt(0),
+            inclusive: false,
+            message: errorUtil.toString(message),
+        });
+    }
+    nonpositive(message) {
+        return this._addCheck({
+            kind: "max",
+            value: BigInt(0),
+            inclusive: true,
+            message: errorUtil.toString(message),
+        });
+    }
+    nonnegative(message) {
+        return this._addCheck({
+            kind: "min",
+            value: BigInt(0),
+            inclusive: true,
+            message: errorUtil.toString(message),
+        });
+    }
+    multipleOf(value, message) {
+        return this._addCheck({
+            kind: "multipleOf",
+            value,
+            message: errorUtil.toString(message),
+        });
+    }
+    get minValue() {
+        let min = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "min") {
+                if (min === null || ch.value > min)
+                    min = ch.value;
+            }
+        }
+        return min;
+    }
+    get maxValue() {
+        let max = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "max") {
+                if (max === null || ch.value < max)
+                    max = ch.value;
+            }
+        }
+        return max;
+    }
+}
+ZodBigInt.create = (params) => {
+    var _a;
+    return new ZodBigInt({
+        checks: [],
+        typeName: ZodFirstPartyTypeKind.ZodBigInt,
+        coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+        ...processCreateParams(params),
+    });
+};
+class ZodBoolean extends ZodType {
+    _parse(input) {
+        if (this._def.coerce) {
+            input.data = Boolean(input.data);
+        }
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.boolean) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.boolean,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        return OK(input.data);
+    }
+}
+ZodBoolean.create = (params) => {
+    return new ZodBoolean({
+        typeName: ZodFirstPartyTypeKind.ZodBoolean,
+        coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+        ...processCreateParams(params),
+    });
+};
+class ZodDate extends ZodType {
+    _parse(input) {
+        if (this._def.coerce) {
+            input.data = new Date(input.data);
+        }
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.date) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.date,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        if (isNaN(input.data.getTime())) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_date,
+            });
+            return INVALID;
+        }
+        const status = new ParseStatus();
+        let ctx = undefined;
+        for (const check of this._def.checks) {
+            if (check.kind === "min") {
+                if (input.data.getTime() < check.value) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_small,
+                        message: check.message,
+                        inclusive: true,
+                        exact: false,
+                        minimum: check.value,
+                        type: "date",
+                    });
+                    status.dirty();
+                }
+            }
+            else if (check.kind === "max") {
+                if (input.data.getTime() > check.value) {
+                    ctx = this._getOrReturnCtx(input, ctx);
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.too_big,
+                        message: check.message,
+                        inclusive: true,
+                        exact: false,
+                        maximum: check.value,
+                        type: "date",
+                    });
+                    status.dirty();
+                }
+            }
+            else {
+                util.assertNever(check);
+            }
+        }
+        return {
+            status: status.value,
+            value: new Date(input.data.getTime()),
+        };
+    }
+    _addCheck(check) {
+        return new ZodDate({
+            ...this._def,
+            checks: [...this._def.checks, check],
+        });
+    }
+    min(minDate, message) {
+        return this._addCheck({
+            kind: "min",
+            value: minDate.getTime(),
+            message: errorUtil.toString(message),
+        });
+    }
+    max(maxDate, message) {
+        return this._addCheck({
+            kind: "max",
+            value: maxDate.getTime(),
+            message: errorUtil.toString(message),
+        });
+    }
+    get minDate() {
+        let min = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "min") {
+                if (min === null || ch.value > min)
+                    min = ch.value;
+            }
+        }
+        return min != null ? new Date(min) : null;
+    }
+    get maxDate() {
+        let max = null;
+        for (const ch of this._def.checks) {
+            if (ch.kind === "max") {
+                if (max === null || ch.value < max)
+                    max = ch.value;
+            }
+        }
+        return max != null ? new Date(max) : null;
+    }
+}
+ZodDate.create = (params) => {
+    return new ZodDate({
+        checks: [],
+        coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+        typeName: ZodFirstPartyTypeKind.ZodDate,
+        ...processCreateParams(params),
+    });
+};
+class ZodSymbol extends ZodType {
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.symbol) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.symbol,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        return OK(input.data);
+    }
+}
+ZodSymbol.create = (params) => {
+    return new ZodSymbol({
+        typeName: ZodFirstPartyTypeKind.ZodSymbol,
+        ...processCreateParams(params),
+    });
+};
+class ZodUndefined extends ZodType {
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.undefined) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.undefined,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        return OK(input.data);
+    }
+}
+ZodUndefined.create = (params) => {
+    return new ZodUndefined({
+        typeName: ZodFirstPartyTypeKind.ZodUndefined,
+        ...processCreateParams(params),
+    });
+};
+class ZodNull extends ZodType {
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.null) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.null,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        return OK(input.data);
+    }
+}
+ZodNull.create = (params) => {
+    return new ZodNull({
+        typeName: ZodFirstPartyTypeKind.ZodNull,
+        ...processCreateParams(params),
+    });
+};
+class ZodAny extends ZodType {
+    constructor() {
+        super(...arguments);
+        // to prevent instances of other classes from extending ZodAny. this causes issues with catchall in ZodObject.
+        this._any = true;
+    }
+    _parse(input) {
+        return OK(input.data);
+    }
+}
+ZodAny.create = (params) => {
+    return new ZodAny({
+        typeName: ZodFirstPartyTypeKind.ZodAny,
+        ...processCreateParams(params),
+    });
+};
+class ZodUnknown extends ZodType {
+    constructor() {
+        super(...arguments);
+        // required
+        this._unknown = true;
+    }
+    _parse(input) {
+        return OK(input.data);
+    }
+}
+ZodUnknown.create = (params) => {
+    return new ZodUnknown({
+        typeName: ZodFirstPartyTypeKind.ZodUnknown,
+        ...processCreateParams(params),
+    });
+};
+class ZodNever extends ZodType {
+    _parse(input) {
+        const ctx = this._getOrReturnCtx(input);
+        addIssueToContext(ctx, {
+            code: ZodIssueCode.invalid_type,
+            expected: ZodParsedType.never,
+            received: ctx.parsedType,
+        });
+        return INVALID;
+    }
+}
+ZodNever.create = (params) => {
+    return new ZodNever({
+        typeName: ZodFirstPartyTypeKind.ZodNever,
+        ...processCreateParams(params),
+    });
+};
+class ZodVoid extends ZodType {
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.undefined) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.void,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        return OK(input.data);
+    }
+}
+ZodVoid.create = (params) => {
+    return new ZodVoid({
+        typeName: ZodFirstPartyTypeKind.ZodVoid,
+        ...processCreateParams(params),
+    });
+};
+class ZodArray extends ZodType {
+    _parse(input) {
+        const { ctx, status } = this._processInputParams(input);
+        const def = this._def;
+        if (ctx.parsedType !== ZodParsedType.array) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.array,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        if (def.exactLength !== null) {
+            const tooBig = ctx.data.length > def.exactLength.value;
+            const tooSmall = ctx.data.length < def.exactLength.value;
+            if (tooBig || tooSmall) {
+                addIssueToContext(ctx, {
+                    code: tooBig ? ZodIssueCode.too_big : ZodIssueCode.too_small,
+                    minimum: (tooSmall ? def.exactLength.value : undefined),
+                    maximum: (tooBig ? def.exactLength.value : undefined),
+                    type: "array",
+                    inclusive: true,
+                    exact: true,
+                    message: def.exactLength.message,
+                });
+                status.dirty();
+            }
+        }
+        if (def.minLength !== null) {
+            if (ctx.data.length < def.minLength.value) {
+                addIssueToContext(ctx, {
+                    code: ZodIssueCode.too_small,
+                    minimum: def.minLength.value,
+                    type: "array",
+                    inclusive: true,
+                    exact: false,
+                    message: def.minLength.message,
+                });
+                status.dirty();
+            }
+        }
+        if (def.maxLength !== null) {
+            if (ctx.data.length > def.maxLength.value) {
+                addIssueToContext(ctx, {
+                    code: ZodIssueCode.too_big,
+                    maximum: def.maxLength.value,
+                    type: "array",
+                    inclusive: true,
+                    exact: false,
+                    message: def.maxLength.message,
+                });
+                status.dirty();
+            }
+        }
+        if (ctx.common.async) {
+            return Promise.all([...ctx.data].map((item, i) => {
+                return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+            })).then((result) => {
+                return ParseStatus.mergeArray(status, result);
+            });
+        }
+        const result = [...ctx.data].map((item, i) => {
+            return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+        });
+        return ParseStatus.mergeArray(status, result);
+    }
+    get element() {
+        return this._def.type;
+    }
+    min(minLength, message) {
+        return new ZodArray({
+            ...this._def,
+            minLength: { value: minLength, message: errorUtil.toString(message) },
+        });
+    }
+    max(maxLength, message) {
+        return new ZodArray({
+            ...this._def,
+            maxLength: { value: maxLength, message: errorUtil.toString(message) },
+        });
+    }
+    length(len, message) {
+        return new ZodArray({
+            ...this._def,
+            exactLength: { value: len, message: errorUtil.toString(message) },
+        });
+    }
+    nonempty(message) {
+        return this.min(1, message);
+    }
+}
+ZodArray.create = (schema, params) => {
+    return new ZodArray({
+        type: schema,
+        minLength: null,
+        maxLength: null,
+        exactLength: null,
+        typeName: ZodFirstPartyTypeKind.ZodArray,
+        ...processCreateParams(params),
+    });
+};
+function deepPartialify(schema) {
+    if (schema instanceof ZodObject) {
+        const newShape = {};
+        for (const key in schema.shape) {
+            const fieldSchema = schema.shape[key];
+            newShape[key] = ZodOptional.create(deepPartialify(fieldSchema));
+        }
+        return new ZodObject({
+            ...schema._def,
+            shape: () => newShape,
+        });
+    }
+    else if (schema instanceof ZodArray) {
+        return new ZodArray({
+            ...schema._def,
+            type: deepPartialify(schema.element),
+        });
+    }
+    else if (schema instanceof ZodOptional) {
+        return ZodOptional.create(deepPartialify(schema.unwrap()));
+    }
+    else if (schema instanceof ZodNullable) {
+        return ZodNullable.create(deepPartialify(schema.unwrap()));
+    }
+    else if (schema instanceof ZodTuple) {
+        return ZodTuple.create(schema.items.map((item) => deepPartialify(item)));
+    }
+    else {
+        return schema;
+    }
+}
+class ZodObject extends ZodType {
+    constructor() {
+        super(...arguments);
+        this._cached = null;
+        /**
+         * @deprecated In most cases, this is no longer needed - unknown properties are now silently stripped.
+         * If you want to pass through unknown properties, use `.passthrough()` instead.
+         */
+        this.nonstrict = this.passthrough;
+        // extend<
+        //   Augmentation extends ZodRawShape,
+        //   NewOutput extends util.flatten<{
+        //     [k in keyof Augmentation | keyof Output]: k extends keyof Augmentation
+        //       ? Augmentation[k]["_output"]
+        //       : k extends keyof Output
+        //       ? Output[k]
+        //       : never;
+        //   }>,
+        //   NewInput extends util.flatten<{
+        //     [k in keyof Augmentation | keyof Input]: k extends keyof Augmentation
+        //       ? Augmentation[k]["_input"]
+        //       : k extends keyof Input
+        //       ? Input[k]
+        //       : never;
+        //   }>
+        // >(
+        //   augmentation: Augmentation
+        // ): ZodObject<
+        //   extendShape<T, Augmentation>,
+        //   UnknownKeys,
+        //   Catchall,
+        //   NewOutput,
+        //   NewInput
+        // > {
+        //   return new ZodObject({
+        //     ...this._def,
+        //     shape: () => ({
+        //       ...this._def.shape(),
+        //       ...augmentation,
+        //     }),
+        //   }) as any;
+        // }
+        /**
+         * @deprecated Use `.extend` instead
+         *  */
+        this.augment = this.extend;
+    }
+    _getCached() {
+        if (this._cached !== null)
+            return this._cached;
+        const shape = this._def.shape();
+        const keys = util.objectKeys(shape);
+        return (this._cached = { shape, keys });
+    }
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.object) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.object,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        const { status, ctx } = this._processInputParams(input);
+        const { shape, keys: shapeKeys } = this._getCached();
+        const extraKeys = [];
+        if (!(this._def.catchall instanceof ZodNever &&
+            this._def.unknownKeys === "strip")) {
+            for (const key in ctx.data) {
+                if (!shapeKeys.includes(key)) {
+                    extraKeys.push(key);
+                }
+            }
+        }
+        const pairs = [];
+        for (const key of shapeKeys) {
+            const keyValidator = shape[key];
+            const value = ctx.data[key];
+            pairs.push({
+                key: { status: "valid", value: key },
+                value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key)),
+                alwaysSet: key in ctx.data,
+            });
+        }
+        if (this._def.catchall instanceof ZodNever) {
+            const unknownKeys = this._def.unknownKeys;
+            if (unknownKeys === "passthrough") {
+                for (const key of extraKeys) {
+                    pairs.push({
+                        key: { status: "valid", value: key },
+                        value: { status: "valid", value: ctx.data[key] },
+                    });
+                }
+            }
+            else if (unknownKeys === "strict") {
+                if (extraKeys.length > 0) {
+                    addIssueToContext(ctx, {
+                        code: ZodIssueCode.unrecognized_keys,
+                        keys: extraKeys,
+                    });
+                    status.dirty();
+                }
+            }
+            else if (unknownKeys === "strip") ;
+            else {
+                throw new Error(`Internal ZodObject error: invalid unknownKeys value.`);
+            }
+        }
+        else {
+            // run catchall validation
+            const catchall = this._def.catchall;
+            for (const key of extraKeys) {
+                const value = ctx.data[key];
+                pairs.push({
+                    key: { status: "valid", value: key },
+                    value: catchall._parse(new ParseInputLazyPath(ctx, value, ctx.path, key) //, ctx.child(key), value, getParsedType(value)
+                    ),
+                    alwaysSet: key in ctx.data,
+                });
+            }
+        }
+        if (ctx.common.async) {
+            return Promise.resolve()
+                .then(async () => {
+                const syncPairs = [];
+                for (const pair of pairs) {
+                    const key = await pair.key;
+                    syncPairs.push({
+                        key,
+                        value: await pair.value,
+                        alwaysSet: pair.alwaysSet,
+                    });
+                }
+                return syncPairs;
+            })
+                .then((syncPairs) => {
+                return ParseStatus.mergeObjectSync(status, syncPairs);
+            });
+        }
+        else {
+            return ParseStatus.mergeObjectSync(status, pairs);
+        }
+    }
+    get shape() {
+        return this._def.shape();
+    }
+    strict(message) {
+        errorUtil.errToObj;
+        return new ZodObject({
+            ...this._def,
+            unknownKeys: "strict",
+            ...(message !== undefined
+                ? {
+                    errorMap: (issue, ctx) => {
+                        var _a, _b, _c, _d;
+                        const defaultError = (_c = (_b = (_a = this._def).errorMap) === null || _b === void 0 ? void 0 : _b.call(_a, issue, ctx).message) !== null && _c !== void 0 ? _c : ctx.defaultError;
+                        if (issue.code === "unrecognized_keys")
+                            return {
+                                message: (_d = errorUtil.errToObj(message).message) !== null && _d !== void 0 ? _d : defaultError,
+                            };
+                        return {
+                            message: defaultError,
+                        };
+                    },
+                }
+                : {}),
+        });
+    }
+    strip() {
+        return new ZodObject({
+            ...this._def,
+            unknownKeys: "strip",
+        });
+    }
+    passthrough() {
+        return new ZodObject({
+            ...this._def,
+            unknownKeys: "passthrough",
+        });
+    }
+    // const AugmentFactory =
+    //   <Def extends ZodObjectDef>(def: Def) =>
+    //   <Augmentation extends ZodRawShape>(
+    //     augmentation: Augmentation
+    //   ): ZodObject<
+    //     extendShape<ReturnType<Def["shape"]>, Augmentation>,
+    //     Def["unknownKeys"],
+    //     Def["catchall"]
+    //   > => {
+    //     return new ZodObject({
+    //       ...def,
+    //       shape: () => ({
+    //         ...def.shape(),
+    //         ...augmentation,
+    //       }),
+    //     }) as any;
+    //   };
+    extend(augmentation) {
+        return new ZodObject({
+            ...this._def,
+            shape: () => ({
+                ...this._def.shape(),
+                ...augmentation,
+            }),
+        });
+    }
+    /**
+     * Prior to zod@1.0.12 there was a bug in the
+     * inferred type of merged objects. Please
+     * upgrade if you are experiencing issues.
+     */
+    merge(merging) {
+        const merged = new ZodObject({
+            unknownKeys: merging._def.unknownKeys,
+            catchall: merging._def.catchall,
+            shape: () => ({
+                ...this._def.shape(),
+                ...merging._def.shape(),
+            }),
+            typeName: ZodFirstPartyTypeKind.ZodObject,
+        });
+        return merged;
+    }
+    // merge<
+    //   Incoming extends AnyZodObject,
+    //   Augmentation extends Incoming["shape"],
+    //   NewOutput extends {
+    //     [k in keyof Augmentation | keyof Output]: k extends keyof Augmentation
+    //       ? Augmentation[k]["_output"]
+    //       : k extends keyof Output
+    //       ? Output[k]
+    //       : never;
+    //   },
+    //   NewInput extends {
+    //     [k in keyof Augmentation | keyof Input]: k extends keyof Augmentation
+    //       ? Augmentation[k]["_input"]
+    //       : k extends keyof Input
+    //       ? Input[k]
+    //       : never;
+    //   }
+    // >(
+    //   merging: Incoming
+    // ): ZodObject<
+    //   extendShape<T, ReturnType<Incoming["_def"]["shape"]>>,
+    //   Incoming["_def"]["unknownKeys"],
+    //   Incoming["_def"]["catchall"],
+    //   NewOutput,
+    //   NewInput
+    // > {
+    //   const merged: any = new ZodObject({
+    //     unknownKeys: merging._def.unknownKeys,
+    //     catchall: merging._def.catchall,
+    //     shape: () =>
+    //       objectUtil.mergeShapes(this._def.shape(), merging._def.shape()),
+    //     typeName: ZodFirstPartyTypeKind.ZodObject,
+    //   }) as any;
+    //   return merged;
+    // }
+    setKey(key, schema) {
+        return this.augment({ [key]: schema });
+    }
+    // merge<Incoming extends AnyZodObject>(
+    //   merging: Incoming
+    // ): //ZodObject<T & Incoming["_shape"], UnknownKeys, Catchall> = (merging) => {
+    // ZodObject<
+    //   extendShape<T, ReturnType<Incoming["_def"]["shape"]>>,
+    //   Incoming["_def"]["unknownKeys"],
+    //   Incoming["_def"]["catchall"]
+    // > {
+    //   // const mergedShape = objectUtil.mergeShapes(
+    //   //   this._def.shape(),
+    //   //   merging._def.shape()
+    //   // );
+    //   const merged: any = new ZodObject({
+    //     unknownKeys: merging._def.unknownKeys,
+    //     catchall: merging._def.catchall,
+    //     shape: () =>
+    //       objectUtil.mergeShapes(this._def.shape(), merging._def.shape()),
+    //     typeName: ZodFirstPartyTypeKind.ZodObject,
+    //   }) as any;
+    //   return merged;
+    // }
+    catchall(index) {
+        return new ZodObject({
+            ...this._def,
+            catchall: index,
+        });
+    }
+    pick(mask) {
+        const shape = {};
+        util.objectKeys(mask).forEach((key) => {
+            if (mask[key] && this.shape[key]) {
+                shape[key] = this.shape[key];
+            }
+        });
+        return new ZodObject({
+            ...this._def,
+            shape: () => shape,
+        });
+    }
+    omit(mask) {
+        const shape = {};
+        util.objectKeys(this.shape).forEach((key) => {
+            if (!mask[key]) {
+                shape[key] = this.shape[key];
+            }
+        });
+        return new ZodObject({
+            ...this._def,
+            shape: () => shape,
+        });
+    }
+    /**
+     * @deprecated
+     */
+    deepPartial() {
+        return deepPartialify(this);
+    }
+    partial(mask) {
+        const newShape = {};
+        util.objectKeys(this.shape).forEach((key) => {
+            const fieldSchema = this.shape[key];
+            if (mask && !mask[key]) {
+                newShape[key] = fieldSchema;
+            }
+            else {
+                newShape[key] = fieldSchema.optional();
+            }
+        });
+        return new ZodObject({
+            ...this._def,
+            shape: () => newShape,
+        });
+    }
+    required(mask) {
+        const newShape = {};
+        util.objectKeys(this.shape).forEach((key) => {
+            if (mask && !mask[key]) {
+                newShape[key] = this.shape[key];
+            }
+            else {
+                const fieldSchema = this.shape[key];
+                let newField = fieldSchema;
+                while (newField instanceof ZodOptional) {
+                    newField = newField._def.innerType;
+                }
+                newShape[key] = newField;
+            }
+        });
+        return new ZodObject({
+            ...this._def,
+            shape: () => newShape,
+        });
+    }
+    keyof() {
+        return createZodEnum(util.objectKeys(this.shape));
+    }
+}
+ZodObject.create = (shape, params) => {
+    return new ZodObject({
+        shape: () => shape,
+        unknownKeys: "strip",
+        catchall: ZodNever.create(),
+        typeName: ZodFirstPartyTypeKind.ZodObject,
+        ...processCreateParams(params),
+    });
+};
+ZodObject.strictCreate = (shape, params) => {
+    return new ZodObject({
+        shape: () => shape,
+        unknownKeys: "strict",
+        catchall: ZodNever.create(),
+        typeName: ZodFirstPartyTypeKind.ZodObject,
+        ...processCreateParams(params),
+    });
+};
+ZodObject.lazycreate = (shape, params) => {
+    return new ZodObject({
+        shape,
+        unknownKeys: "strip",
+        catchall: ZodNever.create(),
+        typeName: ZodFirstPartyTypeKind.ZodObject,
+        ...processCreateParams(params),
+    });
+};
+class ZodUnion extends ZodType {
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        const options = this._def.options;
+        function handleResults(results) {
+            // return first issue-free validation if it exists
+            for (const result of results) {
+                if (result.result.status === "valid") {
+                    return result.result;
+                }
+            }
+            for (const result of results) {
+                if (result.result.status === "dirty") {
+                    // add issues from dirty option
+                    ctx.common.issues.push(...result.ctx.common.issues);
+                    return result.result;
+                }
+            }
+            // return invalid
+            const unionErrors = results.map((result) => new ZodError(result.ctx.common.issues));
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_union,
+                unionErrors,
+            });
+            return INVALID;
+        }
+        if (ctx.common.async) {
+            return Promise.all(options.map(async (option) => {
+                const childCtx = {
+                    ...ctx,
+                    common: {
+                        ...ctx.common,
+                        issues: [],
+                    },
+                    parent: null,
+                };
+                return {
+                    result: await option._parseAsync({
+                        data: ctx.data,
+                        path: ctx.path,
+                        parent: childCtx,
+                    }),
+                    ctx: childCtx,
+                };
+            })).then(handleResults);
+        }
+        else {
+            let dirty = undefined;
+            const issues = [];
+            for (const option of options) {
+                const childCtx = {
+                    ...ctx,
+                    common: {
+                        ...ctx.common,
+                        issues: [],
+                    },
+                    parent: null,
+                };
+                const result = option._parseSync({
+                    data: ctx.data,
+                    path: ctx.path,
+                    parent: childCtx,
+                });
+                if (result.status === "valid") {
+                    return result;
+                }
+                else if (result.status === "dirty" && !dirty) {
+                    dirty = { result, ctx: childCtx };
+                }
+                if (childCtx.common.issues.length) {
+                    issues.push(childCtx.common.issues);
+                }
+            }
+            if (dirty) {
+                ctx.common.issues.push(...dirty.ctx.common.issues);
+                return dirty.result;
+            }
+            const unionErrors = issues.map((issues) => new ZodError(issues));
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_union,
+                unionErrors,
+            });
+            return INVALID;
+        }
+    }
+    get options() {
+        return this._def.options;
+    }
+}
+ZodUnion.create = (types, params) => {
+    return new ZodUnion({
+        options: types,
+        typeName: ZodFirstPartyTypeKind.ZodUnion,
+        ...processCreateParams(params),
+    });
+};
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+//////////                                 //////////
+//////////      ZodDiscriminatedUnion      //////////
+//////////                                 //////////
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+const getDiscriminator = (type) => {
+    if (type instanceof ZodLazy) {
+        return getDiscriminator(type.schema);
+    }
+    else if (type instanceof ZodEffects) {
+        return getDiscriminator(type.innerType());
+    }
+    else if (type instanceof ZodLiteral) {
+        return [type.value];
+    }
+    else if (type instanceof ZodEnum) {
+        return type.options;
+    }
+    else if (type instanceof ZodNativeEnum) {
+        // eslint-disable-next-line ban/ban
+        return Object.keys(type.enum);
+    }
+    else if (type instanceof ZodDefault) {
+        return getDiscriminator(type._def.innerType);
+    }
+    else if (type instanceof ZodUndefined) {
+        return [undefined];
+    }
+    else if (type instanceof ZodNull) {
+        return [null];
+    }
+    else {
+        return null;
+    }
+};
+class ZodDiscriminatedUnion extends ZodType {
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        if (ctx.parsedType !== ZodParsedType.object) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.object,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        const discriminator = this.discriminator;
+        const discriminatorValue = ctx.data[discriminator];
+        const option = this.optionsMap.get(discriminatorValue);
+        if (!option) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_union_discriminator,
+                options: Array.from(this.optionsMap.keys()),
+                path: [discriminator],
+            });
+            return INVALID;
+        }
+        if (ctx.common.async) {
+            return option._parseAsync({
+                data: ctx.data,
+                path: ctx.path,
+                parent: ctx,
+            });
+        }
+        else {
+            return option._parseSync({
+                data: ctx.data,
+                path: ctx.path,
+                parent: ctx,
+            });
+        }
+    }
+    get discriminator() {
+        return this._def.discriminator;
+    }
+    get options() {
+        return this._def.options;
+    }
+    get optionsMap() {
+        return this._def.optionsMap;
+    }
+    /**
+     * The constructor of the discriminated union schema. Its behaviour is very similar to that of the normal z.union() constructor.
+     * However, it only allows a union of objects, all of which need to share a discriminator property. This property must
+     * have a different value for each object in the union.
+     * @param discriminator the name of the discriminator property
+     * @param types an array of object schemas
+     * @param params
+     */
+    static create(discriminator, options, params) {
+        // Get all the valid discriminator values
+        const optionsMap = new Map();
+        // try {
+        for (const type of options) {
+            const discriminatorValues = getDiscriminator(type.shape[discriminator]);
+            if (!discriminatorValues) {
+                throw new Error(`A discriminator value for key \`${discriminator}\` could not be extracted from all schema options`);
+            }
+            for (const value of discriminatorValues) {
+                if (optionsMap.has(value)) {
+                    throw new Error(`Discriminator property ${String(discriminator)} has duplicate value ${String(value)}`);
+                }
+                optionsMap.set(value, type);
+            }
+        }
+        return new ZodDiscriminatedUnion({
+            typeName: ZodFirstPartyTypeKind.ZodDiscriminatedUnion,
+            discriminator,
+            options,
+            optionsMap,
+            ...processCreateParams(params),
+        });
+    }
+}
+function mergeValues(a, b) {
+    const aType = getParsedType(a);
+    const bType = getParsedType(b);
+    if (a === b) {
+        return { valid: true, data: a };
+    }
+    else if (aType === ZodParsedType.object && bType === ZodParsedType.object) {
+        const bKeys = util.objectKeys(b);
+        const sharedKeys = util
+            .objectKeys(a)
+            .filter((key) => bKeys.indexOf(key) !== -1);
+        const newObj = { ...a, ...b };
+        for (const key of sharedKeys) {
+            const sharedValue = mergeValues(a[key], b[key]);
+            if (!sharedValue.valid) {
+                return { valid: false };
+            }
+            newObj[key] = sharedValue.data;
+        }
+        return { valid: true, data: newObj };
+    }
+    else if (aType === ZodParsedType.array && bType === ZodParsedType.array) {
+        if (a.length !== b.length) {
+            return { valid: false };
+        }
+        const newArray = [];
+        for (let index = 0; index < a.length; index++) {
+            const itemA = a[index];
+            const itemB = b[index];
+            const sharedValue = mergeValues(itemA, itemB);
+            if (!sharedValue.valid) {
+                return { valid: false };
+            }
+            newArray.push(sharedValue.data);
+        }
+        return { valid: true, data: newArray };
+    }
+    else if (aType === ZodParsedType.date &&
+        bType === ZodParsedType.date &&
+        +a === +b) {
+        return { valid: true, data: a };
+    }
+    else {
+        return { valid: false };
+    }
+}
+class ZodIntersection extends ZodType {
+    _parse(input) {
+        const { status, ctx } = this._processInputParams(input);
+        const handleParsed = (parsedLeft, parsedRight) => {
+            if (isAborted(parsedLeft) || isAborted(parsedRight)) {
+                return INVALID;
+            }
+            const merged = mergeValues(parsedLeft.value, parsedRight.value);
+            if (!merged.valid) {
+                addIssueToContext(ctx, {
+                    code: ZodIssueCode.invalid_intersection_types,
+                });
+                return INVALID;
+            }
+            if (isDirty(parsedLeft) || isDirty(parsedRight)) {
+                status.dirty();
+            }
+            return { status: status.value, value: merged.data };
+        };
+        if (ctx.common.async) {
+            return Promise.all([
+                this._def.left._parseAsync({
+                    data: ctx.data,
+                    path: ctx.path,
+                    parent: ctx,
+                }),
+                this._def.right._parseAsync({
+                    data: ctx.data,
+                    path: ctx.path,
+                    parent: ctx,
+                }),
+            ]).then(([left, right]) => handleParsed(left, right));
+        }
+        else {
+            return handleParsed(this._def.left._parseSync({
+                data: ctx.data,
+                path: ctx.path,
+                parent: ctx,
+            }), this._def.right._parseSync({
+                data: ctx.data,
+                path: ctx.path,
+                parent: ctx,
+            }));
+        }
+    }
+}
+ZodIntersection.create = (left, right, params) => {
+    return new ZodIntersection({
+        left: left,
+        right: right,
+        typeName: ZodFirstPartyTypeKind.ZodIntersection,
+        ...processCreateParams(params),
+    });
+};
+class ZodTuple extends ZodType {
+    _parse(input) {
+        const { status, ctx } = this._processInputParams(input);
+        if (ctx.parsedType !== ZodParsedType.array) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.array,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        if (ctx.data.length < this._def.items.length) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.too_small,
+                minimum: this._def.items.length,
+                inclusive: true,
+                exact: false,
+                type: "array",
+            });
+            return INVALID;
+        }
+        const rest = this._def.rest;
+        if (!rest && ctx.data.length > this._def.items.length) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.too_big,
+                maximum: this._def.items.length,
+                inclusive: true,
+                exact: false,
+                type: "array",
+            });
+            status.dirty();
+        }
+        const items = [...ctx.data]
+            .map((item, itemIndex) => {
+            const schema = this._def.items[itemIndex] || this._def.rest;
+            if (!schema)
+                return null;
+            return schema._parse(new ParseInputLazyPath(ctx, item, ctx.path, itemIndex));
+        })
+            .filter((x) => !!x); // filter nulls
+        if (ctx.common.async) {
+            return Promise.all(items).then((results) => {
+                return ParseStatus.mergeArray(status, results);
+            });
+        }
+        else {
+            return ParseStatus.mergeArray(status, items);
+        }
+    }
+    get items() {
+        return this._def.items;
+    }
+    rest(rest) {
+        return new ZodTuple({
+            ...this._def,
+            rest,
+        });
+    }
+}
+ZodTuple.create = (schemas, params) => {
+    if (!Array.isArray(schemas)) {
+        throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
+    }
+    return new ZodTuple({
+        items: schemas,
+        typeName: ZodFirstPartyTypeKind.ZodTuple,
+        rest: null,
+        ...processCreateParams(params),
+    });
+};
+class ZodRecord extends ZodType {
+    get keySchema() {
+        return this._def.keyType;
+    }
+    get valueSchema() {
+        return this._def.valueType;
+    }
+    _parse(input) {
+        const { status, ctx } = this._processInputParams(input);
+        if (ctx.parsedType !== ZodParsedType.object) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.object,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        const pairs = [];
+        const keyType = this._def.keyType;
+        const valueType = this._def.valueType;
+        for (const key in ctx.data) {
+            pairs.push({
+                key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, key)),
+                value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key], ctx.path, key)),
+            });
+        }
+        if (ctx.common.async) {
+            return ParseStatus.mergeObjectAsync(status, pairs);
+        }
+        else {
+            return ParseStatus.mergeObjectSync(status, pairs);
+        }
+    }
+    get element() {
+        return this._def.valueType;
+    }
+    static create(first, second, third) {
+        if (second instanceof ZodType) {
+            return new ZodRecord({
+                keyType: first,
+                valueType: second,
+                typeName: ZodFirstPartyTypeKind.ZodRecord,
+                ...processCreateParams(third),
+            });
+        }
+        return new ZodRecord({
+            keyType: ZodString.create(),
+            valueType: first,
+            typeName: ZodFirstPartyTypeKind.ZodRecord,
+            ...processCreateParams(second),
+        });
+    }
+}
+class ZodMap extends ZodType {
+    get keySchema() {
+        return this._def.keyType;
+    }
+    get valueSchema() {
+        return this._def.valueType;
+    }
+    _parse(input) {
+        const { status, ctx } = this._processInputParams(input);
+        if (ctx.parsedType !== ZodParsedType.map) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.map,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        const keyType = this._def.keyType;
+        const valueType = this._def.valueType;
+        const pairs = [...ctx.data.entries()].map(([key, value], index) => {
+            return {
+                key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, [index, "key"])),
+                value: valueType._parse(new ParseInputLazyPath(ctx, value, ctx.path, [index, "value"])),
+            };
+        });
+        if (ctx.common.async) {
+            const finalMap = new Map();
+            return Promise.resolve().then(async () => {
+                for (const pair of pairs) {
+                    const key = await pair.key;
+                    const value = await pair.value;
+                    if (key.status === "aborted" || value.status === "aborted") {
+                        return INVALID;
+                    }
+                    if (key.status === "dirty" || value.status === "dirty") {
+                        status.dirty();
+                    }
+                    finalMap.set(key.value, value.value);
+                }
+                return { status: status.value, value: finalMap };
+            });
+        }
+        else {
+            const finalMap = new Map();
+            for (const pair of pairs) {
+                const key = pair.key;
+                const value = pair.value;
+                if (key.status === "aborted" || value.status === "aborted") {
+                    return INVALID;
+                }
+                if (key.status === "dirty" || value.status === "dirty") {
+                    status.dirty();
+                }
+                finalMap.set(key.value, value.value);
+            }
+            return { status: status.value, value: finalMap };
+        }
+    }
+}
+ZodMap.create = (keyType, valueType, params) => {
+    return new ZodMap({
+        valueType,
+        keyType,
+        typeName: ZodFirstPartyTypeKind.ZodMap,
+        ...processCreateParams(params),
+    });
+};
+class ZodSet extends ZodType {
+    _parse(input) {
+        const { status, ctx } = this._processInputParams(input);
+        if (ctx.parsedType !== ZodParsedType.set) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.set,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        const def = this._def;
+        if (def.minSize !== null) {
+            if (ctx.data.size < def.minSize.value) {
+                addIssueToContext(ctx, {
+                    code: ZodIssueCode.too_small,
+                    minimum: def.minSize.value,
+                    type: "set",
+                    inclusive: true,
+                    exact: false,
+                    message: def.minSize.message,
+                });
+                status.dirty();
+            }
+        }
+        if (def.maxSize !== null) {
+            if (ctx.data.size > def.maxSize.value) {
+                addIssueToContext(ctx, {
+                    code: ZodIssueCode.too_big,
+                    maximum: def.maxSize.value,
+                    type: "set",
+                    inclusive: true,
+                    exact: false,
+                    message: def.maxSize.message,
+                });
+                status.dirty();
+            }
+        }
+        const valueType = this._def.valueType;
+        function finalizeSet(elements) {
+            const parsedSet = new Set();
+            for (const element of elements) {
+                if (element.status === "aborted")
+                    return INVALID;
+                if (element.status === "dirty")
+                    status.dirty();
+                parsedSet.add(element.value);
+            }
+            return { status: status.value, value: parsedSet };
+        }
+        const elements = [...ctx.data.values()].map((item, i) => valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i)));
+        if (ctx.common.async) {
+            return Promise.all(elements).then((elements) => finalizeSet(elements));
+        }
+        else {
+            return finalizeSet(elements);
+        }
+    }
+    min(minSize, message) {
+        return new ZodSet({
+            ...this._def,
+            minSize: { value: minSize, message: errorUtil.toString(message) },
+        });
+    }
+    max(maxSize, message) {
+        return new ZodSet({
+            ...this._def,
+            maxSize: { value: maxSize, message: errorUtil.toString(message) },
+        });
+    }
+    size(size, message) {
+        return this.min(size, message).max(size, message);
+    }
+    nonempty(message) {
+        return this.min(1, message);
+    }
+}
+ZodSet.create = (valueType, params) => {
+    return new ZodSet({
+        valueType,
+        minSize: null,
+        maxSize: null,
+        typeName: ZodFirstPartyTypeKind.ZodSet,
+        ...processCreateParams(params),
+    });
+};
+class ZodFunction extends ZodType {
+    constructor() {
+        super(...arguments);
+        this.validate = this.implement;
+    }
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        if (ctx.parsedType !== ZodParsedType.function) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.function,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        function makeArgsIssue(args, error) {
+            return makeIssue({
+                data: args,
+                path: ctx.path,
+                errorMaps: [
+                    ctx.common.contextualErrorMap,
+                    ctx.schemaErrorMap,
+                    getErrorMap(),
+                    errorMap,
+                ].filter((x) => !!x),
+                issueData: {
+                    code: ZodIssueCode.invalid_arguments,
+                    argumentsError: error,
+                },
+            });
+        }
+        function makeReturnsIssue(returns, error) {
+            return makeIssue({
+                data: returns,
+                path: ctx.path,
+                errorMaps: [
+                    ctx.common.contextualErrorMap,
+                    ctx.schemaErrorMap,
+                    getErrorMap(),
+                    errorMap,
+                ].filter((x) => !!x),
+                issueData: {
+                    code: ZodIssueCode.invalid_return_type,
+                    returnTypeError: error,
+                },
+            });
+        }
+        const params = { errorMap: ctx.common.contextualErrorMap };
+        const fn = ctx.data;
+        if (this._def.returns instanceof ZodPromise) {
+            // Would love a way to avoid disabling this rule, but we need
+            // an alias (using an arrow function was what caused 2651).
+            // eslint-disable-next-line @typescript-eslint/no-this-alias
+            const me = this;
+            return OK(async function (...args) {
+                const error = new ZodError([]);
+                const parsedArgs = await me._def.args
+                    .parseAsync(args, params)
+                    .catch((e) => {
+                    error.addIssue(makeArgsIssue(args, e));
+                    throw error;
+                });
+                const result = await Reflect.apply(fn, this, parsedArgs);
+                const parsedReturns = await me._def.returns._def.type
+                    .parseAsync(result, params)
+                    .catch((e) => {
+                    error.addIssue(makeReturnsIssue(result, e));
+                    throw error;
+                });
+                return parsedReturns;
+            });
+        }
+        else {
+            // Would love a way to avoid disabling this rule, but we need
+            // an alias (using an arrow function was what caused 2651).
+            // eslint-disable-next-line @typescript-eslint/no-this-alias
+            const me = this;
+            return OK(function (...args) {
+                const parsedArgs = me._def.args.safeParse(args, params);
+                if (!parsedArgs.success) {
+                    throw new ZodError([makeArgsIssue(args, parsedArgs.error)]);
+                }
+                const result = Reflect.apply(fn, this, parsedArgs.data);
+                const parsedReturns = me._def.returns.safeParse(result, params);
+                if (!parsedReturns.success) {
+                    throw new ZodError([makeReturnsIssue(result, parsedReturns.error)]);
+                }
+                return parsedReturns.data;
+            });
+        }
+    }
+    parameters() {
+        return this._def.args;
+    }
+    returnType() {
+        return this._def.returns;
+    }
+    args(...items) {
+        return new ZodFunction({
+            ...this._def,
+            args: ZodTuple.create(items).rest(ZodUnknown.create()),
+        });
+    }
+    returns(returnType) {
+        return new ZodFunction({
+            ...this._def,
+            returns: returnType,
+        });
+    }
+    implement(func) {
+        const validatedFunc = this.parse(func);
+        return validatedFunc;
+    }
+    strictImplement(func) {
+        const validatedFunc = this.parse(func);
+        return validatedFunc;
+    }
+    static create(args, returns, params) {
+        return new ZodFunction({
+            args: (args
+                ? args
+                : ZodTuple.create([]).rest(ZodUnknown.create())),
+            returns: returns || ZodUnknown.create(),
+            typeName: ZodFirstPartyTypeKind.ZodFunction,
+            ...processCreateParams(params),
+        });
+    }
+}
+class ZodLazy extends ZodType {
+    get schema() {
+        return this._def.getter();
+    }
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        const lazySchema = this._def.getter();
+        return lazySchema._parse({ data: ctx.data, path: ctx.path, parent: ctx });
+    }
+}
+ZodLazy.create = (getter, params) => {
+    return new ZodLazy({
+        getter: getter,
+        typeName: ZodFirstPartyTypeKind.ZodLazy,
+        ...processCreateParams(params),
+    });
+};
+class ZodLiteral extends ZodType {
+    _parse(input) {
+        if (input.data !== this._def.value) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                received: ctx.data,
+                code: ZodIssueCode.invalid_literal,
+                expected: this._def.value,
+            });
+            return INVALID;
+        }
+        return { status: "valid", value: input.data };
+    }
+    get value() {
+        return this._def.value;
+    }
+}
+ZodLiteral.create = (value, params) => {
+    return new ZodLiteral({
+        value: value,
+        typeName: ZodFirstPartyTypeKind.ZodLiteral,
+        ...processCreateParams(params),
+    });
+};
+function createZodEnum(values, params) {
+    return new ZodEnum({
+        values,
+        typeName: ZodFirstPartyTypeKind.ZodEnum,
+        ...processCreateParams(params),
+    });
+}
+class ZodEnum extends ZodType {
+    _parse(input) {
+        if (typeof input.data !== "string") {
+            const ctx = this._getOrReturnCtx(input);
+            const expectedValues = this._def.values;
+            addIssueToContext(ctx, {
+                expected: util.joinValues(expectedValues),
+                received: ctx.parsedType,
+                code: ZodIssueCode.invalid_type,
+            });
+            return INVALID;
+        }
+        if (this._def.values.indexOf(input.data) === -1) {
+            const ctx = this._getOrReturnCtx(input);
+            const expectedValues = this._def.values;
+            addIssueToContext(ctx, {
+                received: ctx.data,
+                code: ZodIssueCode.invalid_enum_value,
+                options: expectedValues,
+            });
+            return INVALID;
+        }
+        return OK(input.data);
+    }
+    get options() {
+        return this._def.values;
+    }
+    get enum() {
+        const enumValues = {};
+        for (const val of this._def.values) {
+            enumValues[val] = val;
+        }
+        return enumValues;
+    }
+    get Values() {
+        const enumValues = {};
+        for (const val of this._def.values) {
+            enumValues[val] = val;
+        }
+        return enumValues;
+    }
+    get Enum() {
+        const enumValues = {};
+        for (const val of this._def.values) {
+            enumValues[val] = val;
+        }
+        return enumValues;
+    }
+    extract(values) {
+        return ZodEnum.create(values);
+    }
+    exclude(values) {
+        return ZodEnum.create(this.options.filter((opt) => !values.includes(opt)));
+    }
+}
+ZodEnum.create = createZodEnum;
+class ZodNativeEnum extends ZodType {
+    _parse(input) {
+        const nativeEnumValues = util.getValidEnumValues(this._def.values);
+        const ctx = this._getOrReturnCtx(input);
+        if (ctx.parsedType !== ZodParsedType.string &&
+            ctx.parsedType !== ZodParsedType.number) {
+            const expectedValues = util.objectValues(nativeEnumValues);
+            addIssueToContext(ctx, {
+                expected: util.joinValues(expectedValues),
+                received: ctx.parsedType,
+                code: ZodIssueCode.invalid_type,
+            });
+            return INVALID;
+        }
+        if (nativeEnumValues.indexOf(input.data) === -1) {
+            const expectedValues = util.objectValues(nativeEnumValues);
+            addIssueToContext(ctx, {
+                received: ctx.data,
+                code: ZodIssueCode.invalid_enum_value,
+                options: expectedValues,
+            });
+            return INVALID;
+        }
+        return OK(input.data);
+    }
+    get enum() {
+        return this._def.values;
+    }
+}
+ZodNativeEnum.create = (values, params) => {
+    return new ZodNativeEnum({
+        values: values,
+        typeName: ZodFirstPartyTypeKind.ZodNativeEnum,
+        ...processCreateParams(params),
+    });
+};
+class ZodPromise extends ZodType {
+    unwrap() {
+        return this._def.type;
+    }
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        if (ctx.parsedType !== ZodParsedType.promise &&
+            ctx.common.async === false) {
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.promise,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        const promisified = ctx.parsedType === ZodParsedType.promise
+            ? ctx.data
+            : Promise.resolve(ctx.data);
+        return OK(promisified.then((data) => {
+            return this._def.type.parseAsync(data, {
+                path: ctx.path,
+                errorMap: ctx.common.contextualErrorMap,
+            });
+        }));
+    }
+}
+ZodPromise.create = (schema, params) => {
+    return new ZodPromise({
+        type: schema,
+        typeName: ZodFirstPartyTypeKind.ZodPromise,
+        ...processCreateParams(params),
+    });
+};
+class ZodEffects extends ZodType {
+    innerType() {
+        return this._def.schema;
+    }
+    sourceType() {
+        return this._def.schema._def.typeName === ZodFirstPartyTypeKind.ZodEffects
+            ? this._def.schema.sourceType()
+            : this._def.schema;
+    }
+    _parse(input) {
+        const { status, ctx } = this._processInputParams(input);
+        const effect = this._def.effect || null;
+        const checkCtx = {
+            addIssue: (arg) => {
+                addIssueToContext(ctx, arg);
+                if (arg.fatal) {
+                    status.abort();
+                }
+                else {
+                    status.dirty();
+                }
+            },
+            get path() {
+                return ctx.path;
+            },
+        };
+        checkCtx.addIssue = checkCtx.addIssue.bind(checkCtx);
+        if (effect.type === "preprocess") {
+            const processed = effect.transform(ctx.data, checkCtx);
+            if (ctx.common.issues.length) {
+                return {
+                    status: "dirty",
+                    value: ctx.data,
+                };
+            }
+            if (ctx.common.async) {
+                return Promise.resolve(processed).then((processed) => {
+                    return this._def.schema._parseAsync({
+                        data: processed,
+                        path: ctx.path,
+                        parent: ctx,
+                    });
+                });
+            }
+            else {
+                return this._def.schema._parseSync({
+                    data: processed,
+                    path: ctx.path,
+                    parent: ctx,
+                });
+            }
+        }
+        if (effect.type === "refinement") {
+            const executeRefinement = (acc
+            // effect: RefinementEffect<any>
+            ) => {
+                const result = effect.refinement(acc, checkCtx);
+                if (ctx.common.async) {
+                    return Promise.resolve(result);
+                }
+                if (result instanceof Promise) {
+                    throw new Error("Async refinement encountered during synchronous parse operation. Use .parseAsync instead.");
+                }
+                return acc;
+            };
+            if (ctx.common.async === false) {
+                const inner = this._def.schema._parseSync({
+                    data: ctx.data,
+                    path: ctx.path,
+                    parent: ctx,
+                });
+                if (inner.status === "aborted")
+                    return INVALID;
+                if (inner.status === "dirty")
+                    status.dirty();
+                // return value is ignored
+                executeRefinement(inner.value);
+                return { status: status.value, value: inner.value };
+            }
+            else {
+                return this._def.schema
+                    ._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx })
+                    .then((inner) => {
+                    if (inner.status === "aborted")
+                        return INVALID;
+                    if (inner.status === "dirty")
+                        status.dirty();
+                    return executeRefinement(inner.value).then(() => {
+                        return { status: status.value, value: inner.value };
+                    });
+                });
+            }
+        }
+        if (effect.type === "transform") {
+            if (ctx.common.async === false) {
+                const base = this._def.schema._parseSync({
+                    data: ctx.data,
+                    path: ctx.path,
+                    parent: ctx,
+                });
+                if (!isValid(base))
+                    return base;
+                const result = effect.transform(base.value, checkCtx);
+                if (result instanceof Promise) {
+                    throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
+                }
+                return { status: status.value, value: result };
+            }
+            else {
+                return this._def.schema
+                    ._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx })
+                    .then((base) => {
+                    if (!isValid(base))
+                        return base;
+                    return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({ status: status.value, value: result }));
+                });
+            }
+        }
+        util.assertNever(effect);
+    }
+}
+ZodEffects.create = (schema, effect, params) => {
+    return new ZodEffects({
+        schema,
+        typeName: ZodFirstPartyTypeKind.ZodEffects,
+        effect,
+        ...processCreateParams(params),
+    });
+};
+ZodEffects.createWithPreprocess = (preprocess, schema, params) => {
+    return new ZodEffects({
+        schema,
+        effect: { type: "preprocess", transform: preprocess },
+        typeName: ZodFirstPartyTypeKind.ZodEffects,
+        ...processCreateParams(params),
+    });
+};
+class ZodOptional extends ZodType {
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType === ZodParsedType.undefined) {
+            return OK(undefined);
+        }
+        return this._def.innerType._parse(input);
+    }
+    unwrap() {
+        return this._def.innerType;
+    }
+}
+ZodOptional.create = (type, params) => {
+    return new ZodOptional({
+        innerType: type,
+        typeName: ZodFirstPartyTypeKind.ZodOptional,
+        ...processCreateParams(params),
+    });
+};
+class ZodNullable extends ZodType {
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType === ZodParsedType.null) {
+            return OK(null);
+        }
+        return this._def.innerType._parse(input);
+    }
+    unwrap() {
+        return this._def.innerType;
+    }
+}
+ZodNullable.create = (type, params) => {
+    return new ZodNullable({
+        innerType: type,
+        typeName: ZodFirstPartyTypeKind.ZodNullable,
+        ...processCreateParams(params),
+    });
+};
+class ZodDefault extends ZodType {
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        let data = ctx.data;
+        if (ctx.parsedType === ZodParsedType.undefined) {
+            data = this._def.defaultValue();
+        }
+        return this._def.innerType._parse({
+            data,
+            path: ctx.path,
+            parent: ctx,
+        });
+    }
+    removeDefault() {
+        return this._def.innerType;
+    }
+}
+ZodDefault.create = (type, params) => {
+    return new ZodDefault({
+        innerType: type,
+        typeName: ZodFirstPartyTypeKind.ZodDefault,
+        defaultValue: typeof params.default === "function"
+            ? params.default
+            : () => params.default,
+        ...processCreateParams(params),
+    });
+};
+class ZodCatch extends ZodType {
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        // newCtx is used to not collect issues from inner types in ctx
+        const newCtx = {
+            ...ctx,
+            common: {
+                ...ctx.common,
+                issues: [],
+            },
+        };
+        const result = this._def.innerType._parse({
+            data: newCtx.data,
+            path: newCtx.path,
+            parent: {
+                ...newCtx,
+            },
+        });
+        if (isAsync(result)) {
+            return result.then((result) => {
+                return {
+                    status: "valid",
+                    value: result.status === "valid"
+                        ? result.value
+                        : this._def.catchValue({
+                            get error() {
+                                return new ZodError(newCtx.common.issues);
+                            },
+                            input: newCtx.data,
+                        }),
+                };
+            });
+        }
+        else {
+            return {
+                status: "valid",
+                value: result.status === "valid"
+                    ? result.value
+                    : this._def.catchValue({
+                        get error() {
+                            return new ZodError(newCtx.common.issues);
+                        },
+                        input: newCtx.data,
+                    }),
+            };
+        }
+    }
+    removeCatch() {
+        return this._def.innerType;
+    }
+}
+ZodCatch.create = (type, params) => {
+    return new ZodCatch({
+        innerType: type,
+        typeName: ZodFirstPartyTypeKind.ZodCatch,
+        catchValue: typeof params.catch === "function" ? params.catch : () => params.catch,
+        ...processCreateParams(params),
+    });
+};
+class ZodNaN extends ZodType {
+    _parse(input) {
+        const parsedType = this._getType(input);
+        if (parsedType !== ZodParsedType.nan) {
+            const ctx = this._getOrReturnCtx(input);
+            addIssueToContext(ctx, {
+                code: ZodIssueCode.invalid_type,
+                expected: ZodParsedType.nan,
+                received: ctx.parsedType,
+            });
+            return INVALID;
+        }
+        return { status: "valid", value: input.data };
+    }
+}
+ZodNaN.create = (params) => {
+    return new ZodNaN({
+        typeName: ZodFirstPartyTypeKind.ZodNaN,
+        ...processCreateParams(params),
+    });
+};
+const BRAND = Symbol("zod_brand");
+class ZodBranded extends ZodType {
+    _parse(input) {
+        const { ctx } = this._processInputParams(input);
+        const data = ctx.data;
+        return this._def.type._parse({
+            data,
+            path: ctx.path,
+            parent: ctx,
+        });
+    }
+    unwrap() {
+        return this._def.type;
+    }
+}
+class ZodPipeline extends ZodType {
+    _parse(input) {
+        const { status, ctx } = this._processInputParams(input);
+        if (ctx.common.async) {
+            const handleAsync = async () => {
+                const inResult = await this._def.in._parseAsync({
+                    data: ctx.data,
+                    path: ctx.path,
+                    parent: ctx,
+                });
+                if (inResult.status === "aborted")
+                    return INVALID;
+                if (inResult.status === "dirty") {
+                    status.dirty();
+                    return DIRTY(inResult.value);
+                }
+                else {
+                    return this._def.out._parseAsync({
+                        data: inResult.value,
+                        path: ctx.path,
+                        parent: ctx,
+                    });
+                }
+            };
+            return handleAsync();
+        }
+        else {
+            const inResult = this._def.in._parseSync({
+                data: ctx.data,
+                path: ctx.path,
+                parent: ctx,
+            });
+            if (inResult.status === "aborted")
+                return INVALID;
+            if (inResult.status === "dirty") {
+                status.dirty();
+                return {
+                    status: "dirty",
+                    value: inResult.value,
+                };
+            }
+            else {
+                return this._def.out._parseSync({
+                    data: inResult.value,
+                    path: ctx.path,
+                    parent: ctx,
+                });
+            }
+        }
+    }
+    static create(a, b) {
+        return new ZodPipeline({
+            in: a,
+            out: b,
+            typeName: ZodFirstPartyTypeKind.ZodPipeline,
+        });
+    }
+}
+class ZodReadonly extends ZodType {
+    _parse(input) {
+        const result = this._def.innerType._parse(input);
+        if (isValid(result)) {
+            result.value = Object.freeze(result.value);
+        }
+        return result;
+    }
+}
+ZodReadonly.create = (type, params) => {
+    return new ZodReadonly({
+        innerType: type,
+        typeName: ZodFirstPartyTypeKind.ZodReadonly,
+        ...processCreateParams(params),
+    });
+};
+const custom = (check, params = {}, 
+/*
+ * @deprecated
+ *
+ * Pass `fatal` into the params object instead:
+ *
+ * ```ts
+ * z.string().custom((val) => val.length > 5, { fatal: false })
+ * ```
+ *
+ */
+fatal) => {
+    if (check)
+        return ZodAny.create().superRefine((data, ctx) => {
+            var _a, _b;
+            if (!check(data)) {
+                const p = typeof params === "function"
+                    ? params(data)
+                    : typeof params === "string"
+                        ? { message: params }
+                        : params;
+                const _fatal = (_b = (_a = p.fatal) !== null && _a !== void 0 ? _a : fatal) !== null && _b !== void 0 ? _b : true;
+                const p2 = typeof p === "string" ? { message: p } : p;
+                ctx.addIssue({ code: "custom", ...p2, fatal: _fatal });
+            }
+        });
+    return ZodAny.create();
+};
+const late = {
+    object: ZodObject.lazycreate,
+};
+var ZodFirstPartyTypeKind;
+(function (ZodFirstPartyTypeKind) {
+    ZodFirstPartyTypeKind["ZodString"] = "ZodString";
+    ZodFirstPartyTypeKind["ZodNumber"] = "ZodNumber";
+    ZodFirstPartyTypeKind["ZodNaN"] = "ZodNaN";
+    ZodFirstPartyTypeKind["ZodBigInt"] = "ZodBigInt";
+    ZodFirstPartyTypeKind["ZodBoolean"] = "ZodBoolean";
+    ZodFirstPartyTypeKind["ZodDate"] = "ZodDate";
+    ZodFirstPartyTypeKind["ZodSymbol"] = "ZodSymbol";
+    ZodFirstPartyTypeKind["ZodUndefined"] = "ZodUndefined";
+    ZodFirstPartyTypeKind["ZodNull"] = "ZodNull";
+    ZodFirstPartyTypeKind["ZodAny"] = "ZodAny";
+    ZodFirstPartyTypeKind["ZodUnknown"] = "ZodUnknown";
+    ZodFirstPartyTypeKind["ZodNever"] = "ZodNever";
+    ZodFirstPartyTypeKind["ZodVoid"] = "ZodVoid";
+    ZodFirstPartyTypeKind["ZodArray"] = "ZodArray";
+    ZodFirstPartyTypeKind["ZodObject"] = "ZodObject";
+    ZodFirstPartyTypeKind["ZodUnion"] = "ZodUnion";
+    ZodFirstPartyTypeKind["ZodDiscriminatedUnion"] = "ZodDiscriminatedUnion";
+    ZodFirstPartyTypeKind["ZodIntersection"] = "ZodIntersection";
+    ZodFirstPartyTypeKind["ZodTuple"] = "ZodTuple";
+    ZodFirstPartyTypeKind["ZodRecord"] = "ZodRecord";
+    ZodFirstPartyTypeKind["ZodMap"] = "ZodMap";
+    ZodFirstPartyTypeKind["ZodSet"] = "ZodSet";
+    ZodFirstPartyTypeKind["ZodFunction"] = "ZodFunction";
+    ZodFirstPartyTypeKind["ZodLazy"] = "ZodLazy";
+    ZodFirstPartyTypeKind["ZodLiteral"] = "ZodLiteral";
+    ZodFirstPartyTypeKind["ZodEnum"] = "ZodEnum";
+    ZodFirstPartyTypeKind["ZodEffects"] = "ZodEffects";
+    ZodFirstPartyTypeKind["ZodNativeEnum"] = "ZodNativeEnum";
+    ZodFirstPartyTypeKind["ZodOptional"] = "ZodOptional";
+    ZodFirstPartyTypeKind["ZodNullable"] = "ZodNullable";
+    ZodFirstPartyTypeKind["ZodDefault"] = "ZodDefault";
+    ZodFirstPartyTypeKind["ZodCatch"] = "ZodCatch";
+    ZodFirstPartyTypeKind["ZodPromise"] = "ZodPromise";
+    ZodFirstPartyTypeKind["ZodBranded"] = "ZodBranded";
+    ZodFirstPartyTypeKind["ZodPipeline"] = "ZodPipeline";
+    ZodFirstPartyTypeKind["ZodReadonly"] = "ZodReadonly";
+})(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
+const instanceOfType = (
+// const instanceOfType = <T extends new (...args: any[]) => any>(
+cls, params = {
+    message: `Input not instance of ${cls.name}`,
+}) => custom((data) => data instanceof cls, params);
+const stringType = ZodString.create;
+const numberType = ZodNumber.create;
+const nanType = ZodNaN.create;
+const bigIntType = ZodBigInt.create;
+const booleanType = ZodBoolean.create;
+const dateType = ZodDate.create;
+const symbolType = ZodSymbol.create;
+const undefinedType = ZodUndefined.create;
+const nullType = ZodNull.create;
+const anyType = ZodAny.create;
+const unknownType = ZodUnknown.create;
+const neverType = ZodNever.create;
+const voidType = ZodVoid.create;
+const arrayType = ZodArray.create;
+const objectType = ZodObject.create;
+const strictObjectType = ZodObject.strictCreate;
+const unionType = ZodUnion.create;
+const discriminatedUnionType = ZodDiscriminatedUnion.create;
+const intersectionType = ZodIntersection.create;
+const tupleType = ZodTuple.create;
+const recordType = ZodRecord.create;
+const mapType = ZodMap.create;
+const setType = ZodSet.create;
+const functionType = ZodFunction.create;
+const lazyType = ZodLazy.create;
+const literalType = ZodLiteral.create;
+const enumType = ZodEnum.create;
+const nativeEnumType = ZodNativeEnum.create;
+const promiseType = ZodPromise.create;
+const effectsType = ZodEffects.create;
+const optionalType = ZodOptional.create;
+const nullableType = ZodNullable.create;
+const preprocessType = ZodEffects.createWithPreprocess;
+const pipelineType = ZodPipeline.create;
+const ostring = () => stringType().optional();
+const onumber = () => numberType().optional();
+const oboolean = () => booleanType().optional();
+const coerce = {
+    string: ((arg) => ZodString.create({ ...arg, coerce: true })),
+    number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
+    boolean: ((arg) => ZodBoolean.create({
+        ...arg,
+        coerce: true,
+    })),
+    bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
+    date: ((arg) => ZodDate.create({ ...arg, coerce: true })),
+};
+const NEVER = INVALID;
+
+var z = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    defaultErrorMap: errorMap,
+    setErrorMap: setErrorMap,
+    getErrorMap: getErrorMap,
+    makeIssue: makeIssue,
+    EMPTY_PATH: EMPTY_PATH,
+    addIssueToContext: addIssueToContext,
+    ParseStatus: ParseStatus,
+    INVALID: INVALID,
+    DIRTY: DIRTY,
+    OK: OK,
+    isAborted: isAborted,
+    isDirty: isDirty,
+    isValid: isValid,
+    isAsync: isAsync,
+    get util () { return util; },
+    get objectUtil () { return objectUtil; },
+    ZodParsedType: ZodParsedType,
+    getParsedType: getParsedType,
+    ZodType: ZodType,
+    ZodString: ZodString,
+    ZodNumber: ZodNumber,
+    ZodBigInt: ZodBigInt,
+    ZodBoolean: ZodBoolean,
+    ZodDate: ZodDate,
+    ZodSymbol: ZodSymbol,
+    ZodUndefined: ZodUndefined,
+    ZodNull: ZodNull,
+    ZodAny: ZodAny,
+    ZodUnknown: ZodUnknown,
+    ZodNever: ZodNever,
+    ZodVoid: ZodVoid,
+    ZodArray: ZodArray,
+    ZodObject: ZodObject,
+    ZodUnion: ZodUnion,
+    ZodDiscriminatedUnion: ZodDiscriminatedUnion,
+    ZodIntersection: ZodIntersection,
+    ZodTuple: ZodTuple,
+    ZodRecord: ZodRecord,
+    ZodMap: ZodMap,
+    ZodSet: ZodSet,
+    ZodFunction: ZodFunction,
+    ZodLazy: ZodLazy,
+    ZodLiteral: ZodLiteral,
+    ZodEnum: ZodEnum,
+    ZodNativeEnum: ZodNativeEnum,
+    ZodPromise: ZodPromise,
+    ZodEffects: ZodEffects,
+    ZodTransformer: ZodEffects,
+    ZodOptional: ZodOptional,
+    ZodNullable: ZodNullable,
+    ZodDefault: ZodDefault,
+    ZodCatch: ZodCatch,
+    ZodNaN: ZodNaN,
+    BRAND: BRAND,
+    ZodBranded: ZodBranded,
+    ZodPipeline: ZodPipeline,
+    ZodReadonly: ZodReadonly,
+    custom: custom,
+    Schema: ZodType,
+    ZodSchema: ZodType,
+    late: late,
+    get ZodFirstPartyTypeKind () { return ZodFirstPartyTypeKind; },
+    coerce: coerce,
+    any: anyType,
+    array: arrayType,
+    bigint: bigIntType,
+    boolean: booleanType,
+    date: dateType,
+    discriminatedUnion: discriminatedUnionType,
+    effect: effectsType,
+    'enum': enumType,
+    'function': functionType,
+    'instanceof': instanceOfType,
+    intersection: intersectionType,
+    lazy: lazyType,
+    literal: literalType,
+    map: mapType,
+    nan: nanType,
+    nativeEnum: nativeEnumType,
+    never: neverType,
+    'null': nullType,
+    nullable: nullableType,
+    number: numberType,
+    object: objectType,
+    oboolean: oboolean,
+    onumber: onumber,
+    optional: optionalType,
+    ostring: ostring,
+    pipeline: pipelineType,
+    preprocess: preprocessType,
+    promise: promiseType,
+    record: recordType,
+    set: setType,
+    strictObject: strictObjectType,
+    string: stringType,
+    symbol: symbolType,
+    transformer: effectsType,
+    tuple: tupleType,
+    'undefined': undefinedType,
+    union: unionType,
+    unknown: unknownType,
+    'void': voidType,
+    NEVER: NEVER,
+    ZodIssueCode: ZodIssueCode,
+    quotelessJson: quotelessJson,
+    ZodError: ZodError
+});
+
+
+
 ;// CONCATENATED MODULE: ./dist/index.js
 
 
@@ -31941,40 +35382,50 @@ var lib = __nccwpck_require__(1899);
 
 
 
+
 async function run() {
-    let token = core.getInput("GH_TOKEN", { required: true });
-    let octokit = (0,github.getOctokit)(token);
-    let GITHUB_REPOSITORY = core.getInput("GITHUB_REPOSITORY");
-    let [owner, repo] = GITHUB_REPOSITORY.split("/");
-    let ignored = core.getInput("IGNORED_DEPENDENCIES");
-    let deps = ignored.split(",").map((d) => d.trim());
-    let packageJsonInput = core.getInput("PACKAGE_JSON_PATH", {
-        trimWhitespace: true,
+    let schema = z.object({
+        GITHUB_REPOSITORY: z.string(),
+        GH_TOKEN: z.string(),
+        PACKAGE_JSON_PATH: z.string().optional().default("./"),
+        IGNORED_DEPENDENCIES: z.string().optional().default(""),
     });
-    if (!packageJsonInput) {
-        packageJsonInput = "./";
-    }
-    if (packageJsonInput.endsWith("package.json")) {
-        packageJsonInput = external_node_path_namespaceObject.dirname(packageJsonInput);
-    }
-    core.debug(`Ignoring dependencies: ${deps.join(", ")}`);
-    let json = await lib.load(external_node_path_namespaceObject.resolve(packageJsonInput));
+    let env = schema.parse({
+        GITHUB_REPOSITORY: core.getInput("GITHUB_REPOSITORY"),
+        GH_TOKEN: core.getInput("GH_TOKEN", { required: true }),
+        PACKAGE_JSON_PATH: core.getInput("PACKAGE_JSON_PATH"),
+        IGNORED_DEPENDENCIES: core.getInput("IGNORED_DEPENDENCIES"),
+    });
+    let octokit = (0,github.getOctokit)(env.GH_TOKEN);
+    let PACKAGE_JSON = "package.json";
+    let BUN_LOCK = "bun.lockb";
+    let [owner, repo] = env.GITHUB_REPOSITORY.split("/");
+    if (!owner || !repo)
+        throw new Error(`Invalid GITHUB_REPOSITORY`);
+    let ignoredDeps = env.IGNORED_DEPENDENCIES.split(",").map((d) => d.trim());
+    let CWD = external_node_path_namespaceObject.resolve(env.PACKAGE_JSON_PATH);
+    if (CWD.endsWith(PACKAGE_JSON))
+        CWD = external_node_path_namespaceObject.dirname(CWD);
+    core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
+    let json = await lib.load(external_node_path_namespaceObject.resolve(CWD));
     let dependencies = getAllDependencies(json);
-    let depsToCheck = Object.keys(dependencies).filter((d) => !deps.includes(d));
+    let depsToCheck = Object.keys(dependencies).filter((d) => {
+        return !ignoredDeps.includes(d);
+    });
     core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);
     for (let dep of depsToCheck) {
         core.debug(`Checking ${dep}`);
         // reest to HEAD so we don't commit previous changes
         external_node_child_process_namespaceObject.execSync(`git reset --hard`, { stdio: "inherit" });
         external_node_child_process_namespaceObject.execSync(`bun add ${dep}`, { stdio: "inherit" });
-        let updated = await lib.load(external_node_path_namespaceObject.resolve(packageJsonInput));
+        let updated = await lib.load(external_node_path_namespaceObject.resolve(CWD));
         let updatedDependencies = getAllDependencies(updated);
         if (dependencies[dep] === updatedDependencies[dep]) {
             core.debug(`${dep} is up to date`);
             continue;
         }
         let branch = `bun-dependabot/${dep}`;
-        let bunContent = external_node_fs_namespaceObject.readFileSync(external_node_path_namespaceObject.join(packageJsonInput, "bun.lockb"), "base64");
+        let bunContent = external_node_fs_namespaceObject.readFileSync(external_node_path_namespaceObject.join(CWD, BUN_LOCK), "base64");
         let [bunBlob, packageJsonBlob] = await Promise.all([
             octokit.rest.git.createBlob({
                 owner,
@@ -32001,13 +35452,13 @@ async function run() {
             tree: [
                 {
                     sha: bunBlob.data.sha,
-                    path: "bun.lockb",
+                    path: BUN_LOCK,
                     mode: "100644",
                     type: "blob",
                 },
                 {
                     sha: packageJsonBlob.data.sha,
-                    path: "package.json",
+                    path: PACKAGE_JSON,
                     mode: "100644",
                     type: "blob",
                 },
@@ -32024,18 +35475,20 @@ async function run() {
                 name: "github-actions[bot]",
             },
         });
+        let REF = `heads/${branch}`;
+        let FULL_REF = `refs/${REF}`;
         try {
             let existingRef = await octokit.rest.git.getRef({
                 owner,
                 repo,
-                ref: `heads/${branch}`,
+                ref: REF,
             });
             if (existingRef.status === 200) {
                 console.log(`📦 Updating branch ${branch}`);
                 await octokit.rest.git.updateRef({
                     owner,
                     repo,
-                    ref: `heads/${branch}`,
+                    ref: REF,
                     sha: commit.data.sha,
                     force: true,
                 });
@@ -32048,7 +35501,7 @@ async function run() {
             await octokit.rest.git.createRef({
                 owner,
                 repo,
-                ref: `refs/heads/${branch}`,
+                ref: FULL_REF,
                 sha: commit.data.sha,
             });
         }
@@ -32067,7 +35520,7 @@ async function run() {
             owner,
             repo,
             base: "main",
-            head: `refs/heads/${branch}`,
+            head: FULL_REF,
             title: `Update ${dep} to latest version`,
             body: `This PR updates ${dep} to the latest version.`,
         });
@@ -32083,11 +35536,14 @@ function getAllDependencies(packageJson) {
         ...devDependencies,
     };
 }
-run().catch((e) => {
-    console.error(e);
+run().then(() => {
+    process.exit(0);
+}, (error) => {
+    if (error)
+        console.error(error);
     process.exit(1);
 });
-
+//# sourceMappingURL=index.js.map
 })();
 
 
