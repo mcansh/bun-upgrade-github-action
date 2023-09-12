@@ -33,7 +33,6 @@ async function run(): Promise<void> {
 
   let PACKAGE_JSON = "package.json" as const;
   let BUN_LOCK = "bun.lockb" as const;
-  let PACKAGE_JSON_PATH = path.resolve(CWD, PACKAGE_JSON);
 
   if (CWD.endsWith(PACKAGE_JSON)) CWD = path.dirname(CWD);
 
@@ -69,7 +68,7 @@ async function run(): Promise<void> {
     let lastCommitToBranch = await octokit.rest.repos.getContent({
       owner,
       repo,
-      path: PACKAGE_JSON_PATH,
+      path: PACKAGE_JSON,
       ref: branch,
       mediaType: { format: "raw" },
     });

@@ -35404,7 +35404,6 @@ async function run() {
     let CWD = external_node_path_namespaceObject.resolve(env.PACKAGE_JSON_PATH);
     let PACKAGE_JSON = "package.json";
     let BUN_LOCK = "bun.lockb";
-    let PACKAGE_JSON_PATH = external_node_path_namespaceObject.resolve(CWD, PACKAGE_JSON);
     if (CWD.endsWith(PACKAGE_JSON))
         CWD = external_node_path_namespaceObject.dirname(CWD);
     core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
@@ -35429,7 +35428,7 @@ async function run() {
         let lastCommitToBranch = await octokit.rest.repos.getContent({
             owner,
             repo,
-            path: PACKAGE_JSON_PATH,
+            path: PACKAGE_JSON,
             ref: branch,
             mediaType: { format: "raw" },
         });
