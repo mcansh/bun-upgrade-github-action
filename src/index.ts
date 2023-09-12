@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
 import * as core from "@actions/core";
@@ -30,9 +31,6 @@ async function run(): Promise<void> {
 
   core.debug(`Ignoring dependencies: ${deps.join(", ")}`);
 
-  // let packageJson = await fs.readFile(path.resolve(packageJsonInput), "utf8");
-  // let json = JSON.parse(packageJson);
-
   let json = await NPMCliPackageJson.load(path.resolve(packageJsonInput));
 
   let dependencies = getAllDependencies(json);
@@ -64,6 +62,8 @@ async function run(): Promise<void> {
         name: "github-actions[bot]",
       };
 
+      let bunContent = fs.readFileSync("bun.lock", "utf8");
+
       await Promise.all([
         createOrUpdateTextFile({
           owner,
@@ -79,7 +79,7 @@ async function run(): Promise<void> {
           owner,
           repo,
           path: "bun.lockb",
-          content: JSON.stringify(json, null, 2),
+          content: bunContent,
           message: `Update ${dep} to latest version`,
           author: author,
           committer: author,
