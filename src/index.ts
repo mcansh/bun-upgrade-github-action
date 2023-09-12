@@ -23,9 +23,6 @@ async function run(): Promise<void> {
 
   let octokit = getOctokit(env.GH_TOKEN);
 
-  let PACKAGE_JSON = "package.json" as const;
-  let BUN_LOCK = "bun.lockb" as const;
-
   let [owner, repo] = env.GITHUB_REPOSITORY.split("/");
 
   if (!owner || !repo) throw new Error(`Invalid GITHUB_REPOSITORY`);
@@ -33,6 +30,10 @@ async function run(): Promise<void> {
   let ignoredDeps = env.IGNORED_DEPENDENCIES.split(",").map((d) => d.trim());
 
   let CWD = path.resolve(env.PACKAGE_JSON_PATH);
+
+  let PACKAGE_JSON = "package.json" as const;
+  let BUN_LOCK = "bun.lockb" as const;
+  let PACKAGE_JSON_PATH = path.resolve(CWD, PACKAGE_JSON);
 
   if (CWD.endsWith(PACKAGE_JSON)) CWD = path.dirname(CWD);
 
@@ -64,6 +65,26 @@ async function run(): Promise<void> {
     }
 
     let branch = `bun-dependabot/${dep}`;
+
+    let lastCommitToBranch = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: PACKAGE_JSON_PATH,
+      ref: branch,
+      mediaType: { format: "raw" },
+    });
+
+    let lastCommitPackageJson = JSON.parse(lastCommitToBranch.data.toString());
+
+    let lastCommitDeps = {
+      ...lastCommitPackageJson.dependencies,
+      ...lastCommitPackageJson.devDependencies,
+    };
+
+    if (lastCommitDeps[dep] === updatedDependencies[dep]) {
+      console.log(`📦 PR already up to date`);
+      continue;
+    }
 
     let bunContent = fs.readFileSync(path.join(CWD, BUN_LOCK), "base64");
 

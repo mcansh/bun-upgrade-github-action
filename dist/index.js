@@ -35397,13 +35397,14 @@ async function run() {
         IGNORED_DEPENDENCIES: core.getInput("IGNORED_DEPENDENCIES"),
     });
     let octokit = (0,github.getOctokit)(env.GH_TOKEN);
-    let PACKAGE_JSON = "package.json";
-    let BUN_LOCK = "bun.lockb";
     let [owner, repo] = env.GITHUB_REPOSITORY.split("/");
     if (!owner || !repo)
         throw new Error(`Invalid GITHUB_REPOSITORY`);
     let ignoredDeps = env.IGNORED_DEPENDENCIES.split(",").map((d) => d.trim());
     let CWD = external_node_path_namespaceObject.resolve(env.PACKAGE_JSON_PATH);
+    let PACKAGE_JSON = "package.json";
+    let BUN_LOCK = "bun.lockb";
+    let PACKAGE_JSON_PATH = external_node_path_namespaceObject.resolve(CWD, PACKAGE_JSON);
     if (CWD.endsWith(PACKAGE_JSON))
         CWD = external_node_path_namespaceObject.dirname(CWD);
     core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
@@ -35425,6 +35426,22 @@ async function run() {
             continue;
         }
         let branch = `bun-dependabot/${dep}`;
+        let lastCommitToBranch = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: PACKAGE_JSON_PATH,
+            ref: branch,
+            mediaType: { format: "raw" },
+        });
+        let lastCommitPackageJson = JSON.parse(lastCommitToBranch.data.toString());
+        let lastCommitDeps = {
+            ...lastCommitPackageJson.dependencies,
+            ...lastCommitPackageJson.devDependencies,
+        };
+        if (lastCommitDeps[dep] === updatedDependencies[dep]) {
+            console.log(`📦 PR already up to date`);
+            continue;
+        }
         let bunContent = external_node_fs_namespaceObject.readFileSync(external_node_path_namespaceObject.join(CWD, BUN_LOCK), "base64");
         let [bunBlob, packageJsonBlob] = await Promise.all([
             octokit.rest.git.createBlob({
