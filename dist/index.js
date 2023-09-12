@@ -31404,12 +31404,12 @@ async function run() {
                 name: "github-actions[bot]",
             },
         });
-        try {
-            await octokit.rest.git.getRef({
-                owner,
-                repo,
-                ref: `heads/${branch}`,
-            });
+        let existingRef = await octokit.rest.git.getRef({
+            owner,
+            repo,
+            ref: `heads/${branch}`,
+        });
+        if (existingRef.status === 200) {
             console.log(`📦 Updating branch ${branch}`);
             await octokit.rest.git.updateRef({
                 owner,
@@ -31419,7 +31419,7 @@ async function run() {
                 force: true,
             });
         }
-        catch (error) {
+        else {
             console.log(`📦 Creating branch ${branch}`);
             await octokit.rest.git.createRef({
                 owner,
