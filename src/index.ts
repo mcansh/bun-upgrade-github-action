@@ -2,19 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
 import * as core from "@actions/core";
-import { createOrUpdateTextFile as ogCreateOrUpdateTextFile } from "@octokit/plugin-create-or-update-text-file";
+
 import { getOctokit } from "@actions/github";
 import NPMCliPackageJson from "@npmcli/package-json";
 
 async function run(): Promise<void> {
   let token = core.getInput("GH_TOKEN", { required: true });
   let octokit = getOctokit(token);
-  let { createOrUpdateTextFile } = ogCreateOrUpdateTextFile(octokit);
 
   let GITHUB_REPOSITORY = core.getInput("GITHUB_REPOSITORY");
   let [owner, repo] = GITHUB_REPOSITORY.split("/");
 
-  let ignored = core.getInput("IGNORED_DEPENDENCIES", { trimWhitespace: true });
+  let ignored = core.getInput("IGNORED_DEPENDENCIES");
   let deps = ignored.split(",").map((d) => d.trim());
 
   let packageJsonInput = core.getInput("PACKAGE_JSON_PATH", {
@@ -57,36 +56,71 @@ async function run(): Promise<void> {
 
       let branch = `bun-dependabot/${dep}`;
 
-      let author = {
-        email: "github-actions[bot]@users.noreply.github.com",
-        name: "github-actions[bot]",
-      };
+      let bunContent = fs.readFileSync(
+        path.join(packageJsonInput, "bun.lockb"),
+      );
 
-      let bunContent = fs.readFileSync("bun.lock", "utf8");
-
-      await Promise.all([
-        createOrUpdateTextFile({
+      let [bunBlob, packageJsonBlob] = await Promise.all([
+        octokit.rest.git.createBlob({
           owner,
           repo,
-          path: "package.json",
-          content: JSON.stringify(json, null, 2),
-          message: `Update ${dep} to latest version`,
-          author: author,
-          committer: author,
-          branch,
+          content: bunContent.toString(),
+          encoding: "utf-8",
         }),
-        createOrUpdateTextFile({
+        octokit.rest.git.createBlob({
           owner,
           repo,
-          path: "bun.lockb",
-          content: bunContent,
-          message: `Update ${dep} to latest version`,
-          author: author,
-          committer: author,
-          branch,
+          content: JSON.stringify(updated.content, null, 2),
+          encoding: "utf-8",
         }),
       ]);
-      octokit.rest.pulls.create({
+
+      let latestCommit = await octokit.rest.git.getRef({
+        owner,
+        repo,
+        ref: "heads/main", // TODO: get default branch
+      });
+
+      let tree = await octokit.rest.git.createTree({
+        owner,
+        repo,
+        base_tree: latestCommit.data.object.sha,
+        tree: [
+          {
+            sha: bunBlob.data.sha,
+            path: "bun.lockb",
+            mode: "100644",
+            type: "blob",
+          },
+          {
+            sha: packageJsonBlob.data.sha,
+            path: "package.json",
+            mode: "100644",
+            type: "blob",
+          },
+        ],
+      });
+
+      let commit = await octokit.rest.git.createCommit({
+        owner,
+        repo,
+        message: `Update ${dep} to latest version`,
+        tree: tree.data.sha,
+        parents: [latestCommit.data.object.sha],
+        author: {
+          email: "github-actions[bot]@users.noreply.github.com",
+          name: "github-actions[bot]",
+        },
+      });
+
+      await octokit.rest.git.updateRef({
+        owner,
+        repo,
+        ref: `heads/${branch}`,
+        sha: commit.data.sha,
+      });
+
+      let pr = await octokit.rest.pulls.create({
         owner,
         repo,
         base: "main",
@@ -94,6 +128,8 @@ async function run(): Promise<void> {
         title: `Update ${dep} to latest version`,
         body: `This PR updates ${dep} to the latest version.`,
       });
+
+      console.log(`💿 Created PR ${pr.data.url}`);
     }),
   );
 }

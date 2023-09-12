@@ -672,7 +672,12 @@ var require_proxy = __commonJS((exports) => {
       }
     })();
     if (proxyVar) {
-      return new URL(proxyVar);
+      try {
+        return new URL(proxyVar);
+      } catch (_a) {
+        if (!proxyVar.startsWith("http://") && !proxyVar.startsWith("https://"))
+          return new URL(`http://${proxyVar}`);
+      }
     } else {
       return;
     }
@@ -1088,6 +1093,19 @@ var require_lib = __commonJS((exports) => {
           });
           this.message.on("end", () => {
             resolve(output.toString());
+          });
+        }));
+      });
+    }
+    readBodyBuffer() {
+      return __awaiter(this, undefined, undefined, function* () {
+        return new Promise((resolve) => __awaiter(this, undefined, undefined, function* () {
+          const chunks = [];
+          this.message.on("data", (chunk) => {
+            chunks.push(chunk);
+          });
+          this.message.on("end", () => {
+            resolve(Buffer.concat(chunks));
           });
         }));
       });
@@ -1651,7 +1669,7 @@ var require_oidc_utils = __commonJS((exports) => {
         const res = yield httpclient.getJson(id_token_url).catch((error) => {
           throw new Error(`Failed to get ID Token. \n 
         Error Code : ${error.statusCode}\n 
-        Error Message: ${error.result.message}`);
+        Error Message: ${error.message}`);
         });
         const id_token = (_a = res.result) === null || _a === undefined ? undefined : _a.value;
         if (!id_token) {
@@ -2114,6 +2132,725 @@ var require_core = __commonJS((exports) => {
   Object.defineProperty(exports, "toPlatformPath", { enumerable: true, get: function() {
     return path_utils_1.toPlatformPath;
   } });
+});
+
+// node_modules/@actions/github/lib/context.js
+var require_context = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.Context = undefined;
+  var fs_1 = __require("fs");
+  var os_1 = __require("os");
+
+  class Context {
+    constructor() {
+      var _a, _b, _c;
+      this.payload = {};
+      if (process.env.GITHUB_EVENT_PATH) {
+        if (fs_1.existsSync(process.env.GITHUB_EVENT_PATH)) {
+          this.payload = JSON.parse(fs_1.readFileSync(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" }));
+        } else {
+          const path = process.env.GITHUB_EVENT_PATH;
+          process.stdout.write(`GITHUB_EVENT_PATH ${path} does not exist${os_1.EOL}`);
+        }
+      }
+      this.eventName = process.env.GITHUB_EVENT_NAME;
+      this.sha = process.env.GITHUB_SHA;
+      this.ref = process.env.GITHUB_REF;
+      this.workflow = process.env.GITHUB_WORKFLOW;
+      this.action = process.env.GITHUB_ACTION;
+      this.actor = process.env.GITHUB_ACTOR;
+      this.job = process.env.GITHUB_JOB;
+      this.runNumber = parseInt(process.env.GITHUB_RUN_NUMBER, 10);
+      this.runId = parseInt(process.env.GITHUB_RUN_ID, 10);
+      this.apiUrl = (_a = process.env.GITHUB_API_URL) !== null && _a !== undefined ? _a : `https://api.github.com`;
+      this.serverUrl = (_b = process.env.GITHUB_SERVER_URL) !== null && _b !== undefined ? _b : `https://github.com`;
+      this.graphqlUrl = (_c = process.env.GITHUB_GRAPHQL_URL) !== null && _c !== undefined ? _c : `https://api.github.com/graphql`;
+    }
+    get issue() {
+      const payload = this.payload;
+      return Object.assign(Object.assign({}, this.repo), { number: (payload.issue || payload.pull_request || payload).number });
+    }
+    get repo() {
+      if (process.env.GITHUB_REPOSITORY) {
+        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+        return { owner, repo };
+      }
+      if (this.payload.repository) {
+        return {
+          owner: this.payload.repository.owner.login,
+          repo: this.payload.repository.name
+        };
+      }
+      throw new Error("context.repo requires a GITHUB_REPOSITORY environment variable like 'owner/repo'");
+    }
+  }
+  exports.Context = Context;
+});
+
+// node_modules/@actions/github/node_modules/@actions/http-client/lib/proxy.js
+var require_proxy2 = __commonJS((exports) => {
+  var getProxyUrl = function(reqUrl) {
+    const usingSsl = reqUrl.protocol === "https:";
+    if (checkBypass(reqUrl)) {
+      return;
+    }
+    const proxyVar = (() => {
+      if (usingSsl) {
+        return process.env["https_proxy"] || process.env["HTTPS_PROXY"];
+      } else {
+        return process.env["http_proxy"] || process.env["HTTP_PROXY"];
+      }
+    })();
+    if (proxyVar) {
+      return new URL(proxyVar);
+    } else {
+      return;
+    }
+  };
+  var checkBypass = function(reqUrl) {
+    if (!reqUrl.hostname) {
+      return false;
+    }
+    const reqHost = reqUrl.hostname;
+    if (isLoopbackAddress(reqHost)) {
+      return true;
+    }
+    const noProxy = process.env["no_proxy"] || process.env["NO_PROXY"] || "";
+    if (!noProxy) {
+      return false;
+    }
+    let reqPort;
+    if (reqUrl.port) {
+      reqPort = Number(reqUrl.port);
+    } else if (reqUrl.protocol === "http:") {
+      reqPort = 80;
+    } else if (reqUrl.protocol === "https:") {
+      reqPort = 443;
+    }
+    const upperReqHosts = [reqUrl.hostname.toUpperCase()];
+    if (typeof reqPort === "number") {
+      upperReqHosts.push(`${upperReqHosts[0]}:${reqPort}`);
+    }
+    for (const upperNoProxyItem of noProxy.split(",").map((x) => x.trim().toUpperCase()).filter((x) => x)) {
+      if (upperNoProxyItem === "*" || upperReqHosts.some((x) => x === upperNoProxyItem || x.endsWith(`.${upperNoProxyItem}`) || upperNoProxyItem.startsWith(".") && x.endsWith(`${upperNoProxyItem}`))) {
+        return true;
+      }
+    }
+    return false;
+  };
+  var isLoopbackAddress = function(host) {
+    const hostLower = host.toLowerCase();
+    return hostLower === "localhost" || hostLower.startsWith("127.") || hostLower.startsWith("[::1]") || hostLower.startsWith("[0:0:0:0:0:0:0:1]");
+  };
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.checkBypass = exports.getProxyUrl = undefined;
+  exports.getProxyUrl = getProxyUrl;
+  exports.checkBypass = checkBypass;
+});
+
+// node_modules/@actions/github/node_modules/@actions/http-client/lib/index.js
+var require_lib2 = __commonJS((exports) => {
+  var getProxyUrl = function(serverUrl) {
+    const proxyUrl = pm.getProxyUrl(new URL(serverUrl));
+    return proxyUrl ? proxyUrl.href : "";
+  };
+  var isHttps = function(requestUrl) {
+    const parsedUrl = new URL(requestUrl);
+    return parsedUrl.protocol === "https:";
+  };
+  var __createBinding = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() {
+      return m[k];
+    } });
+  } : function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    o[k2] = m[k];
+  });
+  var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+  } : function(o, v) {
+    o["default"] = v;
+  });
+  var __importStar = exports && exports.__importStar || function(mod) {
+    if (mod && mod.__esModule)
+      return mod;
+    var result = {};
+    if (mod != null) {
+      for (var k in mod)
+        if (k !== "default" && Object.hasOwnProperty.call(mod, k))
+          __createBinding(result, mod, k);
+    }
+    __setModuleDefault(result, mod);
+    return result;
+  };
+  var __awaiter = exports && exports.__awaiter || function(thisArg, _arguments, P, generator) {
+    function adopt(value) {
+      return value instanceof P ? value : new P(function(resolve) {
+        resolve(value);
+      });
+    }
+    return new (P || (P = Promise))(function(resolve, reject) {
+      function fulfilled(value) {
+        try {
+          step(generator.next(value));
+        } catch (e) {
+          reject(e);
+        }
+      }
+      function rejected(value) {
+        try {
+          step(generator["throw"](value));
+        } catch (e) {
+          reject(e);
+        }
+      }
+      function step(result) {
+        result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+      }
+      step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+  };
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.HttpClient = exports.isHttps = exports.HttpClientResponse = exports.HttpClientError = exports.getProxyUrl = exports.MediaTypes = exports.Headers = exports.HttpCodes = undefined;
+  var http = __importStar(__require("http"));
+  var https = __importStar(__require("https"));
+  var pm = __importStar(require_proxy2());
+  var tunnel = __importStar(require_tunnel());
+  var HttpCodes;
+  (function(HttpCodes2) {
+    HttpCodes2[HttpCodes2["OK"] = 200] = "OK";
+    HttpCodes2[HttpCodes2["MultipleChoices"] = 300] = "MultipleChoices";
+    HttpCodes2[HttpCodes2["MovedPermanently"] = 301] = "MovedPermanently";
+    HttpCodes2[HttpCodes2["ResourceMoved"] = 302] = "ResourceMoved";
+    HttpCodes2[HttpCodes2["SeeOther"] = 303] = "SeeOther";
+    HttpCodes2[HttpCodes2["NotModified"] = 304] = "NotModified";
+    HttpCodes2[HttpCodes2["UseProxy"] = 305] = "UseProxy";
+    HttpCodes2[HttpCodes2["SwitchProxy"] = 306] = "SwitchProxy";
+    HttpCodes2[HttpCodes2["TemporaryRedirect"] = 307] = "TemporaryRedirect";
+    HttpCodes2[HttpCodes2["PermanentRedirect"] = 308] = "PermanentRedirect";
+    HttpCodes2[HttpCodes2["BadRequest"] = 400] = "BadRequest";
+    HttpCodes2[HttpCodes2["Unauthorized"] = 401] = "Unauthorized";
+    HttpCodes2[HttpCodes2["PaymentRequired"] = 402] = "PaymentRequired";
+    HttpCodes2[HttpCodes2["Forbidden"] = 403] = "Forbidden";
+    HttpCodes2[HttpCodes2["NotFound"] = 404] = "NotFound";
+    HttpCodes2[HttpCodes2["MethodNotAllowed"] = 405] = "MethodNotAllowed";
+    HttpCodes2[HttpCodes2["NotAcceptable"] = 406] = "NotAcceptable";
+    HttpCodes2[HttpCodes2["ProxyAuthenticationRequired"] = 407] = "ProxyAuthenticationRequired";
+    HttpCodes2[HttpCodes2["RequestTimeout"] = 408] = "RequestTimeout";
+    HttpCodes2[HttpCodes2["Conflict"] = 409] = "Conflict";
+    HttpCodes2[HttpCodes2["Gone"] = 410] = "Gone";
+    HttpCodes2[HttpCodes2["TooManyRequests"] = 429] = "TooManyRequests";
+    HttpCodes2[HttpCodes2["InternalServerError"] = 500] = "InternalServerError";
+    HttpCodes2[HttpCodes2["NotImplemented"] = 501] = "NotImplemented";
+    HttpCodes2[HttpCodes2["BadGateway"] = 502] = "BadGateway";
+    HttpCodes2[HttpCodes2["ServiceUnavailable"] = 503] = "ServiceUnavailable";
+    HttpCodes2[HttpCodes2["GatewayTimeout"] = 504] = "GatewayTimeout";
+  })(HttpCodes = exports.HttpCodes || (exports.HttpCodes = {}));
+  var Headers;
+  (function(Headers2) {
+    Headers2["Accept"] = "accept";
+    Headers2["ContentType"] = "content-type";
+  })(Headers = exports.Headers || (exports.Headers = {}));
+  var MediaTypes;
+  (function(MediaTypes2) {
+    MediaTypes2["ApplicationJson"] = "application/json";
+  })(MediaTypes = exports.MediaTypes || (exports.MediaTypes = {}));
+  exports.getProxyUrl = getProxyUrl;
+  var HttpRedirectCodes = [
+    HttpCodes.MovedPermanently,
+    HttpCodes.ResourceMoved,
+    HttpCodes.SeeOther,
+    HttpCodes.TemporaryRedirect,
+    HttpCodes.PermanentRedirect
+  ];
+  var HttpResponseRetryCodes = [
+    HttpCodes.BadGateway,
+    HttpCodes.ServiceUnavailable,
+    HttpCodes.GatewayTimeout
+  ];
+  var RetryableHttpVerbs = ["OPTIONS", "GET", "DELETE", "HEAD"];
+  var ExponentialBackoffCeiling = 10;
+  var ExponentialBackoffTimeSlice = 5;
+
+  class HttpClientError extends Error {
+    constructor(message, statusCode) {
+      super(message);
+      this.name = "HttpClientError";
+      this.statusCode = statusCode;
+      Object.setPrototypeOf(this, HttpClientError.prototype);
+    }
+  }
+  exports.HttpClientError = HttpClientError;
+
+  class HttpClientResponse {
+    constructor(message) {
+      this.message = message;
+    }
+    readBody() {
+      return __awaiter(this, undefined, undefined, function* () {
+        return new Promise((resolve) => __awaiter(this, undefined, undefined, function* () {
+          let output = Buffer.alloc(0);
+          this.message.on("data", (chunk) => {
+            output = Buffer.concat([output, chunk]);
+          });
+          this.message.on("end", () => {
+            resolve(output.toString());
+          });
+        }));
+      });
+    }
+  }
+  exports.HttpClientResponse = HttpClientResponse;
+  exports.isHttps = isHttps;
+
+  class HttpClient {
+    constructor(userAgent, handlers, requestOptions) {
+      this._ignoreSslError = false;
+      this._allowRedirects = true;
+      this._allowRedirectDowngrade = false;
+      this._maxRedirects = 50;
+      this._allowRetries = false;
+      this._maxRetries = 1;
+      this._keepAlive = false;
+      this._disposed = false;
+      this.userAgent = userAgent;
+      this.handlers = handlers || [];
+      this.requestOptions = requestOptions;
+      if (requestOptions) {
+        if (requestOptions.ignoreSslError != null) {
+          this._ignoreSslError = requestOptions.ignoreSslError;
+        }
+        this._socketTimeout = requestOptions.socketTimeout;
+        if (requestOptions.allowRedirects != null) {
+          this._allowRedirects = requestOptions.allowRedirects;
+        }
+        if (requestOptions.allowRedirectDowngrade != null) {
+          this._allowRedirectDowngrade = requestOptions.allowRedirectDowngrade;
+        }
+        if (requestOptions.maxRedirects != null) {
+          this._maxRedirects = Math.max(requestOptions.maxRedirects, 0);
+        }
+        if (requestOptions.keepAlive != null) {
+          this._keepAlive = requestOptions.keepAlive;
+        }
+        if (requestOptions.allowRetries != null) {
+          this._allowRetries = requestOptions.allowRetries;
+        }
+        if (requestOptions.maxRetries != null) {
+          this._maxRetries = requestOptions.maxRetries;
+        }
+      }
+    }
+    options(requestUrl, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request("OPTIONS", requestUrl, null, additionalHeaders || {});
+      });
+    }
+    get(requestUrl, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request("GET", requestUrl, null, additionalHeaders || {});
+      });
+    }
+    del(requestUrl, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request("DELETE", requestUrl, null, additionalHeaders || {});
+      });
+    }
+    post(requestUrl, data, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request("POST", requestUrl, data, additionalHeaders || {});
+      });
+    }
+    patch(requestUrl, data, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request("PATCH", requestUrl, data, additionalHeaders || {});
+      });
+    }
+    put(requestUrl, data, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request("PUT", requestUrl, data, additionalHeaders || {});
+      });
+    }
+    head(requestUrl, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request("HEAD", requestUrl, null, additionalHeaders || {});
+      });
+    }
+    sendStream(verb, requestUrl, stream, additionalHeaders) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return this.request(verb, requestUrl, stream, additionalHeaders);
+      });
+    }
+    getJson(requestUrl, additionalHeaders = {}) {
+      return __awaiter(this, undefined, undefined, function* () {
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        const res = yield this.get(requestUrl, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+      });
+    }
+    postJson(requestUrl, obj, additionalHeaders = {}) {
+      return __awaiter(this, undefined, undefined, function* () {
+        const data = JSON.stringify(obj, null, 2);
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+        const res = yield this.post(requestUrl, data, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+      });
+    }
+    putJson(requestUrl, obj, additionalHeaders = {}) {
+      return __awaiter(this, undefined, undefined, function* () {
+        const data = JSON.stringify(obj, null, 2);
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+        const res = yield this.put(requestUrl, data, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+      });
+    }
+    patchJson(requestUrl, obj, additionalHeaders = {}) {
+      return __awaiter(this, undefined, undefined, function* () {
+        const data = JSON.stringify(obj, null, 2);
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+        const res = yield this.patch(requestUrl, data, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+      });
+    }
+    request(verb, requestUrl, data, headers) {
+      return __awaiter(this, undefined, undefined, function* () {
+        if (this._disposed) {
+          throw new Error("Client has already been disposed.");
+        }
+        const parsedUrl = new URL(requestUrl);
+        let info = this._prepareRequest(verb, parsedUrl, headers);
+        const maxTries = this._allowRetries && RetryableHttpVerbs.includes(verb) ? this._maxRetries + 1 : 1;
+        let numTries = 0;
+        let response;
+        do {
+          response = yield this.requestRaw(info, data);
+          if (response && response.message && response.message.statusCode === HttpCodes.Unauthorized) {
+            let authenticationHandler;
+            for (const handler of this.handlers) {
+              if (handler.canHandleAuthentication(response)) {
+                authenticationHandler = handler;
+                break;
+              }
+            }
+            if (authenticationHandler) {
+              return authenticationHandler.handleAuthentication(this, info, data);
+            } else {
+              return response;
+            }
+          }
+          let redirectsRemaining = this._maxRedirects;
+          while (response.message.statusCode && HttpRedirectCodes.includes(response.message.statusCode) && this._allowRedirects && redirectsRemaining > 0) {
+            const redirectUrl = response.message.headers["location"];
+            if (!redirectUrl) {
+              break;
+            }
+            const parsedRedirectUrl = new URL(redirectUrl);
+            if (parsedUrl.protocol === "https:" && parsedUrl.protocol !== parsedRedirectUrl.protocol && !this._allowRedirectDowngrade) {
+              throw new Error("Redirect from HTTPS to HTTP protocol. This downgrade is not allowed for security reasons. If you want to allow this behavior, set the allowRedirectDowngrade option to true.");
+            }
+            yield response.readBody();
+            if (parsedRedirectUrl.hostname !== parsedUrl.hostname) {
+              for (const header in headers) {
+                if (header.toLowerCase() === "authorization") {
+                  delete headers[header];
+                }
+              }
+            }
+            info = this._prepareRequest(verb, parsedRedirectUrl, headers);
+            response = yield this.requestRaw(info, data);
+            redirectsRemaining--;
+          }
+          if (!response.message.statusCode || !HttpResponseRetryCodes.includes(response.message.statusCode)) {
+            return response;
+          }
+          numTries += 1;
+          if (numTries < maxTries) {
+            yield response.readBody();
+            yield this._performExponentialBackoff(numTries);
+          }
+        } while (numTries < maxTries);
+        return response;
+      });
+    }
+    dispose() {
+      if (this._agent) {
+        this._agent.destroy();
+      }
+      this._disposed = true;
+    }
+    requestRaw(info, data) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return new Promise((resolve, reject) => {
+          function callbackForResult(err, res) {
+            if (err) {
+              reject(err);
+            } else if (!res) {
+              reject(new Error("Unknown error"));
+            } else {
+              resolve(res);
+            }
+          }
+          this.requestRawWithCallback(info, data, callbackForResult);
+        });
+      });
+    }
+    requestRawWithCallback(info, data, onResult) {
+      if (typeof data === "string") {
+        if (!info.options.headers) {
+          info.options.headers = {};
+        }
+        info.options.headers["Content-Length"] = Buffer.byteLength(data, "utf8");
+      }
+      let callbackCalled = false;
+      function handleResult(err, res) {
+        if (!callbackCalled) {
+          callbackCalled = true;
+          onResult(err, res);
+        }
+      }
+      const req = info.httpModule.request(info.options, (msg) => {
+        const res = new HttpClientResponse(msg);
+        handleResult(undefined, res);
+      });
+      let socket;
+      req.on("socket", (sock) => {
+        socket = sock;
+      });
+      req.setTimeout(this._socketTimeout || 3 * 60000, () => {
+        if (socket) {
+          socket.end();
+        }
+        handleResult(new Error(`Request timeout: ${info.options.path}`));
+      });
+      req.on("error", function(err) {
+        handleResult(err);
+      });
+      if (data && typeof data === "string") {
+        req.write(data, "utf8");
+      }
+      if (data && typeof data !== "string") {
+        data.on("close", function() {
+          req.end();
+        });
+        data.pipe(req);
+      } else {
+        req.end();
+      }
+    }
+    getAgent(serverUrl) {
+      const parsedUrl = new URL(serverUrl);
+      return this._getAgent(parsedUrl);
+    }
+    _prepareRequest(method, requestUrl, headers) {
+      const info = {};
+      info.parsedUrl = requestUrl;
+      const usingSsl = info.parsedUrl.protocol === "https:";
+      info.httpModule = usingSsl ? https : http;
+      const defaultPort = usingSsl ? 443 : 80;
+      info.options = {};
+      info.options.host = info.parsedUrl.hostname;
+      info.options.port = info.parsedUrl.port ? parseInt(info.parsedUrl.port) : defaultPort;
+      info.options.path = (info.parsedUrl.pathname || "") + (info.parsedUrl.search || "");
+      info.options.method = method;
+      info.options.headers = this._mergeHeaders(headers);
+      if (this.userAgent != null) {
+        info.options.headers["user-agent"] = this.userAgent;
+      }
+      info.options.agent = this._getAgent(info.parsedUrl);
+      if (this.handlers) {
+        for (const handler of this.handlers) {
+          handler.prepareRequest(info.options);
+        }
+      }
+      return info;
+    }
+    _mergeHeaders(headers) {
+      if (this.requestOptions && this.requestOptions.headers) {
+        return Object.assign({}, lowercaseKeys(this.requestOptions.headers), lowercaseKeys(headers || {}));
+      }
+      return lowercaseKeys(headers || {});
+    }
+    _getExistingOrDefaultHeader(additionalHeaders, header, _default) {
+      let clientHeader;
+      if (this.requestOptions && this.requestOptions.headers) {
+        clientHeader = lowercaseKeys(this.requestOptions.headers)[header];
+      }
+      return additionalHeaders[header] || clientHeader || _default;
+    }
+    _getAgent(parsedUrl) {
+      let agent;
+      const proxyUrl = pm.getProxyUrl(parsedUrl);
+      const useProxy = proxyUrl && proxyUrl.hostname;
+      if (this._keepAlive && useProxy) {
+        agent = this._proxyAgent;
+      }
+      if (this._keepAlive && !useProxy) {
+        agent = this._agent;
+      }
+      if (agent) {
+        return agent;
+      }
+      const usingSsl = parsedUrl.protocol === "https:";
+      let maxSockets = 100;
+      if (this.requestOptions) {
+        maxSockets = this.requestOptions.maxSockets || http.globalAgent.maxSockets;
+      }
+      if (proxyUrl && proxyUrl.hostname) {
+        const agentOptions = {
+          maxSockets,
+          keepAlive: this._keepAlive,
+          proxy: Object.assign(Object.assign({}, (proxyUrl.username || proxyUrl.password) && {
+            proxyAuth: `${proxyUrl.username}:${proxyUrl.password}`
+          }), { host: proxyUrl.hostname, port: proxyUrl.port })
+        };
+        let tunnelAgent;
+        const overHttps = proxyUrl.protocol === "https:";
+        if (usingSsl) {
+          tunnelAgent = overHttps ? tunnel.httpsOverHttps : tunnel.httpsOverHttp;
+        } else {
+          tunnelAgent = overHttps ? tunnel.httpOverHttps : tunnel.httpOverHttp;
+        }
+        agent = tunnelAgent(agentOptions);
+        this._proxyAgent = agent;
+      }
+      if (this._keepAlive && !agent) {
+        const options = { keepAlive: this._keepAlive, maxSockets };
+        agent = usingSsl ? new https.Agent(options) : new http.Agent(options);
+        this._agent = agent;
+      }
+      if (!agent) {
+        agent = usingSsl ? https.globalAgent : http.globalAgent;
+      }
+      if (usingSsl && this._ignoreSslError) {
+        agent.options = Object.assign(agent.options || {}, {
+          rejectUnauthorized: false
+        });
+      }
+      return agent;
+    }
+    _performExponentialBackoff(retryNumber) {
+      return __awaiter(this, undefined, undefined, function* () {
+        retryNumber = Math.min(ExponentialBackoffCeiling, retryNumber);
+        const ms = ExponentialBackoffTimeSlice * Math.pow(2, retryNumber);
+        return new Promise((resolve) => setTimeout(() => resolve(), ms));
+      });
+    }
+    _processResponse(res, options) {
+      return __awaiter(this, undefined, undefined, function* () {
+        return new Promise((resolve, reject) => __awaiter(this, undefined, undefined, function* () {
+          const statusCode = res.message.statusCode || 0;
+          const response = {
+            statusCode,
+            result: null,
+            headers: {}
+          };
+          if (statusCode === HttpCodes.NotFound) {
+            resolve(response);
+          }
+          function dateTimeDeserializer(key, value) {
+            if (typeof value === "string") {
+              const a = new Date(value);
+              if (!isNaN(a.valueOf())) {
+                return a;
+              }
+            }
+            return value;
+          }
+          let obj;
+          let contents;
+          try {
+            contents = yield res.readBody();
+            if (contents && contents.length > 0) {
+              if (options && options.deserializeDates) {
+                obj = JSON.parse(contents, dateTimeDeserializer);
+              } else {
+                obj = JSON.parse(contents);
+              }
+              response.result = obj;
+            }
+            response.headers = res.message.headers;
+          } catch (err) {
+          }
+          if (statusCode > 299) {
+            let msg;
+            if (obj && obj.message) {
+              msg = obj.message;
+            } else if (contents && contents.length > 0) {
+              msg = contents;
+            } else {
+              msg = `Failed request: (${statusCode})`;
+            }
+            const err = new HttpClientError(msg, statusCode);
+            err.result = response.result;
+            reject(err);
+          } else {
+            resolve(response);
+          }
+        }));
+      });
+    }
+  }
+  exports.HttpClient = HttpClient;
+  var lowercaseKeys = (obj) => Object.keys(obj).reduce((c, k) => (c[k.toLowerCase()] = obj[k], c), {});
+});
+
+// node_modules/@actions/github/lib/internal/utils.js
+var require_utils2 = __commonJS((exports) => {
+  var getAuthString = function(token, options) {
+    if (!token && !options.auth) {
+      throw new Error("Parameter token or opts.auth is required");
+    } else if (token && options.auth) {
+      throw new Error("Parameters token and opts.auth may not both be specified");
+    }
+    return typeof options.auth === "string" ? options.auth : `token ${token}`;
+  };
+  var getProxyAgent = function(destinationUrl) {
+    const hc = new httpClient.HttpClient;
+    return hc.getAgent(destinationUrl);
+  };
+  var getApiBaseUrl = function() {
+    return process.env["GITHUB_API_URL"] || "https://api.github.com";
+  };
+  var __createBinding = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() {
+      return m[k];
+    } });
+  } : function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    o[k2] = m[k];
+  });
+  var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+  } : function(o, v) {
+    o["default"] = v;
+  });
+  var __importStar = exports && exports.__importStar || function(mod) {
+    if (mod && mod.__esModule)
+      return mod;
+    var result = {};
+    if (mod != null) {
+      for (var k in mod)
+        if (k !== "default" && Object.hasOwnProperty.call(mod, k))
+          __createBinding(result, mod, k);
+    }
+    __setModuleDefault(result, mod);
+    return result;
+  };
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.getApiBaseUrl = exports.getProxyAgent = exports.getAuthString = undefined;
+  var httpClient = __importStar(require_lib2());
+  exports.getAuthString = getAuthString;
+  exports.getProxyAgent = getProxyAgent;
+  exports.getApiBaseUrl = getApiBaseUrl;
 });
 
 // node_modules/universal-user-agent/dist-node/index.js
@@ -2588,7 +3325,7 @@ var require_dist_node2 = __commonJS((exports) => {
 });
 
 // node_modules/webidl-conversions/lib/index.js
-var require_lib2 = __commonJS((exports, module) => {
+var require_lib3 = __commonJS((exports, module) => {
   var sign = function(x) {
     return x < 0 ? -1 : 1;
   };
@@ -2742,7 +3479,7 @@ var require_lib2 = __commonJS((exports, module) => {
 });
 
 // node_modules/whatwg-url/lib/utils.js
-var require_utils2 = __commonJS((exports, module) => {
+var require_utils3 = __commonJS((exports, module) => {
   exports.mixin = function mixin(target, source) {
     const keys = Object.getOwnPropertyNames(source);
     for (let i = 0;i < keys.length; ++i) {
@@ -4163,8 +4900,8 @@ var require_URL = __commonJS((exports, module) => {
     }
     exports.setup(this, args);
   };
-  var conversions = require_lib2();
-  var utils = require_utils2();
+  var conversions = require_lib3();
+  var utils = require_utils3();
   var Impl = require_URL_impl();
   var impl = utils.implSymbol;
   URL2.prototype.toJSON = function toJSON() {
@@ -4338,7 +5075,7 @@ var require_public_api = __commonJS((exports) => {
 });
 
 // node_modules/node-fetch/lib/index.js
-var require_lib3 = __commonJS((exports, module) => {
+var require_lib4 = __commonJS((exports, module) => {
   var _interopDefault = function(ex) {
     return ex && typeof ex === "object" && ("default" in ex) ? ex["default"] : ex;
   };
@@ -5747,7 +6484,7 @@ var require_dist_node5 = __commonJS((exports) => {
   var endpoint = require_dist_node2();
   var universalUserAgent = require_dist_node();
   var isPlainObject = require_is_plain_object();
-  var nodeFetch = _interopDefault(require_lib3());
+  var nodeFetch = _interopDefault(require_lib4());
   var requestError = require_dist_node4();
   var VERSION = "5.6.3";
   var request = withDefaults(endpoint.endpoint, {
@@ -6030,337 +6767,8 @@ var require_dist_node8 = __commonJS((exports) => {
   exports.Octokit = Octokit;
 });
 
-// node_modules/@octokit/request-error/dist-node/index.js
-var require_dist_node9 = __commonJS((exports, module) => {
-  var __create2 = Object.create;
-  var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-  var __getOwnPropNames2 = Object.getOwnPropertyNames;
-  var __getProtoOf2 = Object.getPrototypeOf;
-  var __hasOwnProp2 = Object.prototype.hasOwnProperty;
-  var __export = (target, all) => {
-    for (var name in all)
-      __defProp2(target, name, { get: all[name], enumerable: true });
-  };
-  var __copyProps = (to, from, except, desc) => {
-    if (from && typeof from === "object" || typeof from === "function") {
-      for (let key of __getOwnPropNames2(from))
-        if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-    }
-    return to;
-  };
-  var __toESM2 = (mod, isNodeMode, target) => (target = mod != null ? __create2(__getProtoOf2(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp2(target, "default", { value: mod, enumerable: true }) : target, mod));
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
-  var dist_src_exports = {};
-  __export(dist_src_exports, {
-    RequestError: () => RequestError
-  });
-  module.exports = __toCommonJS(dist_src_exports);
-  var import_deprecation = require_dist_node3();
-  var import_once = __toESM2(require_once());
-  var logOnceCode = (0, import_once.default)((deprecation) => console.warn(deprecation));
-  var logOnceHeaders = (0, import_once.default)((deprecation) => console.warn(deprecation));
-  var RequestError = class extends Error {
-    constructor(message, statusCode, options) {
-      super(message);
-      if (Error.captureStackTrace) {
-        Error.captureStackTrace(this, this.constructor);
-      }
-      this.name = "HttpError";
-      this.status = statusCode;
-      let headers;
-      if (("headers" in options) && typeof options.headers !== "undefined") {
-        headers = options.headers;
-      }
-      if ("response" in options) {
-        this.response = options.response;
-        headers = options.response.headers;
-      }
-      const requestCopy = Object.assign({}, options.request);
-      if (options.request.headers.authorization) {
-        requestCopy.headers = Object.assign({}, options.request.headers, {
-          authorization: options.request.headers.authorization.replace(/ .*$/, " [REDACTED]")
-        });
-      }
-      requestCopy.url = requestCopy.url.replace(/\bclient_secret=\w+/g, "client_secret=[REDACTED]").replace(/\baccess_token=\w+/g, "access_token=[REDACTED]");
-      this.request = requestCopy;
-      Object.defineProperty(this, "code", {
-        get() {
-          logOnceCode(new import_deprecation.Deprecation("[@octokit/request-error] `error.code` is deprecated, use `error.status`."));
-          return statusCode;
-        }
-      });
-      Object.defineProperty(this, "headers", {
-        get() {
-          logOnceHeaders(new import_deprecation.Deprecation("[@octokit/request-error] `error.headers` is deprecated, use `error.response.headers`."));
-          return headers || {};
-        }
-      });
-    }
-  };
-});
-
-// node_modules/@octokit/plugin-create-or-update-text-file/dist-node/index.js
-var require_dist_node10 = __commonJS((exports, module) => {
-  var nodeUtf8ToBase64 = function(data) {
-    return Buffer.from(data, "utf-8").toString("base64");
-  };
-  var nodeBase64ToUtf8 = function(data) {
-    return Buffer.from(data, "base64").toString("utf-8");
-  };
-  var browserUtf8ToBase64 = function(data) {
-    return btoa(encodeURIComponent(data).replace(/%([0-9A-F]{2})/g, function toSolidBytes(_match, p1) {
-      return String.fromCharCode("0x" + p1);
-    }));
-  };
-  var browserBase64ToUtf8 = function(data) {
-    return decodeURIComponent(atob(data).split("").map(function(c) {
-      return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(""));
-  };
-  async function getFileContents(octokit, options) {
-    const route = "GET /repos/{owner}/{repo}/contents/{path}";
-    const { branch, ...parameters } = options;
-    const getContentsParameters = {
-      ...parameters,
-      ref: branch
-    };
-    const requestOptions = octokit.request.endpoint(route, getContentsParameters);
-    const { data } = await octokit.request(route, getContentsParameters).catch((error) => {
-      if (error.status !== 404)
-        throw error;
-      return {
-        data: {
-          content: null,
-          type: "",
-          sha: ""
-        }
-      };
-    });
-    if (Array.isArray(data)) {
-      throw new import_request_error.RequestError(`[@octokit/plugin-create-or-update-text-file] ${requestOptions.url} is a directory`, 403, {
-        request: requestOptions
-      });
-    }
-    if (!(("sha" in data) && ("content" in data))) {
-      throw new import_request_error.RequestError(`[@octokit/plugin-create-or-update-text-file] ${requestOptions.url} is not a file, but a ${data.type}`, 403, {
-        request: requestOptions
-      });
-    }
-    if (data.content === null) {
-      return {
-        content: null
-      };
-    }
-    try {
-      return {
-        content: base64ToUtf8(data.content),
-        sha: data.sha
-      };
-    } catch (error) {
-      if (error.message !== "URI malformed")
-        throw error;
-      throw new import_request_error.RequestError(`[@octokit/plugin-create-or-update-text-file] ${requestOptions.url} is a binary file, only text files are supported`, 403, {
-        request: requestOptions
-      });
-    }
-  }
-  async function composeCreateOrUpdateTextFile(octokit, options) {
-    const {
-      content: contentOrFn,
-      message,
-      committer,
-      author,
-      ...getOptions
-    } = options;
-    const currentFile = await getFileContents(octokit, getOptions);
-    const content = typeof contentOrFn === "function" ? await contentOrFn({
-      exists: currentFile.content !== null,
-      content: currentFile.content
-    }) : contentOrFn;
-    if (content === currentFile.content) {
-      return {
-        updated: false,
-        deleted: false,
-        data: {},
-        headers: {}
-      };
-    }
-    if (currentFile.sha && content === null) {
-      const response2 = await octokit.request("DELETE /repos/{owner}/{repo}/contents/{path}", {
-        ...getOptions,
-        message,
-        sha: currentFile.sha
-      });
-      return {
-        ...response2,
-        updated: true,
-        deleted: true
-      };
-    }
-    const response = await octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
-      ...getOptions,
-      message,
-      ...currentFile,
-      content: utf8ToBase64(content)
-    });
-    return {
-      ...response,
-      updated: true,
-      deleted: false,
-      content
-    };
-  }
-  var createOrUpdateTextFile = function(octokit) {
-    return {
-      createOrUpdateTextFile(options) {
-        return composeCreateOrUpdateTextFile(octokit, options);
-      }
-    };
-  };
-  var __defProp2 = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-  var __getOwnPropNames2 = Object.getOwnPropertyNames;
-  var __hasOwnProp2 = Object.prototype.hasOwnProperty;
-  var __export = (target, all) => {
-    for (var name in all)
-      __defProp2(target, name, { get: all[name], enumerable: true });
-  };
-  var __copyProps = (to, from, except, desc) => {
-    if (from && typeof from === "object" || typeof from === "function") {
-      for (let key of __getOwnPropNames2(from))
-        if (!__hasOwnProp2.call(to, key) && key !== except)
-          __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-    }
-    return to;
-  };
-  var __toCommonJS = (mod) => __copyProps(__defProp2({}, "__esModule", { value: true }), mod);
-  var dist_src_exports = {};
-  __export(dist_src_exports, {
-    composeCreateOrUpdateTextFile: () => composeCreateOrUpdateTextFile,
-    createOrUpdateTextFile: () => createOrUpdateTextFile
-  });
-  module.exports = __toCommonJS(dist_src_exports);
-  var import_core3 = require_dist_node8();
-  var import_core2 = require_dist_node8();
-  var import_request_error = require_dist_node9();
-  var import_core = require_dist_node8();
-  var isNode = globalThis.process && globalThis.process.release && globalThis.process.release.name;
-  var utf8ToBase64 = isNode ? nodeUtf8ToBase64 : browserUtf8ToBase64;
-  var base64ToUtf8 = isNode ? nodeBase64ToUtf8 : browserBase64ToUtf8;
-  var VERSION = "4.0.0";
-  createOrUpdateTextFile.VERSION = VERSION;
-});
-
-// node_modules/@actions/github/lib/context.js
-var require_context = __commonJS((exports) => {
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.Context = undefined;
-  var fs_1 = __require("fs");
-  var os_1 = __require("os");
-
-  class Context {
-    constructor() {
-      var _a, _b, _c;
-      this.payload = {};
-      if (process.env.GITHUB_EVENT_PATH) {
-        if (fs_1.existsSync(process.env.GITHUB_EVENT_PATH)) {
-          this.payload = JSON.parse(fs_1.readFileSync(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" }));
-        } else {
-          const path = process.env.GITHUB_EVENT_PATH;
-          process.stdout.write(`GITHUB_EVENT_PATH ${path} does not exist${os_1.EOL}`);
-        }
-      }
-      this.eventName = process.env.GITHUB_EVENT_NAME;
-      this.sha = process.env.GITHUB_SHA;
-      this.ref = process.env.GITHUB_REF;
-      this.workflow = process.env.GITHUB_WORKFLOW;
-      this.action = process.env.GITHUB_ACTION;
-      this.actor = process.env.GITHUB_ACTOR;
-      this.job = process.env.GITHUB_JOB;
-      this.runNumber = parseInt(process.env.GITHUB_RUN_NUMBER, 10);
-      this.runId = parseInt(process.env.GITHUB_RUN_ID, 10);
-      this.apiUrl = (_a = process.env.GITHUB_API_URL) !== null && _a !== undefined ? _a : `https://api.github.com`;
-      this.serverUrl = (_b = process.env.GITHUB_SERVER_URL) !== null && _b !== undefined ? _b : `https://github.com`;
-      this.graphqlUrl = (_c = process.env.GITHUB_GRAPHQL_URL) !== null && _c !== undefined ? _c : `https://api.github.com/graphql`;
-    }
-    get issue() {
-      const payload = this.payload;
-      return Object.assign(Object.assign({}, this.repo), { number: (payload.issue || payload.pull_request || payload).number });
-    }
-    get repo() {
-      if (process.env.GITHUB_REPOSITORY) {
-        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
-        return { owner, repo };
-      }
-      if (this.payload.repository) {
-        return {
-          owner: this.payload.repository.owner.login,
-          repo: this.payload.repository.name
-        };
-      }
-      throw new Error("context.repo requires a GITHUB_REPOSITORY environment variable like 'owner/repo'");
-    }
-  }
-  exports.Context = Context;
-});
-
-// node_modules/@actions/github/lib/internal/utils.js
-var require_utils3 = __commonJS((exports) => {
-  var getAuthString = function(token, options) {
-    if (!token && !options.auth) {
-      throw new Error("Parameter token or opts.auth is required");
-    } else if (token && options.auth) {
-      throw new Error("Parameters token and opts.auth may not both be specified");
-    }
-    return typeof options.auth === "string" ? options.auth : `token ${token}`;
-  };
-  var getProxyAgent = function(destinationUrl) {
-    const hc = new httpClient.HttpClient;
-    return hc.getAgent(destinationUrl);
-  };
-  var getApiBaseUrl = function() {
-    return process.env["GITHUB_API_URL"] || "https://api.github.com";
-  };
-  var __createBinding = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
-    if (k2 === undefined)
-      k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() {
-      return m[k];
-    } });
-  } : function(o, m, k, k2) {
-    if (k2 === undefined)
-      k2 = k;
-    o[k2] = m[k];
-  });
-  var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-  } : function(o, v) {
-    o["default"] = v;
-  });
-  var __importStar = exports && exports.__importStar || function(mod) {
-    if (mod && mod.__esModule)
-      return mod;
-    var result = {};
-    if (mod != null) {
-      for (var k in mod)
-        if (k !== "default" && Object.hasOwnProperty.call(mod, k))
-          __createBinding(result, mod, k);
-    }
-    __setModuleDefault(result, mod);
-    return result;
-  };
-  Object.defineProperty(exports, "__esModule", { value: true });
-  exports.getApiBaseUrl = exports.getProxyAgent = exports.getAuthString = undefined;
-  var httpClient = __importStar(require_lib());
-  exports.getAuthString = getAuthString;
-  exports.getProxyAgent = getProxyAgent;
-  exports.getApiBaseUrl = getApiBaseUrl;
-});
-
 // node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
-var require_dist_node11 = __commonJS((exports) => {
+var require_dist_node9 = __commonJS((exports) => {
   var ownKeys = function(object, enumerableOnly) {
     var keys = Object.keys(object);
     if (Object.getOwnPropertySymbols) {
@@ -7431,7 +7839,7 @@ var require_dist_node11 = __commonJS((exports) => {
 });
 
 // node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
-var require_dist_node12 = __commonJS((exports) => {
+var require_dist_node10 = __commonJS((exports) => {
   var ownKeys = function(object, enumerableOnly) {
     var keys = Object.keys(object);
     if (Object.getOwnPropertySymbols) {
@@ -7624,10 +8032,10 @@ var require_utils4 = __commonJS((exports) => {
   Object.defineProperty(exports, "__esModule", { value: true });
   exports.getOctokitOptions = exports.GitHub = exports.defaults = exports.context = undefined;
   var Context = __importStar(require_context());
-  var Utils = __importStar(require_utils3());
+  var Utils = __importStar(require_utils2());
   var core_1 = require_dist_node8();
-  var plugin_rest_endpoint_methods_1 = require_dist_node11();
-  var plugin_paginate_rest_1 = require_dist_node12();
+  var plugin_rest_endpoint_methods_1 = require_dist_node9();
+  var plugin_paginate_rest_1 = require_dist_node10();
   exports.context = new Context.Context;
   var baseUrl = Utils.getApiBaseUrl();
   exports.defaults = {
@@ -7778,6 +8186,2334 @@ var require_update_workspaces = __commonJS((exports, module) => {
     };
   };
   module.exports = updateWorkspaces;
+});
+
+// node_modules/semver/internal/constants.js
+var require_constants = __commonJS((exports, module) => {
+  var SEMVER_SPEC_VERSION = "2.0.0";
+  var MAX_LENGTH = 256;
+  var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || 9007199254740991;
+  var MAX_SAFE_COMPONENT_LENGTH = 16;
+  var MAX_SAFE_BUILD_LENGTH = MAX_LENGTH - 6;
+  var RELEASE_TYPES = [
+    "major",
+    "premajor",
+    "minor",
+    "preminor",
+    "patch",
+    "prepatch",
+    "prerelease"
+  ];
+  module.exports = {
+    MAX_LENGTH,
+    MAX_SAFE_COMPONENT_LENGTH,
+    MAX_SAFE_BUILD_LENGTH,
+    MAX_SAFE_INTEGER,
+    RELEASE_TYPES,
+    SEMVER_SPEC_VERSION,
+    FLAG_INCLUDE_PRERELEASE: 1,
+    FLAG_LOOSE: 2
+  };
+});
+
+// node_modules/semver/internal/debug.js
+var require_debug = __commonJS((exports, module) => {
+  var debug = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
+  };
+  module.exports = debug;
+});
+
+// node_modules/semver/internal/re.js
+var require_re = __commonJS((exports, module) => {
+  var {
+    MAX_SAFE_COMPONENT_LENGTH,
+    MAX_SAFE_BUILD_LENGTH,
+    MAX_LENGTH
+  } = require_constants();
+  var debug = require_debug();
+  exports = module.exports = {};
+  var re = exports.re = [];
+  var safeRe = exports.safeRe = [];
+  var src = exports.src = [];
+  var t = exports.t = {};
+  var R = 0;
+  var LETTERDASHNUMBER = "[a-zA-Z0-9-]";
+  var safeRegexReplacements = [
+    ["\\s", 1],
+    ["\\d", MAX_LENGTH],
+    [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH]
+  ];
+  var makeSafeRegex = (value) => {
+    for (const [token, max] of safeRegexReplacements) {
+      value = value.split(`${token}*`).join(`${token}{0,${max}}`).split(`${token}+`).join(`${token}{1,${max}}`);
+    }
+    return value;
+  };
+  var createToken = (name, value, isGlobal) => {
+    const safe = makeSafeRegex(value);
+    const index = R++;
+    debug(name, index, value);
+    t[name] = index;
+    src[index] = value;
+    re[index] = new RegExp(value, isGlobal ? "g" : undefined);
+    safeRe[index] = new RegExp(safe, isGlobal ? "g" : undefined);
+  };
+  createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
+  createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
+  createToken("NONNUMERICIDENTIFIER", `\\d*[a-zA-Z-]${LETTERDASHNUMBER}*`);
+  createToken("MAINVERSION", `(${src[t.NUMERICIDENTIFIER]})\\.` + `(${src[t.NUMERICIDENTIFIER]})\\.` + `(${src[t.NUMERICIDENTIFIER]})`);
+  createToken("MAINVERSIONLOOSE", `(${src[t.NUMERICIDENTIFIERLOOSE]})\\.` + `(${src[t.NUMERICIDENTIFIERLOOSE]})\\.` + `(${src[t.NUMERICIDENTIFIERLOOSE]})`);
+  createToken("PRERELEASEIDENTIFIER", `(?:${src[t.NUMERICIDENTIFIER]}|${src[t.NONNUMERICIDENTIFIER]})`);
+  createToken("PRERELEASEIDENTIFIERLOOSE", `(?:${src[t.NUMERICIDENTIFIERLOOSE]}|${src[t.NONNUMERICIDENTIFIER]})`);
+  createToken("PRERELEASE", `(?:-(${src[t.PRERELEASEIDENTIFIER]}(?:\\.${src[t.PRERELEASEIDENTIFIER]})*))`);
+  createToken("PRERELEASELOOSE", `(?:-?(${src[t.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t.PRERELEASEIDENTIFIERLOOSE]})*))`);
+  createToken("BUILDIDENTIFIER", `${LETTERDASHNUMBER}+`);
+  createToken("BUILD", `(?:\\+(${src[t.BUILDIDENTIFIER]}(?:\\.${src[t.BUILDIDENTIFIER]})*))`);
+  createToken("FULLPLAIN", `v?${src[t.MAINVERSION]}${src[t.PRERELEASE]}?${src[t.BUILD]}?`);
+  createToken("FULL", `^${src[t.FULLPLAIN]}\$`);
+  createToken("LOOSEPLAIN", `[v=\\s]*${src[t.MAINVERSIONLOOSE]}${src[t.PRERELEASELOOSE]}?${src[t.BUILD]}?`);
+  createToken("LOOSE", `^${src[t.LOOSEPLAIN]}\$`);
+  createToken("GTLT", "((?:<|>)?=?)");
+  createToken("XRANGEIDENTIFIERLOOSE", `${src[t.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
+  createToken("XRANGEIDENTIFIER", `${src[t.NUMERICIDENTIFIER]}|x|X|\\*`);
+  createToken("XRANGEPLAIN", `[v=\\s]*(${src[t.XRANGEIDENTIFIER]})` + `(?:\\.(${src[t.XRANGEIDENTIFIER]})` + `(?:\\.(${src[t.XRANGEIDENTIFIER]})` + `(?:${src[t.PRERELEASE]})?${src[t.BUILD]}?` + `)?)?`);
+  createToken("XRANGEPLAINLOOSE", `[v=\\s]*(${src[t.XRANGEIDENTIFIERLOOSE]})` + `(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})` + `(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})` + `(?:${src[t.PRERELEASELOOSE]})?${src[t.BUILD]}?` + `)?)?`);
+  createToken("XRANGE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAIN]}\$`);
+  createToken("XRANGELOOSE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAINLOOSE]}\$`);
+  createToken("COERCE", `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})` + `(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?` + `(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?` + `(?:\$|[^\\d])`);
+  createToken("COERCERTL", src[t.COERCE], true);
+  createToken("LONETILDE", "(?:~>?)");
+  createToken("TILDETRIM", `(\\s*)${src[t.LONETILDE]}\\s+`, true);
+  exports.tildeTrimReplace = "$1~";
+  createToken("TILDE", `^${src[t.LONETILDE]}${src[t.XRANGEPLAIN]}\$`);
+  createToken("TILDELOOSE", `^${src[t.LONETILDE]}${src[t.XRANGEPLAINLOOSE]}\$`);
+  createToken("LONECARET", "(?:\\^)");
+  createToken("CARETTRIM", `(\\s*)${src[t.LONECARET]}\\s+`, true);
+  exports.caretTrimReplace = "$1^";
+  createToken("CARET", `^${src[t.LONECARET]}${src[t.XRANGEPLAIN]}\$`);
+  createToken("CARETLOOSE", `^${src[t.LONECARET]}${src[t.XRANGEPLAINLOOSE]}\$`);
+  createToken("COMPARATORLOOSE", `^${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]})\$|^\$`);
+  createToken("COMPARATOR", `^${src[t.GTLT]}\\s*(${src[t.FULLPLAIN]})\$|^\$`);
+  createToken("COMPARATORTRIM", `(\\s*)${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]}|${src[t.XRANGEPLAIN]})`, true);
+  exports.comparatorTrimReplace = "$1$2$3";
+  createToken("HYPHENRANGE", `^\\s*(${src[t.XRANGEPLAIN]})` + `\\s+-\\s+` + `(${src[t.XRANGEPLAIN]})` + `\\s*\$`);
+  createToken("HYPHENRANGELOOSE", `^\\s*(${src[t.XRANGEPLAINLOOSE]})` + `\\s+-\\s+` + `(${src[t.XRANGEPLAINLOOSE]})` + `\\s*\$`);
+  createToken("STAR", "(<|>)?=?\\s*\\*");
+  createToken("GTE0", "^\\s*>=\\s*0\\.0\\.0\\s*$");
+  createToken("GTE0PRE", "^\\s*>=\\s*0\\.0\\.0-0\\s*$");
+});
+
+// node_modules/semver/internal/parse-options.js
+var require_parse_options = __commonJS((exports, module) => {
+  var looseOption = Object.freeze({ loose: true });
+  var emptyOpts = Object.freeze({});
+  var parseOptions = (options) => {
+    if (!options) {
+      return emptyOpts;
+    }
+    if (typeof options !== "object") {
+      return looseOption;
+    }
+    return options;
+  };
+  module.exports = parseOptions;
+});
+
+// node_modules/semver/internal/identifiers.js
+var require_identifiers = __commonJS((exports, module) => {
+  var numeric = /^[0-9]+$/;
+  var compareIdentifiers = (a, b) => {
+    const anum = numeric.test(a);
+    const bnum = numeric.test(b);
+    if (anum && bnum) {
+      a = +a;
+      b = +b;
+    }
+    return a === b ? 0 : anum && !bnum ? -1 : bnum && !anum ? 1 : a < b ? -1 : 1;
+  };
+  var rcompareIdentifiers = (a, b) => compareIdentifiers(b, a);
+  module.exports = {
+    compareIdentifiers,
+    rcompareIdentifiers
+  };
+});
+
+// node_modules/semver/classes/semver.js
+var require_semver = __commonJS((exports, module) => {
+  var debug = require_debug();
+  var { MAX_LENGTH, MAX_SAFE_INTEGER } = require_constants();
+  var { safeRe: re, t } = require_re();
+  var parseOptions = require_parse_options();
+  var { compareIdentifiers } = require_identifiers();
+
+  class SemVer {
+    constructor(version, options) {
+      options = parseOptions(options);
+      if (version instanceof SemVer) {
+        if (version.loose === !!options.loose && version.includePrerelease === !!options.includePrerelease) {
+          return version;
+        } else {
+          version = version.version;
+        }
+      } else if (typeof version !== "string") {
+        throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version}".`);
+      }
+      if (version.length > MAX_LENGTH) {
+        throw new TypeError(`version is longer than ${MAX_LENGTH} characters`);
+      }
+      debug("SemVer", version, options);
+      this.options = options;
+      this.loose = !!options.loose;
+      this.includePrerelease = !!options.includePrerelease;
+      const m = version.trim().match(options.loose ? re[t.LOOSE] : re[t.FULL]);
+      if (!m) {
+        throw new TypeError(`Invalid Version: ${version}`);
+      }
+      this.raw = version;
+      this.major = +m[1];
+      this.minor = +m[2];
+      this.patch = +m[3];
+      if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
+        throw new TypeError("Invalid major version");
+      }
+      if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
+        throw new TypeError("Invalid minor version");
+      }
+      if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
+        throw new TypeError("Invalid patch version");
+      }
+      if (!m[4]) {
+        this.prerelease = [];
+      } else {
+        this.prerelease = m[4].split(".").map((id) => {
+          if (/^[0-9]+$/.test(id)) {
+            const num = +id;
+            if (num >= 0 && num < MAX_SAFE_INTEGER) {
+              return num;
+            }
+          }
+          return id;
+        });
+      }
+      this.build = m[5] ? m[5].split(".") : [];
+      this.format();
+    }
+    format() {
+      this.version = `${this.major}.${this.minor}.${this.patch}`;
+      if (this.prerelease.length) {
+        this.version += `-${this.prerelease.join(".")}`;
+      }
+      return this.version;
+    }
+    toString() {
+      return this.version;
+    }
+    compare(other) {
+      debug("SemVer.compare", this.version, this.options, other);
+      if (!(other instanceof SemVer)) {
+        if (typeof other === "string" && other === this.version) {
+          return 0;
+        }
+        other = new SemVer(other, this.options);
+      }
+      if (other.version === this.version) {
+        return 0;
+      }
+      return this.compareMain(other) || this.comparePre(other);
+    }
+    compareMain(other) {
+      if (!(other instanceof SemVer)) {
+        other = new SemVer(other, this.options);
+      }
+      return compareIdentifiers(this.major, other.major) || compareIdentifiers(this.minor, other.minor) || compareIdentifiers(this.patch, other.patch);
+    }
+    comparePre(other) {
+      if (!(other instanceof SemVer)) {
+        other = new SemVer(other, this.options);
+      }
+      if (this.prerelease.length && !other.prerelease.length) {
+        return -1;
+      } else if (!this.prerelease.length && other.prerelease.length) {
+        return 1;
+      } else if (!this.prerelease.length && !other.prerelease.length) {
+        return 0;
+      }
+      let i = 0;
+      do {
+        const a = this.prerelease[i];
+        const b = other.prerelease[i];
+        debug("prerelease compare", i, a, b);
+        if (a === undefined && b === undefined) {
+          return 0;
+        } else if (b === undefined) {
+          return 1;
+        } else if (a === undefined) {
+          return -1;
+        } else if (a === b) {
+          continue;
+        } else {
+          return compareIdentifiers(a, b);
+        }
+      } while (++i);
+    }
+    compareBuild(other) {
+      if (!(other instanceof SemVer)) {
+        other = new SemVer(other, this.options);
+      }
+      let i = 0;
+      do {
+        const a = this.build[i];
+        const b = other.build[i];
+        debug("prerelease compare", i, a, b);
+        if (a === undefined && b === undefined) {
+          return 0;
+        } else if (b === undefined) {
+          return 1;
+        } else if (a === undefined) {
+          return -1;
+        } else if (a === b) {
+          continue;
+        } else {
+          return compareIdentifiers(a, b);
+        }
+      } while (++i);
+    }
+    inc(release, identifier, identifierBase) {
+      switch (release) {
+        case "premajor":
+          this.prerelease.length = 0;
+          this.patch = 0;
+          this.minor = 0;
+          this.major++;
+          this.inc("pre", identifier, identifierBase);
+          break;
+        case "preminor":
+          this.prerelease.length = 0;
+          this.patch = 0;
+          this.minor++;
+          this.inc("pre", identifier, identifierBase);
+          break;
+        case "prepatch":
+          this.prerelease.length = 0;
+          this.inc("patch", identifier, identifierBase);
+          this.inc("pre", identifier, identifierBase);
+          break;
+        case "prerelease":
+          if (this.prerelease.length === 0) {
+            this.inc("patch", identifier, identifierBase);
+          }
+          this.inc("pre", identifier, identifierBase);
+          break;
+        case "major":
+          if (this.minor !== 0 || this.patch !== 0 || this.prerelease.length === 0) {
+            this.major++;
+          }
+          this.minor = 0;
+          this.patch = 0;
+          this.prerelease = [];
+          break;
+        case "minor":
+          if (this.patch !== 0 || this.prerelease.length === 0) {
+            this.minor++;
+          }
+          this.patch = 0;
+          this.prerelease = [];
+          break;
+        case "patch":
+          if (this.prerelease.length === 0) {
+            this.patch++;
+          }
+          this.prerelease = [];
+          break;
+        case "pre": {
+          const base = Number(identifierBase) ? 1 : 0;
+          if (!identifier && identifierBase === false) {
+            throw new Error("invalid increment argument: identifier is empty");
+          }
+          if (this.prerelease.length === 0) {
+            this.prerelease = [base];
+          } else {
+            let i = this.prerelease.length;
+            while (--i >= 0) {
+              if (typeof this.prerelease[i] === "number") {
+                this.prerelease[i]++;
+                i = -2;
+              }
+            }
+            if (i === -1) {
+              if (identifier === this.prerelease.join(".") && identifierBase === false) {
+                throw new Error("invalid increment argument: identifier already exists");
+              }
+              this.prerelease.push(base);
+            }
+          }
+          if (identifier) {
+            let prerelease = [identifier, base];
+            if (identifierBase === false) {
+              prerelease = [identifier];
+            }
+            if (compareIdentifiers(this.prerelease[0], identifier) === 0) {
+              if (isNaN(this.prerelease[1])) {
+                this.prerelease = prerelease;
+              }
+            } else {
+              this.prerelease = prerelease;
+            }
+          }
+          break;
+        }
+        default:
+          throw new Error(`invalid increment argument: ${release}`);
+      }
+      this.raw = this.format();
+      if (this.build.length) {
+        this.raw += `+${this.build.join(".")}`;
+      }
+      return this;
+    }
+  }
+  module.exports = SemVer;
+});
+
+// node_modules/semver/functions/parse.js
+var require_parse2 = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var parse = (version, options, throwErrors = false) => {
+    if (version instanceof SemVer) {
+      return version;
+    }
+    try {
+      return new SemVer(version, options);
+    } catch (er) {
+      if (!throwErrors) {
+        return null;
+      }
+      throw er;
+    }
+  };
+  module.exports = parse;
+});
+
+// node_modules/semver/functions/valid.js
+var require_valid = __commonJS((exports, module) => {
+  var parse = require_parse2();
+  var valid = (version, options) => {
+    const v = parse(version, options);
+    return v ? v.version : null;
+  };
+  module.exports = valid;
+});
+
+// node_modules/semver/functions/clean.js
+var require_clean = __commonJS((exports, module) => {
+  var parse = require_parse2();
+  var clean = (version, options) => {
+    const s = parse(version.trim().replace(/^[=v]+/, ""), options);
+    return s ? s.version : null;
+  };
+  module.exports = clean;
+});
+
+// node_modules/semver/functions/inc.js
+var require_inc = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var inc = (version, release, options, identifier, identifierBase) => {
+    if (typeof options === "string") {
+      identifierBase = identifier;
+      identifier = options;
+      options = undefined;
+    }
+    try {
+      return new SemVer(version instanceof SemVer ? version.version : version, options).inc(release, identifier, identifierBase).version;
+    } catch (er) {
+      return null;
+    }
+  };
+  module.exports = inc;
+});
+
+// node_modules/semver/functions/diff.js
+var require_diff = __commonJS((exports, module) => {
+  var parse = require_parse2();
+  var diff = (version1, version2) => {
+    const v1 = parse(version1, null, true);
+    const v2 = parse(version2, null, true);
+    const comparison = v1.compare(v2);
+    if (comparison === 0) {
+      return null;
+    }
+    const v1Higher = comparison > 0;
+    const highVersion = v1Higher ? v1 : v2;
+    const lowVersion = v1Higher ? v2 : v1;
+    const highHasPre = !!highVersion.prerelease.length;
+    const lowHasPre = !!lowVersion.prerelease.length;
+    if (lowHasPre && !highHasPre) {
+      if (!lowVersion.patch && !lowVersion.minor) {
+        return "major";
+      }
+      if (highVersion.patch) {
+        return "patch";
+      }
+      if (highVersion.minor) {
+        return "minor";
+      }
+      return "major";
+    }
+    const prefix = highHasPre ? "pre" : "";
+    if (v1.major !== v2.major) {
+      return prefix + "major";
+    }
+    if (v1.minor !== v2.minor) {
+      return prefix + "minor";
+    }
+    if (v1.patch !== v2.patch) {
+      return prefix + "patch";
+    }
+    return "prerelease";
+  };
+  module.exports = diff;
+});
+
+// node_modules/semver/functions/major.js
+var require_major = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var major = (a, loose) => new SemVer(a, loose).major;
+  module.exports = major;
+});
+
+// node_modules/semver/functions/minor.js
+var require_minor = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var minor = (a, loose) => new SemVer(a, loose).minor;
+  module.exports = minor;
+});
+
+// node_modules/semver/functions/patch.js
+var require_patch = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var patch = (a, loose) => new SemVer(a, loose).patch;
+  module.exports = patch;
+});
+
+// node_modules/semver/functions/prerelease.js
+var require_prerelease = __commonJS((exports, module) => {
+  var parse = require_parse2();
+  var prerelease = (version, options) => {
+    const parsed = parse(version, options);
+    return parsed && parsed.prerelease.length ? parsed.prerelease : null;
+  };
+  module.exports = prerelease;
+});
+
+// node_modules/semver/functions/compare.js
+var require_compare = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var compare = (a, b, loose) => new SemVer(a, loose).compare(new SemVer(b, loose));
+  module.exports = compare;
+});
+
+// node_modules/semver/functions/rcompare.js
+var require_rcompare = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var rcompare = (a, b, loose) => compare(b, a, loose);
+  module.exports = rcompare;
+});
+
+// node_modules/semver/functions/compare-loose.js
+var require_compare_loose = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var compareLoose = (a, b) => compare(a, b, true);
+  module.exports = compareLoose;
+});
+
+// node_modules/semver/functions/compare-build.js
+var require_compare_build = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var compareBuild = (a, b, loose) => {
+    const versionA = new SemVer(a, loose);
+    const versionB = new SemVer(b, loose);
+    return versionA.compare(versionB) || versionA.compareBuild(versionB);
+  };
+  module.exports = compareBuild;
+});
+
+// node_modules/semver/functions/sort.js
+var require_sort = __commonJS((exports, module) => {
+  var compareBuild = require_compare_build();
+  var sort = (list, loose) => list.sort((a, b) => compareBuild(a, b, loose));
+  module.exports = sort;
+});
+
+// node_modules/semver/functions/rsort.js
+var require_rsort = __commonJS((exports, module) => {
+  var compareBuild = require_compare_build();
+  var rsort = (list, loose) => list.sort((a, b) => compareBuild(b, a, loose));
+  module.exports = rsort;
+});
+
+// node_modules/semver/functions/gt.js
+var require_gt = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var gt = (a, b, loose) => compare(a, b, loose) > 0;
+  module.exports = gt;
+});
+
+// node_modules/semver/functions/lt.js
+var require_lt = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var lt = (a, b, loose) => compare(a, b, loose) < 0;
+  module.exports = lt;
+});
+
+// node_modules/semver/functions/eq.js
+var require_eq = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var eq = (a, b, loose) => compare(a, b, loose) === 0;
+  module.exports = eq;
+});
+
+// node_modules/semver/functions/neq.js
+var require_neq = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var neq = (a, b, loose) => compare(a, b, loose) !== 0;
+  module.exports = neq;
+});
+
+// node_modules/semver/functions/gte.js
+var require_gte = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var gte = (a, b, loose) => compare(a, b, loose) >= 0;
+  module.exports = gte;
+});
+
+// node_modules/semver/functions/lte.js
+var require_lte = __commonJS((exports, module) => {
+  var compare = require_compare();
+  var lte = (a, b, loose) => compare(a, b, loose) <= 0;
+  module.exports = lte;
+});
+
+// node_modules/semver/functions/cmp.js
+var require_cmp = __commonJS((exports, module) => {
+  var eq = require_eq();
+  var neq = require_neq();
+  var gt = require_gt();
+  var gte = require_gte();
+  var lt = require_lt();
+  var lte = require_lte();
+  var cmp = (a, op, b, loose) => {
+    switch (op) {
+      case "===":
+        if (typeof a === "object") {
+          a = a.version;
+        }
+        if (typeof b === "object") {
+          b = b.version;
+        }
+        return a === b;
+      case "!==":
+        if (typeof a === "object") {
+          a = a.version;
+        }
+        if (typeof b === "object") {
+          b = b.version;
+        }
+        return a !== b;
+      case "":
+      case "=":
+      case "==":
+        return eq(a, b, loose);
+      case "!=":
+        return neq(a, b, loose);
+      case ">":
+        return gt(a, b, loose);
+      case ">=":
+        return gte(a, b, loose);
+      case "<":
+        return lt(a, b, loose);
+      case "<=":
+        return lte(a, b, loose);
+      default:
+        throw new TypeError(`Invalid operator: ${op}`);
+    }
+  };
+  module.exports = cmp;
+});
+
+// node_modules/semver/functions/coerce.js
+var require_coerce = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var parse = require_parse2();
+  var { safeRe: re, t } = require_re();
+  var coerce = (version, options) => {
+    if (version instanceof SemVer) {
+      return version;
+    }
+    if (typeof version === "number") {
+      version = String(version);
+    }
+    if (typeof version !== "string") {
+      return null;
+    }
+    options = options || {};
+    let match = null;
+    if (!options.rtl) {
+      match = version.match(re[t.COERCE]);
+    } else {
+      let next;
+      while ((next = re[t.COERCERTL].exec(version)) && (!match || match.index + match[0].length !== version.length)) {
+        if (!match || next.index + next[0].length !== match.index + match[0].length) {
+          match = next;
+        }
+        re[t.COERCERTL].lastIndex = next.index + next[1].length + next[2].length;
+      }
+      re[t.COERCERTL].lastIndex = -1;
+    }
+    if (match === null) {
+      return null;
+    }
+    return parse(`${match[2]}.${match[3] || "0"}.${match[4] || "0"}`, options);
+  };
+  module.exports = coerce;
+});
+
+// node_modules/yallist/iterator.js
+var require_iterator = __commonJS((exports, module) => {
+  module.exports = function(Yallist) {
+    Yallist.prototype[Symbol.iterator] = function* () {
+      for (let walker = this.head;walker; walker = walker.next) {
+        yield walker.value;
+      }
+    };
+  };
+});
+
+// node_modules/yallist/yallist.js
+var require_yallist = __commonJS((exports, module) => {
+  var Yallist = function(list) {
+    var self = this;
+    if (!(self instanceof Yallist)) {
+      self = new Yallist;
+    }
+    self.tail = null;
+    self.head = null;
+    self.length = 0;
+    if (list && typeof list.forEach === "function") {
+      list.forEach(function(item) {
+        self.push(item);
+      });
+    } else if (arguments.length > 0) {
+      for (var i = 0, l = arguments.length;i < l; i++) {
+        self.push(arguments[i]);
+      }
+    }
+    return self;
+  };
+  var insert = function(self, node, value) {
+    var inserted = node === self.head ? new Node(value, null, node, self) : new Node(value, node, node.next, self);
+    if (inserted.next === null) {
+      self.tail = inserted;
+    }
+    if (inserted.prev === null) {
+      self.head = inserted;
+    }
+    self.length++;
+    return inserted;
+  };
+  var push = function(self, item) {
+    self.tail = new Node(item, self.tail, null, self);
+    if (!self.head) {
+      self.head = self.tail;
+    }
+    self.length++;
+  };
+  var unshift = function(self, item) {
+    self.head = new Node(item, null, self.head, self);
+    if (!self.tail) {
+      self.tail = self.head;
+    }
+    self.length++;
+  };
+  var Node = function(value, prev, next, list) {
+    if (!(this instanceof Node)) {
+      return new Node(value, prev, next, list);
+    }
+    this.list = list;
+    this.value = value;
+    if (prev) {
+      prev.next = this;
+      this.prev = prev;
+    } else {
+      this.prev = null;
+    }
+    if (next) {
+      next.prev = this;
+      this.next = next;
+    } else {
+      this.next = null;
+    }
+  };
+  module.exports = Yallist;
+  Yallist.Node = Node;
+  Yallist.create = Yallist;
+  Yallist.prototype.removeNode = function(node) {
+    if (node.list !== this) {
+      throw new Error("removing node which does not belong to this list");
+    }
+    var next = node.next;
+    var prev = node.prev;
+    if (next) {
+      next.prev = prev;
+    }
+    if (prev) {
+      prev.next = next;
+    }
+    if (node === this.head) {
+      this.head = next;
+    }
+    if (node === this.tail) {
+      this.tail = prev;
+    }
+    node.list.length--;
+    node.next = null;
+    node.prev = null;
+    node.list = null;
+    return next;
+  };
+  Yallist.prototype.unshiftNode = function(node) {
+    if (node === this.head) {
+      return;
+    }
+    if (node.list) {
+      node.list.removeNode(node);
+    }
+    var head = this.head;
+    node.list = this;
+    node.next = head;
+    if (head) {
+      head.prev = node;
+    }
+    this.head = node;
+    if (!this.tail) {
+      this.tail = node;
+    }
+    this.length++;
+  };
+  Yallist.prototype.pushNode = function(node) {
+    if (node === this.tail) {
+      return;
+    }
+    if (node.list) {
+      node.list.removeNode(node);
+    }
+    var tail = this.tail;
+    node.list = this;
+    node.prev = tail;
+    if (tail) {
+      tail.next = node;
+    }
+    this.tail = node;
+    if (!this.head) {
+      this.head = node;
+    }
+    this.length++;
+  };
+  Yallist.prototype.push = function() {
+    for (var i = 0, l = arguments.length;i < l; i++) {
+      push(this, arguments[i]);
+    }
+    return this.length;
+  };
+  Yallist.prototype.unshift = function() {
+    for (var i = 0, l = arguments.length;i < l; i++) {
+      unshift(this, arguments[i]);
+    }
+    return this.length;
+  };
+  Yallist.prototype.pop = function() {
+    if (!this.tail) {
+      return;
+    }
+    var res = this.tail.value;
+    this.tail = this.tail.prev;
+    if (this.tail) {
+      this.tail.next = null;
+    } else {
+      this.head = null;
+    }
+    this.length--;
+    return res;
+  };
+  Yallist.prototype.shift = function() {
+    if (!this.head) {
+      return;
+    }
+    var res = this.head.value;
+    this.head = this.head.next;
+    if (this.head) {
+      this.head.prev = null;
+    } else {
+      this.tail = null;
+    }
+    this.length--;
+    return res;
+  };
+  Yallist.prototype.forEach = function(fn, thisp) {
+    thisp = thisp || this;
+    for (var walker = this.head, i = 0;walker !== null; i++) {
+      fn.call(thisp, walker.value, i, this);
+      walker = walker.next;
+    }
+  };
+  Yallist.prototype.forEachReverse = function(fn, thisp) {
+    thisp = thisp || this;
+    for (var walker = this.tail, i = this.length - 1;walker !== null; i--) {
+      fn.call(thisp, walker.value, i, this);
+      walker = walker.prev;
+    }
+  };
+  Yallist.prototype.get = function(n) {
+    for (var i = 0, walker = this.head;walker !== null && i < n; i++) {
+      walker = walker.next;
+    }
+    if (i === n && walker !== null) {
+      return walker.value;
+    }
+  };
+  Yallist.prototype.getReverse = function(n) {
+    for (var i = 0, walker = this.tail;walker !== null && i < n; i++) {
+      walker = walker.prev;
+    }
+    if (i === n && walker !== null) {
+      return walker.value;
+    }
+  };
+  Yallist.prototype.map = function(fn, thisp) {
+    thisp = thisp || this;
+    var res = new Yallist;
+    for (var walker = this.head;walker !== null; ) {
+      res.push(fn.call(thisp, walker.value, this));
+      walker = walker.next;
+    }
+    return res;
+  };
+  Yallist.prototype.mapReverse = function(fn, thisp) {
+    thisp = thisp || this;
+    var res = new Yallist;
+    for (var walker = this.tail;walker !== null; ) {
+      res.push(fn.call(thisp, walker.value, this));
+      walker = walker.prev;
+    }
+    return res;
+  };
+  Yallist.prototype.reduce = function(fn, initial) {
+    var acc;
+    var walker = this.head;
+    if (arguments.length > 1) {
+      acc = initial;
+    } else if (this.head) {
+      walker = this.head.next;
+      acc = this.head.value;
+    } else {
+      throw new TypeError("Reduce of empty list with no initial value");
+    }
+    for (var i = 0;walker !== null; i++) {
+      acc = fn(acc, walker.value, i);
+      walker = walker.next;
+    }
+    return acc;
+  };
+  Yallist.prototype.reduceReverse = function(fn, initial) {
+    var acc;
+    var walker = this.tail;
+    if (arguments.length > 1) {
+      acc = initial;
+    } else if (this.tail) {
+      walker = this.tail.prev;
+      acc = this.tail.value;
+    } else {
+      throw new TypeError("Reduce of empty list with no initial value");
+    }
+    for (var i = this.length - 1;walker !== null; i--) {
+      acc = fn(acc, walker.value, i);
+      walker = walker.prev;
+    }
+    return acc;
+  };
+  Yallist.prototype.toArray = function() {
+    var arr = new Array(this.length);
+    for (var i = 0, walker = this.head;walker !== null; i++) {
+      arr[i] = walker.value;
+      walker = walker.next;
+    }
+    return arr;
+  };
+  Yallist.prototype.toArrayReverse = function() {
+    var arr = new Array(this.length);
+    for (var i = 0, walker = this.tail;walker !== null; i++) {
+      arr[i] = walker.value;
+      walker = walker.prev;
+    }
+    return arr;
+  };
+  Yallist.prototype.slice = function(from, to) {
+    to = to || this.length;
+    if (to < 0) {
+      to += this.length;
+    }
+    from = from || 0;
+    if (from < 0) {
+      from += this.length;
+    }
+    var ret = new Yallist;
+    if (to < from || to < 0) {
+      return ret;
+    }
+    if (from < 0) {
+      from = 0;
+    }
+    if (to > this.length) {
+      to = this.length;
+    }
+    for (var i = 0, walker = this.head;walker !== null && i < from; i++) {
+      walker = walker.next;
+    }
+    for (;walker !== null && i < to; i++, walker = walker.next) {
+      ret.push(walker.value);
+    }
+    return ret;
+  };
+  Yallist.prototype.sliceReverse = function(from, to) {
+    to = to || this.length;
+    if (to < 0) {
+      to += this.length;
+    }
+    from = from || 0;
+    if (from < 0) {
+      from += this.length;
+    }
+    var ret = new Yallist;
+    if (to < from || to < 0) {
+      return ret;
+    }
+    if (from < 0) {
+      from = 0;
+    }
+    if (to > this.length) {
+      to = this.length;
+    }
+    for (var i = this.length, walker = this.tail;walker !== null && i > to; i--) {
+      walker = walker.prev;
+    }
+    for (;walker !== null && i > from; i--, walker = walker.prev) {
+      ret.push(walker.value);
+    }
+    return ret;
+  };
+  Yallist.prototype.splice = function(start, deleteCount, ...nodes) {
+    if (start > this.length) {
+      start = this.length - 1;
+    }
+    if (start < 0) {
+      start = this.length + start;
+    }
+    for (var i = 0, walker = this.head;walker !== null && i < start; i++) {
+      walker = walker.next;
+    }
+    var ret = [];
+    for (var i = 0;walker && i < deleteCount; i++) {
+      ret.push(walker.value);
+      walker = this.removeNode(walker);
+    }
+    if (walker === null) {
+      walker = this.tail;
+    }
+    if (walker !== this.head && walker !== this.tail) {
+      walker = walker.prev;
+    }
+    for (var i = 0;i < nodes.length; i++) {
+      walker = insert(this, walker, nodes[i]);
+    }
+    return ret;
+  };
+  Yallist.prototype.reverse = function() {
+    var head = this.head;
+    var tail = this.tail;
+    for (var walker = head;walker !== null; walker = walker.prev) {
+      var p = walker.prev;
+      walker.prev = walker.next;
+      walker.next = p;
+    }
+    this.head = tail;
+    this.tail = head;
+    return this;
+  };
+  try {
+    require_iterator()(Yallist);
+  } catch (er) {
+  }
+});
+
+// node_modules/lru-cache/index.js
+var require_lru_cache = __commonJS((exports, module) => {
+  var Yallist = require_yallist();
+  var MAX = Symbol("max");
+  var LENGTH = Symbol("length");
+  var LENGTH_CALCULATOR = Symbol("lengthCalculator");
+  var ALLOW_STALE = Symbol("allowStale");
+  var MAX_AGE = Symbol("maxAge");
+  var DISPOSE = Symbol("dispose");
+  var NO_DISPOSE_ON_SET = Symbol("noDisposeOnSet");
+  var LRU_LIST = Symbol("lruList");
+  var CACHE = Symbol("cache");
+  var UPDATE_AGE_ON_GET = Symbol("updateAgeOnGet");
+  var naiveLength = () => 1;
+
+  class LRUCache {
+    constructor(options) {
+      if (typeof options === "number")
+        options = { max: options };
+      if (!options)
+        options = {};
+      if (options.max && (typeof options.max !== "number" || options.max < 0))
+        throw new TypeError("max must be a non-negative number");
+      const max = this[MAX] = options.max || Infinity;
+      const lc = options.length || naiveLength;
+      this[LENGTH_CALCULATOR] = typeof lc !== "function" ? naiveLength : lc;
+      this[ALLOW_STALE] = options.stale || false;
+      if (options.maxAge && typeof options.maxAge !== "number")
+        throw new TypeError("maxAge must be a number");
+      this[MAX_AGE] = options.maxAge || 0;
+      this[DISPOSE] = options.dispose;
+      this[NO_DISPOSE_ON_SET] = options.noDisposeOnSet || false;
+      this[UPDATE_AGE_ON_GET] = options.updateAgeOnGet || false;
+      this.reset();
+    }
+    set max(mL) {
+      if (typeof mL !== "number" || mL < 0)
+        throw new TypeError("max must be a non-negative number");
+      this[MAX] = mL || Infinity;
+      trim(this);
+    }
+    get max() {
+      return this[MAX];
+    }
+    set allowStale(allowStale) {
+      this[ALLOW_STALE] = !!allowStale;
+    }
+    get allowStale() {
+      return this[ALLOW_STALE];
+    }
+    set maxAge(mA) {
+      if (typeof mA !== "number")
+        throw new TypeError("maxAge must be a non-negative number");
+      this[MAX_AGE] = mA;
+      trim(this);
+    }
+    get maxAge() {
+      return this[MAX_AGE];
+    }
+    set lengthCalculator(lC) {
+      if (typeof lC !== "function")
+        lC = naiveLength;
+      if (lC !== this[LENGTH_CALCULATOR]) {
+        this[LENGTH_CALCULATOR] = lC;
+        this[LENGTH] = 0;
+        this[LRU_LIST].forEach((hit) => {
+          hit.length = this[LENGTH_CALCULATOR](hit.value, hit.key);
+          this[LENGTH] += hit.length;
+        });
+      }
+      trim(this);
+    }
+    get lengthCalculator() {
+      return this[LENGTH_CALCULATOR];
+    }
+    get length() {
+      return this[LENGTH];
+    }
+    get itemCount() {
+      return this[LRU_LIST].length;
+    }
+    rforEach(fn, thisp) {
+      thisp = thisp || this;
+      for (let walker = this[LRU_LIST].tail;walker !== null; ) {
+        const prev = walker.prev;
+        forEachStep(this, fn, walker, thisp);
+        walker = prev;
+      }
+    }
+    forEach(fn, thisp) {
+      thisp = thisp || this;
+      for (let walker = this[LRU_LIST].head;walker !== null; ) {
+        const next = walker.next;
+        forEachStep(this, fn, walker, thisp);
+        walker = next;
+      }
+    }
+    keys() {
+      return this[LRU_LIST].toArray().map((k) => k.key);
+    }
+    values() {
+      return this[LRU_LIST].toArray().map((k) => k.value);
+    }
+    reset() {
+      if (this[DISPOSE] && this[LRU_LIST] && this[LRU_LIST].length) {
+        this[LRU_LIST].forEach((hit) => this[DISPOSE](hit.key, hit.value));
+      }
+      this[CACHE] = new Map;
+      this[LRU_LIST] = new Yallist;
+      this[LENGTH] = 0;
+    }
+    dump() {
+      return this[LRU_LIST].map((hit) => isStale(this, hit) ? false : {
+        k: hit.key,
+        v: hit.value,
+        e: hit.now + (hit.maxAge || 0)
+      }).toArray().filter((h) => h);
+    }
+    dumpLru() {
+      return this[LRU_LIST];
+    }
+    set(key, value, maxAge) {
+      maxAge = maxAge || this[MAX_AGE];
+      if (maxAge && typeof maxAge !== "number")
+        throw new TypeError("maxAge must be a number");
+      const now = maxAge ? Date.now() : 0;
+      const len = this[LENGTH_CALCULATOR](value, key);
+      if (this[CACHE].has(key)) {
+        if (len > this[MAX]) {
+          del(this, this[CACHE].get(key));
+          return false;
+        }
+        const node = this[CACHE].get(key);
+        const item = node.value;
+        if (this[DISPOSE]) {
+          if (!this[NO_DISPOSE_ON_SET])
+            this[DISPOSE](key, item.value);
+        }
+        item.now = now;
+        item.maxAge = maxAge;
+        item.value = value;
+        this[LENGTH] += len - item.length;
+        item.length = len;
+        this.get(key);
+        trim(this);
+        return true;
+      }
+      const hit = new Entry(key, value, len, now, maxAge);
+      if (hit.length > this[MAX]) {
+        if (this[DISPOSE])
+          this[DISPOSE](key, value);
+        return false;
+      }
+      this[LENGTH] += hit.length;
+      this[LRU_LIST].unshift(hit);
+      this[CACHE].set(key, this[LRU_LIST].head);
+      trim(this);
+      return true;
+    }
+    has(key) {
+      if (!this[CACHE].has(key))
+        return false;
+      const hit = this[CACHE].get(key).value;
+      return !isStale(this, hit);
+    }
+    get(key) {
+      return get(this, key, true);
+    }
+    peek(key) {
+      return get(this, key, false);
+    }
+    pop() {
+      const node = this[LRU_LIST].tail;
+      if (!node)
+        return null;
+      del(this, node);
+      return node.value;
+    }
+    del(key) {
+      del(this, this[CACHE].get(key));
+    }
+    load(arr) {
+      this.reset();
+      const now = Date.now();
+      for (let l = arr.length - 1;l >= 0; l--) {
+        const hit = arr[l];
+        const expiresAt = hit.e || 0;
+        if (expiresAt === 0)
+          this.set(hit.k, hit.v);
+        else {
+          const maxAge = expiresAt - now;
+          if (maxAge > 0) {
+            this.set(hit.k, hit.v, maxAge);
+          }
+        }
+      }
+    }
+    prune() {
+      this[CACHE].forEach((value, key) => get(this, key, false));
+    }
+  }
+  var get = (self, key, doUse) => {
+    const node = self[CACHE].get(key);
+    if (node) {
+      const hit = node.value;
+      if (isStale(self, hit)) {
+        del(self, node);
+        if (!self[ALLOW_STALE])
+          return;
+      } else {
+        if (doUse) {
+          if (self[UPDATE_AGE_ON_GET])
+            node.value.now = Date.now();
+          self[LRU_LIST].unshiftNode(node);
+        }
+      }
+      return hit.value;
+    }
+  };
+  var isStale = (self, hit) => {
+    if (!hit || !hit.maxAge && !self[MAX_AGE])
+      return false;
+    const diff = Date.now() - hit.now;
+    return hit.maxAge ? diff > hit.maxAge : self[MAX_AGE] && diff > self[MAX_AGE];
+  };
+  var trim = (self) => {
+    if (self[LENGTH] > self[MAX]) {
+      for (let walker = self[LRU_LIST].tail;self[LENGTH] > self[MAX] && walker !== null; ) {
+        const prev = walker.prev;
+        del(self, walker);
+        walker = prev;
+      }
+    }
+  };
+  var del = (self, node) => {
+    if (node) {
+      const hit = node.value;
+      if (self[DISPOSE])
+        self[DISPOSE](hit.key, hit.value);
+      self[LENGTH] -= hit.length;
+      self[CACHE].delete(hit.key);
+      self[LRU_LIST].removeNode(node);
+    }
+  };
+
+  class Entry {
+    constructor(key, value, length, now, maxAge) {
+      this.key = key;
+      this.value = value;
+      this.length = length;
+      this.now = now;
+      this.maxAge = maxAge || 0;
+    }
+  }
+  var forEachStep = (self, fn, node, thisp) => {
+    let hit = node.value;
+    if (isStale(self, hit)) {
+      del(self, node);
+      if (!self[ALLOW_STALE])
+        hit = undefined;
+    }
+    if (hit)
+      fn.call(thisp, hit.value, hit.key, self);
+  };
+  module.exports = LRUCache;
+});
+
+// node_modules/semver/classes/range.js
+var require_range = __commonJS((exports, module) => {
+  class Range {
+    constructor(range, options) {
+      options = parseOptions(options);
+      if (range instanceof Range) {
+        if (range.loose === !!options.loose && range.includePrerelease === !!options.includePrerelease) {
+          return range;
+        } else {
+          return new Range(range.raw, options);
+        }
+      }
+      if (range instanceof Comparator) {
+        this.raw = range.value;
+        this.set = [[range]];
+        this.format();
+        return this;
+      }
+      this.options = options;
+      this.loose = !!options.loose;
+      this.includePrerelease = !!options.includePrerelease;
+      this.raw = range.trim().split(/\s+/).join(" ");
+      this.set = this.raw.split("||").map((r) => this.parseRange(r.trim())).filter((c) => c.length);
+      if (!this.set.length) {
+        throw new TypeError(`Invalid SemVer Range: ${this.raw}`);
+      }
+      if (this.set.length > 1) {
+        const first = this.set[0];
+        this.set = this.set.filter((c) => !isNullSet(c[0]));
+        if (this.set.length === 0) {
+          this.set = [first];
+        } else if (this.set.length > 1) {
+          for (const c of this.set) {
+            if (c.length === 1 && isAny(c[0])) {
+              this.set = [c];
+              break;
+            }
+          }
+        }
+      }
+      this.format();
+    }
+    format() {
+      this.range = this.set.map((comps) => comps.join(" ").trim()).join("||").trim();
+      return this.range;
+    }
+    toString() {
+      return this.range;
+    }
+    parseRange(range) {
+      const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
+      const memoKey = memoOpts + ":" + range;
+      const cached = cache.get(memoKey);
+      if (cached) {
+        return cached;
+      }
+      const loose = this.options.loose;
+      const hr = loose ? re[t.HYPHENRANGELOOSE] : re[t.HYPHENRANGE];
+      range = range.replace(hr, hyphenReplace(this.options.includePrerelease));
+      debug("hyphen replace", range);
+      range = range.replace(re[t.COMPARATORTRIM], comparatorTrimReplace);
+      debug("comparator trim", range);
+      range = range.replace(re[t.TILDETRIM], tildeTrimReplace);
+      debug("tilde trim", range);
+      range = range.replace(re[t.CARETTRIM], caretTrimReplace);
+      debug("caret trim", range);
+      let rangeList = range.split(" ").map((comp) => parseComparator(comp, this.options)).join(" ").split(/\s+/).map((comp) => replaceGTE0(comp, this.options));
+      if (loose) {
+        rangeList = rangeList.filter((comp) => {
+          debug("loose invalid filter", comp, this.options);
+          return !!comp.match(re[t.COMPARATORLOOSE]);
+        });
+      }
+      debug("range list", rangeList);
+      const rangeMap = new Map;
+      const comparators = rangeList.map((comp) => new Comparator(comp, this.options));
+      for (const comp of comparators) {
+        if (isNullSet(comp)) {
+          return [comp];
+        }
+        rangeMap.set(comp.value, comp);
+      }
+      if (rangeMap.size > 1 && rangeMap.has("")) {
+        rangeMap.delete("");
+      }
+      const result = [...rangeMap.values()];
+      cache.set(memoKey, result);
+      return result;
+    }
+    intersects(range, options) {
+      if (!(range instanceof Range)) {
+        throw new TypeError("a Range is required");
+      }
+      return this.set.some((thisComparators) => {
+        return isSatisfiable(thisComparators, options) && range.set.some((rangeComparators) => {
+          return isSatisfiable(rangeComparators, options) && thisComparators.every((thisComparator) => {
+            return rangeComparators.every((rangeComparator) => {
+              return thisComparator.intersects(rangeComparator, options);
+            });
+          });
+        });
+      });
+    }
+    test(version) {
+      if (!version) {
+        return false;
+      }
+      if (typeof version === "string") {
+        try {
+          version = new SemVer(version, this.options);
+        } catch (er) {
+          return false;
+        }
+      }
+      for (let i = 0;i < this.set.length; i++) {
+        if (testSet(this.set[i], version, this.options)) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+  module.exports = Range;
+  var LRU = require_lru_cache();
+  var cache = new LRU({ max: 1000 });
+  var parseOptions = require_parse_options();
+  var Comparator = require_comparator();
+  var debug = require_debug();
+  var SemVer = require_semver();
+  var {
+    safeRe: re,
+    t,
+    comparatorTrimReplace,
+    tildeTrimReplace,
+    caretTrimReplace
+  } = require_re();
+  var { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = require_constants();
+  var isNullSet = (c) => c.value === "<0.0.0-0";
+  var isAny = (c) => c.value === "";
+  var isSatisfiable = (comparators, options) => {
+    let result = true;
+    const remainingComparators = comparators.slice();
+    let testComparator = remainingComparators.pop();
+    while (result && remainingComparators.length) {
+      result = remainingComparators.every((otherComparator) => {
+        return testComparator.intersects(otherComparator, options);
+      });
+      testComparator = remainingComparators.pop();
+    }
+    return result;
+  };
+  var parseComparator = (comp, options) => {
+    debug("comp", comp, options);
+    comp = replaceCarets(comp, options);
+    debug("caret", comp);
+    comp = replaceTildes(comp, options);
+    debug("tildes", comp);
+    comp = replaceXRanges(comp, options);
+    debug("xrange", comp);
+    comp = replaceStars(comp, options);
+    debug("stars", comp);
+    return comp;
+  };
+  var isX = (id) => !id || id.toLowerCase() === "x" || id === "*";
+  var replaceTildes = (comp, options) => {
+    return comp.trim().split(/\s+/).map((c) => replaceTilde(c, options)).join(" ");
+  };
+  var replaceTilde = (comp, options) => {
+    const r = options.loose ? re[t.TILDELOOSE] : re[t.TILDE];
+    return comp.replace(r, (_, M, m, p, pr) => {
+      debug("tilde", comp, _, M, m, p, pr);
+      let ret;
+      if (isX(M)) {
+        ret = "";
+      } else if (isX(m)) {
+        ret = `>=${M}.0.0 <${+M + 1}.0.0-0`;
+      } else if (isX(p)) {
+        ret = `>=${M}.${m}.0 <${M}.${+m + 1}.0-0`;
+      } else if (pr) {
+        debug("replaceTilde pr", pr);
+        ret = `>=${M}.${m}.${p}-${pr} <${M}.${+m + 1}.0-0`;
+      } else {
+        ret = `>=${M}.${m}.${p} <${M}.${+m + 1}.0-0`;
+      }
+      debug("tilde return", ret);
+      return ret;
+    });
+  };
+  var replaceCarets = (comp, options) => {
+    return comp.trim().split(/\s+/).map((c) => replaceCaret(c, options)).join(" ");
+  };
+  var replaceCaret = (comp, options) => {
+    debug("caret", comp, options);
+    const r = options.loose ? re[t.CARETLOOSE] : re[t.CARET];
+    const z = options.includePrerelease ? "-0" : "";
+    return comp.replace(r, (_, M, m, p, pr) => {
+      debug("caret", comp, _, M, m, p, pr);
+      let ret;
+      if (isX(M)) {
+        ret = "";
+      } else if (isX(m)) {
+        ret = `>=${M}.0.0${z} <${+M + 1}.0.0-0`;
+      } else if (isX(p)) {
+        if (M === "0") {
+          ret = `>=${M}.${m}.0${z} <${M}.${+m + 1}.0-0`;
+        } else {
+          ret = `>=${M}.${m}.0${z} <${+M + 1}.0.0-0`;
+        }
+      } else if (pr) {
+        debug("replaceCaret pr", pr);
+        if (M === "0") {
+          if (m === "0") {
+            ret = `>=${M}.${m}.${p}-${pr} <${M}.${m}.${+p + 1}-0`;
+          } else {
+            ret = `>=${M}.${m}.${p}-${pr} <${M}.${+m + 1}.0-0`;
+          }
+        } else {
+          ret = `>=${M}.${m}.${p}-${pr} <${+M + 1}.0.0-0`;
+        }
+      } else {
+        debug("no pr");
+        if (M === "0") {
+          if (m === "0") {
+            ret = `>=${M}.${m}.${p}${z} <${M}.${m}.${+p + 1}-0`;
+          } else {
+            ret = `>=${M}.${m}.${p}${z} <${M}.${+m + 1}.0-0`;
+          }
+        } else {
+          ret = `>=${M}.${m}.${p} <${+M + 1}.0.0-0`;
+        }
+      }
+      debug("caret return", ret);
+      return ret;
+    });
+  };
+  var replaceXRanges = (comp, options) => {
+    debug("replaceXRanges", comp, options);
+    return comp.split(/\s+/).map((c) => replaceXRange(c, options)).join(" ");
+  };
+  var replaceXRange = (comp, options) => {
+    comp = comp.trim();
+    const r = options.loose ? re[t.XRANGELOOSE] : re[t.XRANGE];
+    return comp.replace(r, (ret, gtlt, M, m, p, pr) => {
+      debug("xRange", comp, ret, gtlt, M, m, p, pr);
+      const xM = isX(M);
+      const xm = xM || isX(m);
+      const xp = xm || isX(p);
+      const anyX = xp;
+      if (gtlt === "=" && anyX) {
+        gtlt = "";
+      }
+      pr = options.includePrerelease ? "-0" : "";
+      if (xM) {
+        if (gtlt === ">" || gtlt === "<") {
+          ret = "<0.0.0-0";
+        } else {
+          ret = "*";
+        }
+      } else if (gtlt && anyX) {
+        if (xm) {
+          m = 0;
+        }
+        p = 0;
+        if (gtlt === ">") {
+          gtlt = ">=";
+          if (xm) {
+            M = +M + 1;
+            m = 0;
+            p = 0;
+          } else {
+            m = +m + 1;
+            p = 0;
+          }
+        } else if (gtlt === "<=") {
+          gtlt = "<";
+          if (xm) {
+            M = +M + 1;
+          } else {
+            m = +m + 1;
+          }
+        }
+        if (gtlt === "<") {
+          pr = "-0";
+        }
+        ret = `${gtlt + M}.${m}.${p}${pr}`;
+      } else if (xm) {
+        ret = `>=${M}.0.0${pr} <${+M + 1}.0.0-0`;
+      } else if (xp) {
+        ret = `>=${M}.${m}.0${pr} <${M}.${+m + 1}.0-0`;
+      }
+      debug("xRange return", ret);
+      return ret;
+    });
+  };
+  var replaceStars = (comp, options) => {
+    debug("replaceStars", comp, options);
+    return comp.trim().replace(re[t.STAR], "");
+  };
+  var replaceGTE0 = (comp, options) => {
+    debug("replaceGTE0", comp, options);
+    return comp.trim().replace(re[options.includePrerelease ? t.GTE0PRE : t.GTE0], "");
+  };
+  var hyphenReplace = (incPr) => ($0, from, fM, fm, fp, fpr, fb, to, tM, tm, tp, tpr, tb) => {
+    if (isX(fM)) {
+      from = "";
+    } else if (isX(fm)) {
+      from = `>=${fM}.0.0${incPr ? "-0" : ""}`;
+    } else if (isX(fp)) {
+      from = `>=${fM}.${fm}.0${incPr ? "-0" : ""}`;
+    } else if (fpr) {
+      from = `>=${from}`;
+    } else {
+      from = `>=${from}${incPr ? "-0" : ""}`;
+    }
+    if (isX(tM)) {
+      to = "";
+    } else if (isX(tm)) {
+      to = `<${+tM + 1}.0.0-0`;
+    } else if (isX(tp)) {
+      to = `<${tM}.${+tm + 1}.0-0`;
+    } else if (tpr) {
+      to = `<=${tM}.${tm}.${tp}-${tpr}`;
+    } else if (incPr) {
+      to = `<${tM}.${tm}.${+tp + 1}-0`;
+    } else {
+      to = `<=${to}`;
+    }
+    return `${from} ${to}`.trim();
+  };
+  var testSet = (set, version, options) => {
+    for (let i = 0;i < set.length; i++) {
+      if (!set[i].test(version)) {
+        return false;
+      }
+    }
+    if (version.prerelease.length && !options.includePrerelease) {
+      for (let i = 0;i < set.length; i++) {
+        debug(set[i].semver);
+        if (set[i].semver === Comparator.ANY) {
+          continue;
+        }
+        if (set[i].semver.prerelease.length > 0) {
+          const allowed = set[i].semver;
+          if (allowed.major === version.major && allowed.minor === version.minor && allowed.patch === version.patch) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    return true;
+  };
+});
+
+// node_modules/semver/classes/comparator.js
+var require_comparator = __commonJS((exports, module) => {
+  var ANY = Symbol("SemVer ANY");
+
+  class Comparator {
+    static get ANY() {
+      return ANY;
+    }
+    constructor(comp, options) {
+      options = parseOptions(options);
+      if (comp instanceof Comparator) {
+        if (comp.loose === !!options.loose) {
+          return comp;
+        } else {
+          comp = comp.value;
+        }
+      }
+      comp = comp.trim().split(/\s+/).join(" ");
+      debug("comparator", comp, options);
+      this.options = options;
+      this.loose = !!options.loose;
+      this.parse(comp);
+      if (this.semver === ANY) {
+        this.value = "";
+      } else {
+        this.value = this.operator + this.semver.version;
+      }
+      debug("comp", this);
+    }
+    parse(comp) {
+      const r = this.options.loose ? re[t.COMPARATORLOOSE] : re[t.COMPARATOR];
+      const m = comp.match(r);
+      if (!m) {
+        throw new TypeError(`Invalid comparator: ${comp}`);
+      }
+      this.operator = m[1] !== undefined ? m[1] : "";
+      if (this.operator === "=") {
+        this.operator = "";
+      }
+      if (!m[2]) {
+        this.semver = ANY;
+      } else {
+        this.semver = new SemVer(m[2], this.options.loose);
+      }
+    }
+    toString() {
+      return this.value;
+    }
+    test(version) {
+      debug("Comparator.test", version, this.options.loose);
+      if (this.semver === ANY || version === ANY) {
+        return true;
+      }
+      if (typeof version === "string") {
+        try {
+          version = new SemVer(version, this.options);
+        } catch (er) {
+          return false;
+        }
+      }
+      return cmp(version, this.operator, this.semver, this.options);
+    }
+    intersects(comp, options) {
+      if (!(comp instanceof Comparator)) {
+        throw new TypeError("a Comparator is required");
+      }
+      if (this.operator === "") {
+        if (this.value === "") {
+          return true;
+        }
+        return new Range(comp.value, options).test(this.value);
+      } else if (comp.operator === "") {
+        if (comp.value === "") {
+          return true;
+        }
+        return new Range(this.value, options).test(comp.semver);
+      }
+      options = parseOptions(options);
+      if (options.includePrerelease && (this.value === "<0.0.0-0" || comp.value === "<0.0.0-0")) {
+        return false;
+      }
+      if (!options.includePrerelease && (this.value.startsWith("<0.0.0") || comp.value.startsWith("<0.0.0"))) {
+        return false;
+      }
+      if (this.operator.startsWith(">") && comp.operator.startsWith(">")) {
+        return true;
+      }
+      if (this.operator.startsWith("<") && comp.operator.startsWith("<")) {
+        return true;
+      }
+      if (this.semver.version === comp.semver.version && this.operator.includes("=") && comp.operator.includes("=")) {
+        return true;
+      }
+      if (cmp(this.semver, "<", comp.semver, options) && this.operator.startsWith(">") && comp.operator.startsWith("<")) {
+        return true;
+      }
+      if (cmp(this.semver, ">", comp.semver, options) && this.operator.startsWith("<") && comp.operator.startsWith(">")) {
+        return true;
+      }
+      return false;
+    }
+  }
+  module.exports = Comparator;
+  var parseOptions = require_parse_options();
+  var { safeRe: re, t } = require_re();
+  var cmp = require_cmp();
+  var debug = require_debug();
+  var SemVer = require_semver();
+  var Range = require_range();
+});
+
+// node_modules/semver/functions/satisfies.js
+var require_satisfies = __commonJS((exports, module) => {
+  var Range = require_range();
+  var satisfies = (version, range, options) => {
+    try {
+      range = new Range(range, options);
+    } catch (er) {
+      return false;
+    }
+    return range.test(version);
+  };
+  module.exports = satisfies;
+});
+
+// node_modules/semver/ranges/to-comparators.js
+var require_to_comparators = __commonJS((exports, module) => {
+  var Range = require_range();
+  var toComparators = (range, options) => new Range(range, options).set.map((comp) => comp.map((c) => c.value).join(" ").trim().split(" "));
+  module.exports = toComparators;
+});
+
+// node_modules/semver/ranges/max-satisfying.js
+var require_max_satisfying = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var Range = require_range();
+  var maxSatisfying = (versions, range, options) => {
+    let max = null;
+    let maxSV = null;
+    let rangeObj = null;
+    try {
+      rangeObj = new Range(range, options);
+    } catch (er) {
+      return null;
+    }
+    versions.forEach((v) => {
+      if (rangeObj.test(v)) {
+        if (!max || maxSV.compare(v) === -1) {
+          max = v;
+          maxSV = new SemVer(max, options);
+        }
+      }
+    });
+    return max;
+  };
+  module.exports = maxSatisfying;
+});
+
+// node_modules/semver/ranges/min-satisfying.js
+var require_min_satisfying = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var Range = require_range();
+  var minSatisfying = (versions, range, options) => {
+    let min = null;
+    let minSV = null;
+    let rangeObj = null;
+    try {
+      rangeObj = new Range(range, options);
+    } catch (er) {
+      return null;
+    }
+    versions.forEach((v) => {
+      if (rangeObj.test(v)) {
+        if (!min || minSV.compare(v) === 1) {
+          min = v;
+          minSV = new SemVer(min, options);
+        }
+      }
+    });
+    return min;
+  };
+  module.exports = minSatisfying;
+});
+
+// node_modules/semver/ranges/min-version.js
+var require_min_version = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var Range = require_range();
+  var gt = require_gt();
+  var minVersion = (range, loose) => {
+    range = new Range(range, loose);
+    let minver = new SemVer("0.0.0");
+    if (range.test(minver)) {
+      return minver;
+    }
+    minver = new SemVer("0.0.0-0");
+    if (range.test(minver)) {
+      return minver;
+    }
+    minver = null;
+    for (let i = 0;i < range.set.length; ++i) {
+      const comparators = range.set[i];
+      let setMin = null;
+      comparators.forEach((comparator) => {
+        const compver = new SemVer(comparator.semver.version);
+        switch (comparator.operator) {
+          case ">":
+            if (compver.prerelease.length === 0) {
+              compver.patch++;
+            } else {
+              compver.prerelease.push(0);
+            }
+            compver.raw = compver.format();
+          case "":
+          case ">=":
+            if (!setMin || gt(compver, setMin)) {
+              setMin = compver;
+            }
+            break;
+          case "<":
+          case "<=":
+            break;
+          default:
+            throw new Error(`Unexpected operation: ${comparator.operator}`);
+        }
+      });
+      if (setMin && (!minver || gt(minver, setMin))) {
+        minver = setMin;
+      }
+    }
+    if (minver && range.test(minver)) {
+      return minver;
+    }
+    return null;
+  };
+  module.exports = minVersion;
+});
+
+// node_modules/semver/ranges/valid.js
+var require_valid2 = __commonJS((exports, module) => {
+  var Range = require_range();
+  var validRange = (range, options) => {
+    try {
+      return new Range(range, options).range || "*";
+    } catch (er) {
+      return null;
+    }
+  };
+  module.exports = validRange;
+});
+
+// node_modules/semver/ranges/outside.js
+var require_outside = __commonJS((exports, module) => {
+  var SemVer = require_semver();
+  var Comparator = require_comparator();
+  var { ANY } = Comparator;
+  var Range = require_range();
+  var satisfies = require_satisfies();
+  var gt = require_gt();
+  var lt = require_lt();
+  var lte = require_lte();
+  var gte = require_gte();
+  var outside = (version, range, hilo, options) => {
+    version = new SemVer(version, options);
+    range = new Range(range, options);
+    let gtfn, ltefn, ltfn, comp, ecomp;
+    switch (hilo) {
+      case ">":
+        gtfn = gt;
+        ltefn = lte;
+        ltfn = lt;
+        comp = ">";
+        ecomp = ">=";
+        break;
+      case "<":
+        gtfn = lt;
+        ltefn = gte;
+        ltfn = gt;
+        comp = "<";
+        ecomp = "<=";
+        break;
+      default:
+        throw new TypeError('Must provide a hilo val of "<" or ">"');
+    }
+    if (satisfies(version, range, options)) {
+      return false;
+    }
+    for (let i = 0;i < range.set.length; ++i) {
+      const comparators = range.set[i];
+      let high = null;
+      let low = null;
+      comparators.forEach((comparator) => {
+        if (comparator.semver === ANY) {
+          comparator = new Comparator(">=0.0.0");
+        }
+        high = high || comparator;
+        low = low || comparator;
+        if (gtfn(comparator.semver, high.semver, options)) {
+          high = comparator;
+        } else if (ltfn(comparator.semver, low.semver, options)) {
+          low = comparator;
+        }
+      });
+      if (high.operator === comp || high.operator === ecomp) {
+        return false;
+      }
+      if ((!low.operator || low.operator === comp) && ltefn(version, low.semver)) {
+        return false;
+      } else if (low.operator === ecomp && ltfn(version, low.semver)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  module.exports = outside;
+});
+
+// node_modules/semver/ranges/gtr.js
+var require_gtr = __commonJS((exports, module) => {
+  var outside = require_outside();
+  var gtr = (version, range, options) => outside(version, range, ">", options);
+  module.exports = gtr;
+});
+
+// node_modules/semver/ranges/ltr.js
+var require_ltr = __commonJS((exports, module) => {
+  var outside = require_outside();
+  var ltr = (version, range, options) => outside(version, range, "<", options);
+  module.exports = ltr;
+});
+
+// node_modules/semver/ranges/intersects.js
+var require_intersects = __commonJS((exports, module) => {
+  var Range = require_range();
+  var intersects = (r1, r2, options) => {
+    r1 = new Range(r1, options);
+    r2 = new Range(r2, options);
+    return r1.intersects(r2, options);
+  };
+  module.exports = intersects;
+});
+
+// node_modules/semver/ranges/simplify.js
+var require_simplify = __commonJS((exports, module) => {
+  var satisfies = require_satisfies();
+  var compare = require_compare();
+  module.exports = (versions, range, options) => {
+    const set = [];
+    let first = null;
+    let prev = null;
+    const v = versions.sort((a, b) => compare(a, b, options));
+    for (const version of v) {
+      const included = satisfies(version, range, options);
+      if (included) {
+        prev = version;
+        if (!first) {
+          first = version;
+        }
+      } else {
+        if (prev) {
+          set.push([first, prev]);
+        }
+        prev = null;
+        first = null;
+      }
+    }
+    if (first) {
+      set.push([first, null]);
+    }
+    const ranges = [];
+    for (const [min, max] of set) {
+      if (min === max) {
+        ranges.push(min);
+      } else if (!max && min === v[0]) {
+        ranges.push("*");
+      } else if (!max) {
+        ranges.push(`>=${min}`);
+      } else if (min === v[0]) {
+        ranges.push(`<=${max}`);
+      } else {
+        ranges.push(`${min} - ${max}`);
+      }
+    }
+    const simplified = ranges.join(" || ");
+    const original = typeof range.raw === "string" ? range.raw : String(range);
+    return simplified.length < original.length ? simplified : range;
+  };
+});
+
+// node_modules/semver/ranges/subset.js
+var require_subset = __commonJS((exports, module) => {
+  var Range = require_range();
+  var Comparator = require_comparator();
+  var { ANY } = Comparator;
+  var satisfies = require_satisfies();
+  var compare = require_compare();
+  var subset = (sub, dom, options = {}) => {
+    if (sub === dom) {
+      return true;
+    }
+    sub = new Range(sub, options);
+    dom = new Range(dom, options);
+    let sawNonNull = false;
+    OUTER:
+      for (const simpleSub of sub.set) {
+        for (const simpleDom of dom.set) {
+          const isSub = simpleSubset(simpleSub, simpleDom, options);
+          sawNonNull = sawNonNull || isSub !== null;
+          if (isSub) {
+            continue OUTER;
+          }
+        }
+        if (sawNonNull) {
+          return false;
+        }
+      }
+    return true;
+  };
+  var minimumVersionWithPreRelease = [new Comparator(">=0.0.0-0")];
+  var minimumVersion = [new Comparator(">=0.0.0")];
+  var simpleSubset = (sub, dom, options) => {
+    if (sub === dom) {
+      return true;
+    }
+    if (sub.length === 1 && sub[0].semver === ANY) {
+      if (dom.length === 1 && dom[0].semver === ANY) {
+        return true;
+      } else if (options.includePrerelease) {
+        sub = minimumVersionWithPreRelease;
+      } else {
+        sub = minimumVersion;
+      }
+    }
+    if (dom.length === 1 && dom[0].semver === ANY) {
+      if (options.includePrerelease) {
+        return true;
+      } else {
+        dom = minimumVersion;
+      }
+    }
+    const eqSet = new Set;
+    let gt, lt;
+    for (const c of sub) {
+      if (c.operator === ">" || c.operator === ">=") {
+        gt = higherGT(gt, c, options);
+      } else if (c.operator === "<" || c.operator === "<=") {
+        lt = lowerLT(lt, c, options);
+      } else {
+        eqSet.add(c.semver);
+      }
+    }
+    if (eqSet.size > 1) {
+      return null;
+    }
+    let gtltComp;
+    if (gt && lt) {
+      gtltComp = compare(gt.semver, lt.semver, options);
+      if (gtltComp > 0) {
+        return null;
+      } else if (gtltComp === 0 && (gt.operator !== ">=" || lt.operator !== "<=")) {
+        return null;
+      }
+    }
+    for (const eq of eqSet) {
+      if (gt && !satisfies(eq, String(gt), options)) {
+        return null;
+      }
+      if (lt && !satisfies(eq, String(lt), options)) {
+        return null;
+      }
+      for (const c of dom) {
+        if (!satisfies(eq, String(c), options)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    let higher, lower;
+    let hasDomLT, hasDomGT;
+    let needDomLTPre = lt && !options.includePrerelease && lt.semver.prerelease.length ? lt.semver : false;
+    let needDomGTPre = gt && !options.includePrerelease && gt.semver.prerelease.length ? gt.semver : false;
+    if (needDomLTPre && needDomLTPre.prerelease.length === 1 && lt.operator === "<" && needDomLTPre.prerelease[0] === 0) {
+      needDomLTPre = false;
+    }
+    for (const c of dom) {
+      hasDomGT = hasDomGT || c.operator === ">" || c.operator === ">=";
+      hasDomLT = hasDomLT || c.operator === "<" || c.operator === "<=";
+      if (gt) {
+        if (needDomGTPre) {
+          if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomGTPre.major && c.semver.minor === needDomGTPre.minor && c.semver.patch === needDomGTPre.patch) {
+            needDomGTPre = false;
+          }
+        }
+        if (c.operator === ">" || c.operator === ">=") {
+          higher = higherGT(gt, c, options);
+          if (higher === c && higher !== gt) {
+            return false;
+          }
+        } else if (gt.operator === ">=" && !satisfies(gt.semver, String(c), options)) {
+          return false;
+        }
+      }
+      if (lt) {
+        if (needDomLTPre) {
+          if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomLTPre.major && c.semver.minor === needDomLTPre.minor && c.semver.patch === needDomLTPre.patch) {
+            needDomLTPre = false;
+          }
+        }
+        if (c.operator === "<" || c.operator === "<=") {
+          lower = lowerLT(lt, c, options);
+          if (lower === c && lower !== lt) {
+            return false;
+          }
+        } else if (lt.operator === "<=" && !satisfies(lt.semver, String(c), options)) {
+          return false;
+        }
+      }
+      if (!c.operator && (lt || gt) && gtltComp !== 0) {
+        return false;
+      }
+    }
+    if (gt && hasDomLT && !lt && gtltComp !== 0) {
+      return false;
+    }
+    if (lt && hasDomGT && !gt && gtltComp !== 0) {
+      return false;
+    }
+    if (needDomGTPre || needDomLTPre) {
+      return false;
+    }
+    return true;
+  };
+  var higherGT = (a, b, options) => {
+    if (!a) {
+      return b;
+    }
+    const comp = compare(a.semver, b.semver, options);
+    return comp > 0 ? a : comp < 0 ? b : b.operator === ">" && a.operator === ">=" ? b : a;
+  };
+  var lowerLT = (a, b, options) => {
+    if (!a) {
+      return b;
+    }
+    const comp = compare(a.semver, b.semver, options);
+    return comp < 0 ? a : comp > 0 ? b : b.operator === "<" && a.operator === "<=" ? b : a;
+  };
+  module.exports = subset;
+});
+
+// node_modules/semver/index.js
+var require_semver2 = __commonJS((exports, module) => {
+  var internalRe = require_re();
+  var constants = require_constants();
+  var SemVer = require_semver();
+  var identifiers = require_identifiers();
+  var parse = require_parse2();
+  var valid = require_valid();
+  var clean = require_clean();
+  var inc = require_inc();
+  var diff = require_diff();
+  var major = require_major();
+  var minor = require_minor();
+  var patch = require_patch();
+  var prerelease = require_prerelease();
+  var compare = require_compare();
+  var rcompare = require_rcompare();
+  var compareLoose = require_compare_loose();
+  var compareBuild = require_compare_build();
+  var sort = require_sort();
+  var rsort = require_rsort();
+  var gt = require_gt();
+  var lt = require_lt();
+  var eq = require_eq();
+  var neq = require_neq();
+  var gte = require_gte();
+  var lte = require_lte();
+  var cmp = require_cmp();
+  var coerce = require_coerce();
+  var Comparator = require_comparator();
+  var Range = require_range();
+  var satisfies = require_satisfies();
+  var toComparators = require_to_comparators();
+  var maxSatisfying = require_max_satisfying();
+  var minSatisfying = require_min_satisfying();
+  var minVersion = require_min_version();
+  var validRange = require_valid2();
+  var outside = require_outside();
+  var gtr = require_gtr();
+  var ltr = require_ltr();
+  var intersects = require_intersects();
+  var simplifyRange = require_simplify();
+  var subset = require_subset();
+  module.exports = {
+    parse,
+    valid,
+    clean,
+    inc,
+    diff,
+    major,
+    minor,
+    patch,
+    prerelease,
+    compare,
+    rcompare,
+    compareLoose,
+    compareBuild,
+    sort,
+    rsort,
+    gt,
+    lt,
+    eq,
+    neq,
+    gte,
+    lte,
+    cmp,
+    coerce,
+    Comparator,
+    Range,
+    satisfies,
+    toComparators,
+    maxSatisfying,
+    minSatisfying,
+    minVersion,
+    validRange,
+    outside,
+    gtr,
+    ltr,
+    intersects,
+    simplifyRange,
+    subset,
+    SemVer,
+    re: internalRe.re,
+    src: internalRe.src,
+    tokens: internalRe.t,
+    SEMVER_SPEC_VERSION: constants.SEMVER_SPEC_VERSION,
+    RELEASE_TYPES: constants.RELEASE_TYPES,
+    compareIdentifiers: identifiers.compareIdentifiers,
+    rcompareIdentifiers: identifiers.rcompareIdentifiers
+  };
 });
 
 // node_modules/balanced-match/index.js
@@ -9259,7 +11995,7 @@ var require_cjs2 = __commonJS((exports) => {
   var AC = globalThis.AbortController;
   var AS = globalThis.AbortSignal;
   if (typeof AC === "undefined") {
-    AS = class AbortSignal2 {
+    AS = class AbortSignal {
       onabort;
       _onabort = [];
       reason;
@@ -9268,7 +12004,7 @@ var require_cjs2 = __commonJS((exports) => {
         this._onabort.push(fn);
       }
     };
-    AC = class AbortController2 {
+    AC = class AbortController {
       constructor() {
         warnACPolyfill();
       }
@@ -10290,7 +13026,7 @@ var require_cjs2 = __commonJS((exports) => {
   exports.LRUCache = LRUCache;
 });
 
-// node_modules/minipass/dist/cjs/index.js
+// node_modules/path-scurry/node_modules/minipass/dist/cjs/index.js
 var require_cjs3 = __commonJS((exports) => {
   var __importDefault = exports && exports.__importDefault || function(mod) {
     return mod && mod.__esModule ? mod : { default: mod };
@@ -12428,6 +15164,681 @@ var require_pattern = __commonJS((exports) => {
   exports.Pattern = Pattern;
 });
 
+// node_modules/minipass/dist/cjs/index.js
+var require_cjs5 = __commonJS((exports) => {
+  var __importDefault = exports && exports.__importDefault || function(mod) {
+    return mod && mod.__esModule ? mod : { default: mod };
+  };
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.Minipass = exports.isWritable = exports.isReadable = exports.isStream = undefined;
+  var proc = typeof process === "object" && process ? process : {
+    stdout: null,
+    stderr: null
+  };
+  var events_1 = __require("events");
+  var stream_1 = __importDefault(__require("stream"));
+  var string_decoder_1 = __require("string_decoder");
+  var isStream = (s) => !!s && typeof s === "object" && (s instanceof Minipass || s instanceof stream_1.default || (0, exports.isReadable)(s) || (0, exports.isWritable)(s));
+  exports.isStream = isStream;
+  var isReadable = (s) => !!s && typeof s === "object" && s instanceof events_1.EventEmitter && typeof s.pipe === "function" && s.pipe !== stream_1.default.Writable.prototype.pipe;
+  exports.isReadable = isReadable;
+  var isWritable = (s) => !!s && typeof s === "object" && s instanceof events_1.EventEmitter && typeof s.write === "function" && typeof s.end === "function";
+  exports.isWritable = isWritable;
+  var EOF = Symbol("EOF");
+  var MAYBE_EMIT_END = Symbol("maybeEmitEnd");
+  var EMITTED_END = Symbol("emittedEnd");
+  var EMITTING_END = Symbol("emittingEnd");
+  var EMITTED_ERROR = Symbol("emittedError");
+  var CLOSED = Symbol("closed");
+  var READ = Symbol("read");
+  var FLUSH = Symbol("flush");
+  var FLUSHCHUNK = Symbol("flushChunk");
+  var ENCODING = Symbol("encoding");
+  var DECODER = Symbol("decoder");
+  var FLOWING = Symbol("flowing");
+  var PAUSED = Symbol("paused");
+  var RESUME = Symbol("resume");
+  var BUFFER = Symbol("buffer");
+  var PIPES = Symbol("pipes");
+  var BUFFERLENGTH = Symbol("bufferLength");
+  var BUFFERPUSH = Symbol("bufferPush");
+  var BUFFERSHIFT = Symbol("bufferShift");
+  var OBJECTMODE = Symbol("objectMode");
+  var DESTROYED = Symbol("destroyed");
+  var ERROR = Symbol("error");
+  var EMITDATA = Symbol("emitData");
+  var EMITEND = Symbol("emitEnd");
+  var EMITEND2 = Symbol("emitEnd2");
+  var ASYNC = Symbol("async");
+  var ABORT = Symbol("abort");
+  var ABORTED = Symbol("aborted");
+  var SIGNAL = Symbol("signal");
+  var DATALISTENERS = Symbol("dataListeners");
+  var DISCARDED = Symbol("discarded");
+  var defer = (fn) => Promise.resolve().then(fn);
+  var nodefer = (fn) => fn();
+  var isEndish = (ev) => ev === "end" || ev === "finish" || ev === "prefinish";
+  var isArrayBufferLike = (b) => b instanceof ArrayBuffer || !!b && typeof b === "object" && b.constructor && b.constructor.name === "ArrayBuffer" && b.byteLength >= 0;
+  var isArrayBufferView = (b) => !Buffer.isBuffer(b) && ArrayBuffer.isView(b);
+
+  class Pipe {
+    src;
+    dest;
+    opts;
+    ondrain;
+    constructor(src, dest, opts) {
+      this.src = src;
+      this.dest = dest;
+      this.opts = opts;
+      this.ondrain = () => src[RESUME]();
+      this.dest.on("drain", this.ondrain);
+    }
+    unpipe() {
+      this.dest.removeListener("drain", this.ondrain);
+    }
+    proxyErrors(_er) {
+    }
+    end() {
+      this.unpipe();
+      if (this.opts.end)
+        this.dest.end();
+    }
+  }
+
+  class PipeProxyErrors extends Pipe {
+    unpipe() {
+      this.src.removeListener("error", this.proxyErrors);
+      super.unpipe();
+    }
+    constructor(src, dest, opts) {
+      super(src, dest, opts);
+      this.proxyErrors = (er) => dest.emit("error", er);
+      src.on("error", this.proxyErrors);
+    }
+  }
+  var isObjectModeOptions = (o) => !!o.objectMode;
+  var isEncodingOptions = (o) => !o.objectMode && !!o.encoding && o.encoding !== "buffer";
+
+  class Minipass extends events_1.EventEmitter {
+    [FLOWING] = false;
+    [PAUSED] = false;
+    [PIPES] = [];
+    [BUFFER] = [];
+    [OBJECTMODE];
+    [ENCODING];
+    [ASYNC];
+    [DECODER];
+    [EOF] = false;
+    [EMITTED_END] = false;
+    [EMITTING_END] = false;
+    [CLOSED] = false;
+    [EMITTED_ERROR] = null;
+    [BUFFERLENGTH] = 0;
+    [DESTROYED] = false;
+    [SIGNAL];
+    [ABORTED] = false;
+    [DATALISTENERS] = 0;
+    [DISCARDED] = false;
+    writable = true;
+    readable = true;
+    constructor(...args) {
+      const options = args[0] || {};
+      super();
+      if (options.objectMode && typeof options.encoding === "string") {
+        throw new TypeError("Encoding and objectMode may not be used together");
+      }
+      if (isObjectModeOptions(options)) {
+        this[OBJECTMODE] = true;
+        this[ENCODING] = null;
+      } else if (isEncodingOptions(options)) {
+        this[ENCODING] = options.encoding;
+        this[OBJECTMODE] = false;
+      } else {
+        this[OBJECTMODE] = false;
+        this[ENCODING] = null;
+      }
+      this[ASYNC] = !!options.async;
+      this[DECODER] = this[ENCODING] ? new string_decoder_1.StringDecoder(this[ENCODING]) : null;
+      if (options && options.debugExposeBuffer === true) {
+        Object.defineProperty(this, "buffer", { get: () => this[BUFFER] });
+      }
+      if (options && options.debugExposePipes === true) {
+        Object.defineProperty(this, "pipes", { get: () => this[PIPES] });
+      }
+      const { signal } = options;
+      if (signal) {
+        this[SIGNAL] = signal;
+        if (signal.aborted) {
+          this[ABORT]();
+        } else {
+          signal.addEventListener("abort", () => this[ABORT]());
+        }
+      }
+    }
+    get bufferLength() {
+      return this[BUFFERLENGTH];
+    }
+    get encoding() {
+      return this[ENCODING];
+    }
+    set encoding(_enc) {
+      throw new Error("Encoding must be set at instantiation time");
+    }
+    setEncoding(_enc) {
+      throw new Error("Encoding must be set at instantiation time");
+    }
+    get objectMode() {
+      return this[OBJECTMODE];
+    }
+    set objectMode(_om) {
+      throw new Error("objectMode must be set at instantiation time");
+    }
+    get ["async"]() {
+      return this[ASYNC];
+    }
+    set ["async"](a) {
+      this[ASYNC] = this[ASYNC] || !!a;
+    }
+    [ABORT]() {
+      this[ABORTED] = true;
+      this.emit("abort", this[SIGNAL]?.reason);
+      this.destroy(this[SIGNAL]?.reason);
+    }
+    get aborted() {
+      return this[ABORTED];
+    }
+    set aborted(_) {
+    }
+    write(chunk, encoding, cb) {
+      if (this[ABORTED])
+        return false;
+      if (this[EOF])
+        throw new Error("write after end");
+      if (this[DESTROYED]) {
+        this.emit("error", Object.assign(new Error("Cannot call write after a stream was destroyed"), { code: "ERR_STREAM_DESTROYED" }));
+        return true;
+      }
+      if (typeof encoding === "function") {
+        cb = encoding;
+        encoding = "utf8";
+      }
+      if (!encoding)
+        encoding = "utf8";
+      const fn = this[ASYNC] ? defer : nodefer;
+      if (!this[OBJECTMODE] && !Buffer.isBuffer(chunk)) {
+        if (isArrayBufferView(chunk)) {
+          chunk = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+        } else if (isArrayBufferLike(chunk)) {
+          chunk = Buffer.from(chunk);
+        } else if (typeof chunk !== "string") {
+          throw new Error("Non-contiguous data written to non-objectMode stream");
+        }
+      }
+      if (this[OBJECTMODE]) {
+        if (this[FLOWING] && this[BUFFERLENGTH] !== 0)
+          this[FLUSH](true);
+        if (this[FLOWING])
+          this.emit("data", chunk);
+        else
+          this[BUFFERPUSH](chunk);
+        if (this[BUFFERLENGTH] !== 0)
+          this.emit("readable");
+        if (cb)
+          fn(cb);
+        return this[FLOWING];
+      }
+      if (!chunk.length) {
+        if (this[BUFFERLENGTH] !== 0)
+          this.emit("readable");
+        if (cb)
+          fn(cb);
+        return this[FLOWING];
+      }
+      if (typeof chunk === "string" && !(encoding === this[ENCODING] && !this[DECODER]?.lastNeed)) {
+        chunk = Buffer.from(chunk, encoding);
+      }
+      if (Buffer.isBuffer(chunk) && this[ENCODING]) {
+        chunk = this[DECODER].write(chunk);
+      }
+      if (this[FLOWING] && this[BUFFERLENGTH] !== 0)
+        this[FLUSH](true);
+      if (this[FLOWING])
+        this.emit("data", chunk);
+      else
+        this[BUFFERPUSH](chunk);
+      if (this[BUFFERLENGTH] !== 0)
+        this.emit("readable");
+      if (cb)
+        fn(cb);
+      return this[FLOWING];
+    }
+    read(n) {
+      if (this[DESTROYED])
+        return null;
+      this[DISCARDED] = false;
+      if (this[BUFFERLENGTH] === 0 || n === 0 || n && n > this[BUFFERLENGTH]) {
+        this[MAYBE_EMIT_END]();
+        return null;
+      }
+      if (this[OBJECTMODE])
+        n = null;
+      if (this[BUFFER].length > 1 && !this[OBJECTMODE]) {
+        this[BUFFER] = [
+          this[ENCODING] ? this[BUFFER].join("") : Buffer.concat(this[BUFFER], this[BUFFERLENGTH])
+        ];
+      }
+      const ret = this[READ](n || null, this[BUFFER][0]);
+      this[MAYBE_EMIT_END]();
+      return ret;
+    }
+    [READ](n, chunk) {
+      if (this[OBJECTMODE])
+        this[BUFFERSHIFT]();
+      else {
+        const c = chunk;
+        if (n === c.length || n === null)
+          this[BUFFERSHIFT]();
+        else if (typeof c === "string") {
+          this[BUFFER][0] = c.slice(n);
+          chunk = c.slice(0, n);
+          this[BUFFERLENGTH] -= n;
+        } else {
+          this[BUFFER][0] = c.subarray(n);
+          chunk = c.subarray(0, n);
+          this[BUFFERLENGTH] -= n;
+        }
+      }
+      this.emit("data", chunk);
+      if (!this[BUFFER].length && !this[EOF])
+        this.emit("drain");
+      return chunk;
+    }
+    end(chunk, encoding, cb) {
+      if (typeof chunk === "function") {
+        cb = chunk;
+        chunk = undefined;
+      }
+      if (typeof encoding === "function") {
+        cb = encoding;
+        encoding = "utf8";
+      }
+      if (chunk !== undefined)
+        this.write(chunk, encoding);
+      if (cb)
+        this.once("end", cb);
+      this[EOF] = true;
+      this.writable = false;
+      if (this[FLOWING] || !this[PAUSED])
+        this[MAYBE_EMIT_END]();
+      return this;
+    }
+    [RESUME]() {
+      if (this[DESTROYED])
+        return;
+      if (!this[DATALISTENERS] && !this[PIPES].length) {
+        this[DISCARDED] = true;
+      }
+      this[PAUSED] = false;
+      this[FLOWING] = true;
+      this.emit("resume");
+      if (this[BUFFER].length)
+        this[FLUSH]();
+      else if (this[EOF])
+        this[MAYBE_EMIT_END]();
+      else
+        this.emit("drain");
+    }
+    resume() {
+      return this[RESUME]();
+    }
+    pause() {
+      this[FLOWING] = false;
+      this[PAUSED] = true;
+      this[DISCARDED] = false;
+    }
+    get destroyed() {
+      return this[DESTROYED];
+    }
+    get flowing() {
+      return this[FLOWING];
+    }
+    get paused() {
+      return this[PAUSED];
+    }
+    [BUFFERPUSH](chunk) {
+      if (this[OBJECTMODE])
+        this[BUFFERLENGTH] += 1;
+      else
+        this[BUFFERLENGTH] += chunk.length;
+      this[BUFFER].push(chunk);
+    }
+    [BUFFERSHIFT]() {
+      if (this[OBJECTMODE])
+        this[BUFFERLENGTH] -= 1;
+      else
+        this[BUFFERLENGTH] -= this[BUFFER][0].length;
+      return this[BUFFER].shift();
+    }
+    [FLUSH](noDrain = false) {
+      do {
+      } while (this[FLUSHCHUNK](this[BUFFERSHIFT]()) && this[BUFFER].length);
+      if (!noDrain && !this[BUFFER].length && !this[EOF])
+        this.emit("drain");
+    }
+    [FLUSHCHUNK](chunk) {
+      this.emit("data", chunk);
+      return this[FLOWING];
+    }
+    pipe(dest, opts) {
+      if (this[DESTROYED])
+        return dest;
+      this[DISCARDED] = false;
+      const ended = this[EMITTED_END];
+      opts = opts || {};
+      if (dest === proc.stdout || dest === proc.stderr)
+        opts.end = false;
+      else
+        opts.end = opts.end !== false;
+      opts.proxyErrors = !!opts.proxyErrors;
+      if (ended) {
+        if (opts.end)
+          dest.end();
+      } else {
+        this[PIPES].push(!opts.proxyErrors ? new Pipe(this, dest, opts) : new PipeProxyErrors(this, dest, opts));
+        if (this[ASYNC])
+          defer(() => this[RESUME]());
+        else
+          this[RESUME]();
+      }
+      return dest;
+    }
+    unpipe(dest) {
+      const p = this[PIPES].find((p2) => p2.dest === dest);
+      if (p) {
+        if (this[PIPES].length === 1) {
+          if (this[FLOWING] && this[DATALISTENERS] === 0) {
+            this[FLOWING] = false;
+          }
+          this[PIPES] = [];
+        } else
+          this[PIPES].splice(this[PIPES].indexOf(p), 1);
+        p.unpipe();
+      }
+    }
+    addListener(ev, handler) {
+      return this.on(ev, handler);
+    }
+    on(ev, handler) {
+      const ret = super.on(ev, handler);
+      if (ev === "data") {
+        this[DISCARDED] = false;
+        this[DATALISTENERS]++;
+        if (!this[PIPES].length && !this[FLOWING]) {
+          this[RESUME]();
+        }
+      } else if (ev === "readable" && this[BUFFERLENGTH] !== 0) {
+        super.emit("readable");
+      } else if (isEndish(ev) && this[EMITTED_END]) {
+        super.emit(ev);
+        this.removeAllListeners(ev);
+      } else if (ev === "error" && this[EMITTED_ERROR]) {
+        const h = handler;
+        if (this[ASYNC])
+          defer(() => h.call(this, this[EMITTED_ERROR]));
+        else
+          h.call(this, this[EMITTED_ERROR]);
+      }
+      return ret;
+    }
+    removeListener(ev, handler) {
+      return this.off(ev, handler);
+    }
+    off(ev, handler) {
+      const ret = super.off(ev, handler);
+      if (ev === "data") {
+        this[DATALISTENERS] = this.listeners("data").length;
+        if (this[DATALISTENERS] === 0 && !this[DISCARDED] && !this[PIPES].length) {
+          this[FLOWING] = false;
+        }
+      }
+      return ret;
+    }
+    removeAllListeners(ev) {
+      const ret = super.removeAllListeners(ev);
+      if (ev === "data" || ev === undefined) {
+        this[DATALISTENERS] = 0;
+        if (!this[DISCARDED] && !this[PIPES].length) {
+          this[FLOWING] = false;
+        }
+      }
+      return ret;
+    }
+    get emittedEnd() {
+      return this[EMITTED_END];
+    }
+    [MAYBE_EMIT_END]() {
+      if (!this[EMITTING_END] && !this[EMITTED_END] && !this[DESTROYED] && this[BUFFER].length === 0 && this[EOF]) {
+        this[EMITTING_END] = true;
+        this.emit("end");
+        this.emit("prefinish");
+        this.emit("finish");
+        if (this[CLOSED])
+          this.emit("close");
+        this[EMITTING_END] = false;
+      }
+    }
+    emit(ev, ...args) {
+      const data = args[0];
+      if (ev !== "error" && ev !== "close" && ev !== DESTROYED && this[DESTROYED]) {
+        return false;
+      } else if (ev === "data") {
+        return !this[OBJECTMODE] && !data ? false : this[ASYNC] ? (defer(() => this[EMITDATA](data)), true) : this[EMITDATA](data);
+      } else if (ev === "end") {
+        return this[EMITEND]();
+      } else if (ev === "close") {
+        this[CLOSED] = true;
+        if (!this[EMITTED_END] && !this[DESTROYED])
+          return false;
+        const ret2 = super.emit("close");
+        this.removeAllListeners("close");
+        return ret2;
+      } else if (ev === "error") {
+        this[EMITTED_ERROR] = data;
+        super.emit(ERROR, data);
+        const ret2 = !this[SIGNAL] || this.listeners("error").length ? super.emit("error", data) : false;
+        this[MAYBE_EMIT_END]();
+        return ret2;
+      } else if (ev === "resume") {
+        const ret2 = super.emit("resume");
+        this[MAYBE_EMIT_END]();
+        return ret2;
+      } else if (ev === "finish" || ev === "prefinish") {
+        const ret2 = super.emit(ev);
+        this.removeAllListeners(ev);
+        return ret2;
+      }
+      const ret = super.emit(ev, ...args);
+      this[MAYBE_EMIT_END]();
+      return ret;
+    }
+    [EMITDATA](data) {
+      for (const p of this[PIPES]) {
+        if (p.dest.write(data) === false)
+          this.pause();
+      }
+      const ret = this[DISCARDED] ? false : super.emit("data", data);
+      this[MAYBE_EMIT_END]();
+      return ret;
+    }
+    [EMITEND]() {
+      if (this[EMITTED_END])
+        return false;
+      this[EMITTED_END] = true;
+      this.readable = false;
+      return this[ASYNC] ? (defer(() => this[EMITEND2]()), true) : this[EMITEND2]();
+    }
+    [EMITEND2]() {
+      if (this[DECODER]) {
+        const data = this[DECODER].end();
+        if (data) {
+          for (const p of this[PIPES]) {
+            p.dest.write(data);
+          }
+          if (!this[DISCARDED])
+            super.emit("data", data);
+        }
+      }
+      for (const p of this[PIPES]) {
+        p.end();
+      }
+      const ret = super.emit("end");
+      this.removeAllListeners("end");
+      return ret;
+    }
+    async collect() {
+      const buf = Object.assign([], {
+        dataLength: 0
+      });
+      if (!this[OBJECTMODE])
+        buf.dataLength = 0;
+      const p = this.promise();
+      this.on("data", (c) => {
+        buf.push(c);
+        if (!this[OBJECTMODE])
+          buf.dataLength += c.length;
+      });
+      await p;
+      return buf;
+    }
+    async concat() {
+      if (this[OBJECTMODE]) {
+        throw new Error("cannot concat in objectMode");
+      }
+      const buf = await this.collect();
+      return this[ENCODING] ? buf.join("") : Buffer.concat(buf, buf.dataLength);
+    }
+    async promise() {
+      return new Promise((resolve, reject) => {
+        this.on(DESTROYED, () => reject(new Error("stream destroyed")));
+        this.on("error", (er) => reject(er));
+        this.on("end", () => resolve());
+      });
+    }
+    [Symbol.asyncIterator]() {
+      this[DISCARDED] = false;
+      let stopped = false;
+      const stop = async () => {
+        this.pause();
+        stopped = true;
+        return { value: undefined, done: true };
+      };
+      const next = () => {
+        if (stopped)
+          return stop();
+        const res = this.read();
+        if (res !== null)
+          return Promise.resolve({ done: false, value: res });
+        if (this[EOF])
+          return stop();
+        let resolve;
+        let reject;
+        const onerr = (er) => {
+          this.off("data", ondata);
+          this.off("end", onend);
+          this.off(DESTROYED, ondestroy);
+          stop();
+          reject(er);
+        };
+        const ondata = (value) => {
+          this.off("error", onerr);
+          this.off("end", onend);
+          this.off(DESTROYED, ondestroy);
+          this.pause();
+          resolve({ value, done: !!this[EOF] });
+        };
+        const onend = () => {
+          this.off("error", onerr);
+          this.off("data", ondata);
+          this.off(DESTROYED, ondestroy);
+          stop();
+          resolve({ done: true, value: undefined });
+        };
+        const ondestroy = () => onerr(new Error("stream destroyed"));
+        return new Promise((res2, rej) => {
+          reject = rej;
+          resolve = res2;
+          this.once(DESTROYED, ondestroy);
+          this.once("error", onerr);
+          this.once("end", onend);
+          this.once("data", ondata);
+        });
+      };
+      return {
+        next,
+        throw: stop,
+        return: stop,
+        [Symbol.asyncIterator]() {
+          return this;
+        }
+      };
+    }
+    [Symbol.iterator]() {
+      this[DISCARDED] = false;
+      let stopped = false;
+      const stop = () => {
+        this.pause();
+        this.off(ERROR, stop);
+        this.off(DESTROYED, stop);
+        this.off("end", stop);
+        stopped = true;
+        return { done: true, value: undefined };
+      };
+      const next = () => {
+        if (stopped)
+          return stop();
+        const value = this.read();
+        return value === null ? stop() : { done: false, value };
+      };
+      this.once("end", stop);
+      this.once(ERROR, stop);
+      this.once(DESTROYED, stop);
+      return {
+        next,
+        throw: stop,
+        return: stop,
+        [Symbol.iterator]() {
+          return this;
+        }
+      };
+    }
+    destroy(er) {
+      if (this[DESTROYED]) {
+        if (er)
+          this.emit("error", er);
+        else
+          this.emit(DESTROYED);
+        return this;
+      }
+      this[DESTROYED] = true;
+      this[DISCARDED] = true;
+      this[BUFFER].length = 0;
+      this[BUFFERLENGTH] = 0;
+      const wc = this;
+      if (typeof wc.close === "function" && !this[CLOSED])
+        wc.close();
+      if (er)
+        this.emit("error", er);
+      else
+        this.emit(DESTROYED);
+      return this;
+    }
+    static get isStream() {
+      return exports.isStream;
+    }
+  }
+  exports.Minipass = Minipass;
+});
+
 // node_modules/glob/dist/cjs/src/ignore.js
 var require_ignore = __commonJS((exports) => {
   Object.defineProperty(exports, "__esModule", { value: true });
@@ -12624,8 +16035,6 @@ var require_processor = __commonJS((exports) => {
         let changed = false;
         while (typeof (p = pattern.pattern()) === "string" && (rest = pattern.rest())) {
           const c = t.resolve(p);
-          if (c.isUnknown() && p !== "..")
-            break;
           t = c;
           pattern = rest;
           changed = true;
@@ -12638,12 +16047,8 @@ var require_processor = __commonJS((exports) => {
           this.hasWalkedCache.storeWalked(t, pattern);
         }
         if (typeof p === "string") {
-          if (!rest) {
-            const ifDir = p === ".." || p === "" || p === ".";
-            this.matches.add(t.resolve(p), absolute, ifDir);
-          } else {
-            this.subwalks.add(t, pattern);
-          }
+          const ifDir = p === ".." || p === "" || p === ".";
+          this.matches.add(t.resolve(p), absolute, ifDir);
           continue;
         } else if (p === minimatch_1.GLOBSTAR) {
           if (!t.isSymbolicLink() || this.follow || pattern.checkFollowGlobstar()) {
@@ -12749,7 +16154,7 @@ var require_processor = __commonJS((exports) => {
 var require_walker = __commonJS((exports) => {
   Object.defineProperty(exports, "__esModule", { value: true });
   exports.GlobStream = exports.GlobWalker = exports.GlobUtil = undefined;
-  var minipass_1 = require_cjs3();
+  var minipass_1 = require_cjs5();
   var ignore_js_1 = require_ignore();
   var processor_js_1 = require_processor();
   var makeIgnore = (ignore, opts) => typeof ignore === "string" ? new ignore_js_1.Ignore([ignore], opts) : Array.isArray(ignore) ? new ignore_js_1.Ignore(ignore, opts) : ignore;
@@ -13325,480 +16730,6 @@ var require_src = __commonJS((exports) => {
     unescape: minimatch_1.unescape
   });
   exports.glob.glob = exports.glob;
-});
-
-// node_modules/npm-normalize-package-bin/lib/index.js
-var require_lib4 = __commonJS((exports, module) => {
-  var { join, basename } = __require("path");
-  var normalize = (pkg) => !pkg.bin ? removeBin(pkg) : typeof pkg.bin === "string" ? normalizeString(pkg) : Array.isArray(pkg.bin) ? normalizeArray(pkg) : typeof pkg.bin === "object" ? normalizeObject(pkg) : removeBin(pkg);
-  var normalizeString = (pkg) => {
-    if (!pkg.name) {
-      return removeBin(pkg);
-    }
-    pkg.bin = { [pkg.name]: pkg.bin };
-    return normalizeObject(pkg);
-  };
-  var normalizeArray = (pkg) => {
-    pkg.bin = pkg.bin.reduce((acc, k) => {
-      acc[basename(k)] = k;
-      return acc;
-    }, {});
-    return normalizeObject(pkg);
-  };
-  var removeBin = (pkg) => {
-    delete pkg.bin;
-    return pkg;
-  };
-  var normalizeObject = (pkg) => {
-    const orig = pkg.bin;
-    const clean = {};
-    let hasBins = false;
-    Object.keys(orig).forEach((binKey) => {
-      const base = join("/", basename(binKey.replace(/\\|:/g, "/"))).slice(1);
-      if (typeof orig[binKey] !== "string" || !base) {
-        return;
-      }
-      const binTarget = join("/", orig[binKey].replace(/\\/g, "/")).replace(/\\/g, "/").slice(1);
-      if (!binTarget) {
-        return;
-      }
-      clean[base] = binTarget;
-      hasBins = true;
-    });
-    if (hasBins) {
-      pkg.bin = clean;
-    } else {
-      delete pkg.bin;
-    }
-    return pkg;
-  };
-  module.exports = normalize;
-});
-
-// node_modules/semver/internal/debug.js
-var require_debug = __commonJS((exports, module) => {
-  var debug = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
-  };
-  module.exports = debug;
-});
-
-// node_modules/semver/internal/constants.js
-var require_constants = __commonJS((exports, module) => {
-  var SEMVER_SPEC_VERSION = "2.0.0";
-  var MAX_LENGTH = 256;
-  var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || 9007199254740991;
-  var MAX_SAFE_COMPONENT_LENGTH = 16;
-  var MAX_SAFE_BUILD_LENGTH = MAX_LENGTH - 6;
-  var RELEASE_TYPES = [
-    "major",
-    "premajor",
-    "minor",
-    "preminor",
-    "patch",
-    "prepatch",
-    "prerelease"
-  ];
-  module.exports = {
-    MAX_LENGTH,
-    MAX_SAFE_COMPONENT_LENGTH,
-    MAX_SAFE_BUILD_LENGTH,
-    MAX_SAFE_INTEGER,
-    RELEASE_TYPES,
-    SEMVER_SPEC_VERSION,
-    FLAG_INCLUDE_PRERELEASE: 1,
-    FLAG_LOOSE: 2
-  };
-});
-
-// node_modules/semver/internal/re.js
-var require_re = __commonJS((exports, module) => {
-  var {
-    MAX_SAFE_COMPONENT_LENGTH,
-    MAX_SAFE_BUILD_LENGTH,
-    MAX_LENGTH
-  } = require_constants();
-  var debug = require_debug();
-  exports = module.exports = {};
-  var re = exports.re = [];
-  var safeRe = exports.safeRe = [];
-  var src = exports.src = [];
-  var t = exports.t = {};
-  var R = 0;
-  var LETTERDASHNUMBER = "[a-zA-Z0-9-]";
-  var safeRegexReplacements = [
-    ["\\s", 1],
-    ["\\d", MAX_LENGTH],
-    [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH]
-  ];
-  var makeSafeRegex = (value) => {
-    for (const [token, max] of safeRegexReplacements) {
-      value = value.split(`${token}*`).join(`${token}{0,${max}}`).split(`${token}+`).join(`${token}{1,${max}}`);
-    }
-    return value;
-  };
-  var createToken = (name, value, isGlobal) => {
-    const safe = makeSafeRegex(value);
-    const index = R++;
-    debug(name, index, value);
-    t[name] = index;
-    src[index] = value;
-    re[index] = new RegExp(value, isGlobal ? "g" : undefined);
-    safeRe[index] = new RegExp(safe, isGlobal ? "g" : undefined);
-  };
-  createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
-  createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
-  createToken("NONNUMERICIDENTIFIER", `\\d*[a-zA-Z-]${LETTERDASHNUMBER}*`);
-  createToken("MAINVERSION", `(${src[t.NUMERICIDENTIFIER]})\\.` + `(${src[t.NUMERICIDENTIFIER]})\\.` + `(${src[t.NUMERICIDENTIFIER]})`);
-  createToken("MAINVERSIONLOOSE", `(${src[t.NUMERICIDENTIFIERLOOSE]})\\.` + `(${src[t.NUMERICIDENTIFIERLOOSE]})\\.` + `(${src[t.NUMERICIDENTIFIERLOOSE]})`);
-  createToken("PRERELEASEIDENTIFIER", `(?:${src[t.NUMERICIDENTIFIER]}|${src[t.NONNUMERICIDENTIFIER]})`);
-  createToken("PRERELEASEIDENTIFIERLOOSE", `(?:${src[t.NUMERICIDENTIFIERLOOSE]}|${src[t.NONNUMERICIDENTIFIER]})`);
-  createToken("PRERELEASE", `(?:-(${src[t.PRERELEASEIDENTIFIER]}(?:\\.${src[t.PRERELEASEIDENTIFIER]})*))`);
-  createToken("PRERELEASELOOSE", `(?:-?(${src[t.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t.PRERELEASEIDENTIFIERLOOSE]})*))`);
-  createToken("BUILDIDENTIFIER", `${LETTERDASHNUMBER}+`);
-  createToken("BUILD", `(?:\\+(${src[t.BUILDIDENTIFIER]}(?:\\.${src[t.BUILDIDENTIFIER]})*))`);
-  createToken("FULLPLAIN", `v?${src[t.MAINVERSION]}${src[t.PRERELEASE]}?${src[t.BUILD]}?`);
-  createToken("FULL", `^${src[t.FULLPLAIN]}\$`);
-  createToken("LOOSEPLAIN", `[v=\\s]*${src[t.MAINVERSIONLOOSE]}${src[t.PRERELEASELOOSE]}?${src[t.BUILD]}?`);
-  createToken("LOOSE", `^${src[t.LOOSEPLAIN]}\$`);
-  createToken("GTLT", "((?:<|>)?=?)");
-  createToken("XRANGEIDENTIFIERLOOSE", `${src[t.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
-  createToken("XRANGEIDENTIFIER", `${src[t.NUMERICIDENTIFIER]}|x|X|\\*`);
-  createToken("XRANGEPLAIN", `[v=\\s]*(${src[t.XRANGEIDENTIFIER]})` + `(?:\\.(${src[t.XRANGEIDENTIFIER]})` + `(?:\\.(${src[t.XRANGEIDENTIFIER]})` + `(?:${src[t.PRERELEASE]})?${src[t.BUILD]}?` + `)?)?`);
-  createToken("XRANGEPLAINLOOSE", `[v=\\s]*(${src[t.XRANGEIDENTIFIERLOOSE]})` + `(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})` + `(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})` + `(?:${src[t.PRERELEASELOOSE]})?${src[t.BUILD]}?` + `)?)?`);
-  createToken("XRANGE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAIN]}\$`);
-  createToken("XRANGELOOSE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAINLOOSE]}\$`);
-  createToken("COERCE", `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})` + `(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?` + `(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?` + `(?:\$|[^\\d])`);
-  createToken("COERCERTL", src[t.COERCE], true);
-  createToken("LONETILDE", "(?:~>?)");
-  createToken("TILDETRIM", `(\\s*)${src[t.LONETILDE]}\\s+`, true);
-  exports.tildeTrimReplace = "$1~";
-  createToken("TILDE", `^${src[t.LONETILDE]}${src[t.XRANGEPLAIN]}\$`);
-  createToken("TILDELOOSE", `^${src[t.LONETILDE]}${src[t.XRANGEPLAINLOOSE]}\$`);
-  createToken("LONECARET", "(?:\\^)");
-  createToken("CARETTRIM", `(\\s*)${src[t.LONECARET]}\\s+`, true);
-  exports.caretTrimReplace = "$1^";
-  createToken("CARET", `^${src[t.LONECARET]}${src[t.XRANGEPLAIN]}\$`);
-  createToken("CARETLOOSE", `^${src[t.LONECARET]}${src[t.XRANGEPLAINLOOSE]}\$`);
-  createToken("COMPARATORLOOSE", `^${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]})\$|^\$`);
-  createToken("COMPARATOR", `^${src[t.GTLT]}\\s*(${src[t.FULLPLAIN]})\$|^\$`);
-  createToken("COMPARATORTRIM", `(\\s*)${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]}|${src[t.XRANGEPLAIN]})`, true);
-  exports.comparatorTrimReplace = "$1$2$3";
-  createToken("HYPHENRANGE", `^\\s*(${src[t.XRANGEPLAIN]})` + `\\s+-\\s+` + `(${src[t.XRANGEPLAIN]})` + `\\s*\$`);
-  createToken("HYPHENRANGELOOSE", `^\\s*(${src[t.XRANGEPLAINLOOSE]})` + `\\s+-\\s+` + `(${src[t.XRANGEPLAINLOOSE]})` + `\\s*\$`);
-  createToken("STAR", "(<|>)?=?\\s*\\*");
-  createToken("GTE0", "^\\s*>=\\s*0\\.0\\.0\\s*$");
-  createToken("GTE0PRE", "^\\s*>=\\s*0\\.0\\.0-0\\s*$");
-});
-
-// node_modules/semver/internal/parse-options.js
-var require_parse_options = __commonJS((exports, module) => {
-  var looseOption = Object.freeze({ loose: true });
-  var emptyOpts = Object.freeze({});
-  var parseOptions = (options) => {
-    if (!options) {
-      return emptyOpts;
-    }
-    if (typeof options !== "object") {
-      return looseOption;
-    }
-    return options;
-  };
-  module.exports = parseOptions;
-});
-
-// node_modules/semver/internal/identifiers.js
-var require_identifiers = __commonJS((exports, module) => {
-  var numeric = /^[0-9]+$/;
-  var compareIdentifiers = (a, b) => {
-    const anum = numeric.test(a);
-    const bnum = numeric.test(b);
-    if (anum && bnum) {
-      a = +a;
-      b = +b;
-    }
-    return a === b ? 0 : anum && !bnum ? -1 : bnum && !anum ? 1 : a < b ? -1 : 1;
-  };
-  var rcompareIdentifiers = (a, b) => compareIdentifiers(b, a);
-  module.exports = {
-    compareIdentifiers,
-    rcompareIdentifiers
-  };
-});
-
-// node_modules/semver/classes/semver.js
-var require_semver = __commonJS((exports, module) => {
-  var debug = require_debug();
-  var { MAX_LENGTH, MAX_SAFE_INTEGER } = require_constants();
-  var { safeRe: re, t } = require_re();
-  var parseOptions = require_parse_options();
-  var { compareIdentifiers } = require_identifiers();
-
-  class SemVer {
-    constructor(version, options) {
-      options = parseOptions(options);
-      if (version instanceof SemVer) {
-        if (version.loose === !!options.loose && version.includePrerelease === !!options.includePrerelease) {
-          return version;
-        } else {
-          version = version.version;
-        }
-      } else if (typeof version !== "string") {
-        throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version}".`);
-      }
-      if (version.length > MAX_LENGTH) {
-        throw new TypeError(`version is longer than ${MAX_LENGTH} characters`);
-      }
-      debug("SemVer", version, options);
-      this.options = options;
-      this.loose = !!options.loose;
-      this.includePrerelease = !!options.includePrerelease;
-      const m = version.trim().match(options.loose ? re[t.LOOSE] : re[t.FULL]);
-      if (!m) {
-        throw new TypeError(`Invalid Version: ${version}`);
-      }
-      this.raw = version;
-      this.major = +m[1];
-      this.minor = +m[2];
-      this.patch = +m[3];
-      if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
-        throw new TypeError("Invalid major version");
-      }
-      if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
-        throw new TypeError("Invalid minor version");
-      }
-      if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
-        throw new TypeError("Invalid patch version");
-      }
-      if (!m[4]) {
-        this.prerelease = [];
-      } else {
-        this.prerelease = m[4].split(".").map((id) => {
-          if (/^[0-9]+$/.test(id)) {
-            const num = +id;
-            if (num >= 0 && num < MAX_SAFE_INTEGER) {
-              return num;
-            }
-          }
-          return id;
-        });
-      }
-      this.build = m[5] ? m[5].split(".") : [];
-      this.format();
-    }
-    format() {
-      this.version = `${this.major}.${this.minor}.${this.patch}`;
-      if (this.prerelease.length) {
-        this.version += `-${this.prerelease.join(".")}`;
-      }
-      return this.version;
-    }
-    toString() {
-      return this.version;
-    }
-    compare(other) {
-      debug("SemVer.compare", this.version, this.options, other);
-      if (!(other instanceof SemVer)) {
-        if (typeof other === "string" && other === this.version) {
-          return 0;
-        }
-        other = new SemVer(other, this.options);
-      }
-      if (other.version === this.version) {
-        return 0;
-      }
-      return this.compareMain(other) || this.comparePre(other);
-    }
-    compareMain(other) {
-      if (!(other instanceof SemVer)) {
-        other = new SemVer(other, this.options);
-      }
-      return compareIdentifiers(this.major, other.major) || compareIdentifiers(this.minor, other.minor) || compareIdentifiers(this.patch, other.patch);
-    }
-    comparePre(other) {
-      if (!(other instanceof SemVer)) {
-        other = new SemVer(other, this.options);
-      }
-      if (this.prerelease.length && !other.prerelease.length) {
-        return -1;
-      } else if (!this.prerelease.length && other.prerelease.length) {
-        return 1;
-      } else if (!this.prerelease.length && !other.prerelease.length) {
-        return 0;
-      }
-      let i = 0;
-      do {
-        const a = this.prerelease[i];
-        const b = other.prerelease[i];
-        debug("prerelease compare", i, a, b);
-        if (a === undefined && b === undefined) {
-          return 0;
-        } else if (b === undefined) {
-          return 1;
-        } else if (a === undefined) {
-          return -1;
-        } else if (a === b) {
-          continue;
-        } else {
-          return compareIdentifiers(a, b);
-        }
-      } while (++i);
-    }
-    compareBuild(other) {
-      if (!(other instanceof SemVer)) {
-        other = new SemVer(other, this.options);
-      }
-      let i = 0;
-      do {
-        const a = this.build[i];
-        const b = other.build[i];
-        debug("prerelease compare", i, a, b);
-        if (a === undefined && b === undefined) {
-          return 0;
-        } else if (b === undefined) {
-          return 1;
-        } else if (a === undefined) {
-          return -1;
-        } else if (a === b) {
-          continue;
-        } else {
-          return compareIdentifiers(a, b);
-        }
-      } while (++i);
-    }
-    inc(release, identifier, identifierBase) {
-      switch (release) {
-        case "premajor":
-          this.prerelease.length = 0;
-          this.patch = 0;
-          this.minor = 0;
-          this.major++;
-          this.inc("pre", identifier, identifierBase);
-          break;
-        case "preminor":
-          this.prerelease.length = 0;
-          this.patch = 0;
-          this.minor++;
-          this.inc("pre", identifier, identifierBase);
-          break;
-        case "prepatch":
-          this.prerelease.length = 0;
-          this.inc("patch", identifier, identifierBase);
-          this.inc("pre", identifier, identifierBase);
-          break;
-        case "prerelease":
-          if (this.prerelease.length === 0) {
-            this.inc("patch", identifier, identifierBase);
-          }
-          this.inc("pre", identifier, identifierBase);
-          break;
-        case "major":
-          if (this.minor !== 0 || this.patch !== 0 || this.prerelease.length === 0) {
-            this.major++;
-          }
-          this.minor = 0;
-          this.patch = 0;
-          this.prerelease = [];
-          break;
-        case "minor":
-          if (this.patch !== 0 || this.prerelease.length === 0) {
-            this.minor++;
-          }
-          this.patch = 0;
-          this.prerelease = [];
-          break;
-        case "patch":
-          if (this.prerelease.length === 0) {
-            this.patch++;
-          }
-          this.prerelease = [];
-          break;
-        case "pre": {
-          const base = Number(identifierBase) ? 1 : 0;
-          if (!identifier && identifierBase === false) {
-            throw new Error("invalid increment argument: identifier is empty");
-          }
-          if (this.prerelease.length === 0) {
-            this.prerelease = [base];
-          } else {
-            let i = this.prerelease.length;
-            while (--i >= 0) {
-              if (typeof this.prerelease[i] === "number") {
-                this.prerelease[i]++;
-                i = -2;
-              }
-            }
-            if (i === -1) {
-              if (identifier === this.prerelease.join(".") && identifierBase === false) {
-                throw new Error("invalid increment argument: identifier already exists");
-              }
-              this.prerelease.push(base);
-            }
-          }
-          if (identifier) {
-            let prerelease = [identifier, base];
-            if (identifierBase === false) {
-              prerelease = [identifier];
-            }
-            if (compareIdentifiers(this.prerelease[0], identifier) === 0) {
-              if (isNaN(this.prerelease[1])) {
-                this.prerelease = prerelease;
-              }
-            } else {
-              this.prerelease = prerelease;
-            }
-          }
-          break;
-        }
-        default:
-          throw new Error(`invalid increment argument: ${release}`);
-      }
-      this.raw = this.format();
-      if (this.build.length) {
-        this.raw += `+${this.build.join(".")}`;
-      }
-      return this;
-    }
-  }
-  module.exports = SemVer;
-});
-
-// node_modules/semver/functions/parse.js
-var require_parse2 = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var parse = (version, options, throwErrors = false) => {
-    if (version instanceof SemVer) {
-      return version;
-    }
-    try {
-      return new SemVer(version, options);
-    } catch (er) {
-      if (!throwErrors) {
-        return null;
-      }
-      throw er;
-    }
-  };
-  module.exports = parse;
-});
-
-// node_modules/semver/functions/valid.js
-var require_valid = __commonJS((exports, module) => {
-  var parse = require_parse2();
-  var valid = (version, options) => {
-    const v = parse(version, options);
-    return v ? v.version : null;
-  };
-  module.exports = valid;
-});
-
-// node_modules/semver/functions/clean.js
-var require_clean = __commonJS((exports, module) => {
-  var parse = require_parse2();
-  var clean = (version, options) => {
-    const s = parse(version.trim().replace(/^[=v]+/, ""), options);
-    return s ? s.version : null;
-  };
-  module.exports = clean;
 });
 
 // node_modules/spdx-license-ids/index.json
@@ -14973,83 +17904,54 @@ var require_validate_npm_package_license = __commonJS((exports, module) => {
   };
 });
 
-// node_modules/hosted-git-info/node_modules/lru-cache/index.js
-var require_lru_cache = __commonJS((exports, module) => {
+// node_modules/hosted-git-info/node_modules/lru-cache/dist/cjs/index.js
+var require_cjs6 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.LRUCache = undefined;
   var perf = typeof performance === "object" && performance && typeof performance.now === "function" ? performance : Date;
-  var hasAbortController = typeof AbortController === "function";
-  var AC = hasAbortController ? AbortController : class AbortController2 {
-    constructor() {
-      this.signal = new AS;
-    }
-    abort(reason = new Error("This operation was aborted")) {
-      this.signal.reason = this.signal.reason || reason;
-      this.signal.aborted = true;
-      this.signal.dispatchEvent({
-        type: "abort",
-        target: this.signal
-      });
-    }
-  };
-  var hasAbortSignal = typeof AbortSignal === "function";
-  var hasACAbortSignal = typeof AC.AbortSignal === "function";
-  var AS = hasAbortSignal ? AbortSignal : hasACAbortSignal ? AC.AbortController : class AbortSignal2 {
-    constructor() {
-      this.reason = undefined;
-      this.aborted = false;
-      this._listeners = [];
-    }
-    dispatchEvent(e) {
-      if (e.type === "abort") {
-        this.aborted = true;
-        this.onabort(e);
-        this._listeners.forEach((f) => f(e), this);
-      }
-    }
-    onabort() {
-    }
-    addEventListener(ev, fn) {
-      if (ev === "abort") {
-        this._listeners.push(fn);
-      }
-    }
-    removeEventListener(ev, fn) {
-      if (ev === "abort") {
-        this._listeners = this._listeners.filter((f) => f !== fn);
-      }
-    }
-  };
   var warned = new Set;
-  var deprecatedOption = (opt, instead) => {
-    const code = `LRU_CACHE_OPTION_${opt}`;
-    if (shouldWarn(code)) {
-      warn(code, `${opt} option`, `options.${instead}`, LRUCache);
-    }
+  var PROCESS = typeof process === "object" && !!process ? process : {};
+  var emitWarning = (msg, type, code, fn) => {
+    typeof PROCESS.emitWarning === "function" ? PROCESS.emitWarning(msg, type, code, fn) : console.error(`[${code}] ${type}: ${msg}`);
   };
-  var deprecatedMethod = (method, instead) => {
-    const code = `LRU_CACHE_METHOD_${method}`;
-    if (shouldWarn(code)) {
-      const { prototype } = LRUCache;
-      const { get } = Object.getOwnPropertyDescriptor(prototype, method);
-      warn(code, `${method} method`, `cache.${instead}()`, get);
-    }
-  };
-  var deprecatedProperty = (field, instead) => {
-    const code = `LRU_CACHE_PROPERTY_${field}`;
-    if (shouldWarn(code)) {
-      const { prototype } = LRUCache;
-      const { get } = Object.getOwnPropertyDescriptor(prototype, field);
-      warn(code, `${field} property`, `cache.${instead}`, get);
-    }
-  };
-  var emitWarning = (...a) => {
-    typeof process === "object" && process && typeof process.emitWarning === "function" ? process.emitWarning(...a) : console.error(...a);
-  };
+  var AC = globalThis.AbortController;
+  var AS = globalThis.AbortSignal;
+  if (typeof AC === "undefined") {
+    AS = class AbortSignal {
+      onabort;
+      _onabort = [];
+      reason;
+      aborted = false;
+      addEventListener(_, fn) {
+        this._onabort.push(fn);
+      }
+    };
+    AC = class AbortController {
+      constructor() {
+        warnACPolyfill();
+      }
+      signal = new AS;
+      abort(reason) {
+        if (this.signal.aborted)
+          return;
+        this.signal.reason = reason;
+        this.signal.aborted = true;
+        for (const fn of this.signal._onabort) {
+          fn(reason);
+        }
+        this.signal.onabort?.(reason);
+      }
+    };
+    let printACPolyfillWarning = PROCESS.env?.LRU_CACHE_IGNORE_AC_WARNING !== "1";
+    const warnACPolyfill = () => {
+      if (!printACPolyfillWarning)
+        return;
+      printACPolyfillWarning = false;
+      emitWarning("AbortController is not defined. If using lru-cache in node 14, load an AbortController polyfill from the `node-abort-controller` package. A minimal polyfill is provided for use by LRUCache.fetch(), but it should not be relied upon in other contexts (eg, passing it to other APIs that use AbortController/AbortSignal might have undesirable effects). You may disable this with LRU_CACHE_IGNORE_AC_WARNING=1 in the env.", "NO_ABORT_CONTROLLER", "ENOTSUP", warnACPolyfill);
+    };
+  }
   var shouldWarn = (code) => !warned.has(code);
-  var warn = (code, what, instead, fn) => {
-    warned.add(code);
-    const msg = `The ${what} is deprecated. Please use ${instead} instead.`;
-    emitWarning(msg, "DeprecationWarning", code, fn);
-  };
+  var TYPE = Symbol("type");
   var isPosInt = (n) => n && n === Math.floor(n) && n > 0 && isFinite(n);
   var getUintArray = (max) => !isPosInt(max) ? null : max <= Math.pow(2, 8) ? Uint8Array : max <= Math.pow(2, 16) ? Uint16Array : max <= Math.pow(2, 32) ? Uint32Array : max <= Number.MAX_SAFE_INTEGER ? ZeroArray : null;
 
@@ -15061,12 +17963,23 @@ var require_lru_cache = __commonJS((exports, module) => {
   }
 
   class Stack {
-    constructor(max) {
-      if (max === 0) {
+    heap;
+    length;
+    static #constructing = false;
+    static create(max) {
+      const HeapCls = getUintArray(max);
+      if (!HeapCls)
         return [];
+      Stack.#constructing = true;
+      const s = new Stack(max, HeapCls);
+      Stack.#constructing = false;
+      return s;
+    }
+    constructor(max, HeapCls) {
+      if (!Stack.#constructing) {
+        throw new TypeError("instantiate Stack using Stack.create(n)");
       }
-      const UintArray = getUintArray(max);
-      this.heap = new UintArray(max);
+      this.heap = new HeapCls(max);
       this.length = 0;
     }
     push(n) {
@@ -15078,31 +17991,91 @@ var require_lru_cache = __commonJS((exports, module) => {
   }
 
   class LRUCache {
-    constructor(options = {}) {
-      const {
-        max = 0,
-        ttl,
-        ttlResolution = 1,
-        ttlAutopurge,
-        updateAgeOnGet,
-        updateAgeOnHas,
-        allowStale,
-        dispose,
-        disposeAfter,
-        noDisposeOnSet,
-        noUpdateTTL,
-        maxSize = 0,
-        maxEntrySize = 0,
-        sizeCalculation,
-        fetchMethod,
-        fetchContext,
-        noDeleteOnFetchRejection,
-        noDeleteOnStaleGet,
-        allowStaleOnFetchRejection,
-        allowStaleOnFetchAbort,
-        ignoreFetchAbort
-      } = options;
-      const { length, maxAge, stale } = options instanceof LRUCache ? {} : options;
+    #max;
+    #maxSize;
+    #dispose;
+    #disposeAfter;
+    #fetchMethod;
+    ttl;
+    ttlResolution;
+    ttlAutopurge;
+    updateAgeOnGet;
+    updateAgeOnHas;
+    allowStale;
+    noDisposeOnSet;
+    noUpdateTTL;
+    maxEntrySize;
+    sizeCalculation;
+    noDeleteOnFetchRejection;
+    noDeleteOnStaleGet;
+    allowStaleOnFetchAbort;
+    allowStaleOnFetchRejection;
+    ignoreFetchAbort;
+    #size;
+    #calculatedSize;
+    #keyMap;
+    #keyList;
+    #valList;
+    #next;
+    #prev;
+    #head;
+    #tail;
+    #free;
+    #disposed;
+    #sizes;
+    #starts;
+    #ttls;
+    #hasDispose;
+    #hasFetchMethod;
+    #hasDisposeAfter;
+    static unsafeExposeInternals(c) {
+      return {
+        starts: c.#starts,
+        ttls: c.#ttls,
+        sizes: c.#sizes,
+        keyMap: c.#keyMap,
+        keyList: c.#keyList,
+        valList: c.#valList,
+        next: c.#next,
+        prev: c.#prev,
+        get head() {
+          return c.#head;
+        },
+        get tail() {
+          return c.#tail;
+        },
+        free: c.#free,
+        isBackgroundFetch: (p) => c.#isBackgroundFetch(p),
+        backgroundFetch: (k, index, options, context) => c.#backgroundFetch(k, index, options, context),
+        moveToTail: (index) => c.#moveToTail(index),
+        indexes: (options) => c.#indexes(options),
+        rindexes: (options) => c.#rindexes(options),
+        isStale: (index) => c.#isStale(index)
+      };
+    }
+    get max() {
+      return this.#max;
+    }
+    get maxSize() {
+      return this.#maxSize;
+    }
+    get calculatedSize() {
+      return this.#calculatedSize;
+    }
+    get size() {
+      return this.#size;
+    }
+    get fetchMethod() {
+      return this.#fetchMethod;
+    }
+    get dispose() {
+      return this.#dispose;
+    }
+    get disposeAfter() {
+      return this.#disposeAfter;
+    }
+    constructor(options) {
+      const { max = 0, ttl, ttlResolution = 1, ttlAutopurge, updateAgeOnGet, updateAgeOnHas, allowStale, dispose, disposeAfter, noDisposeOnSet, noUpdateTTL, maxSize = 0, maxEntrySize = 0, sizeCalculation, fetchMethod, noDeleteOnFetchRejection, noDeleteOnStaleGet, allowStaleOnFetchRejection, allowStaleOnFetchAbort, ignoreFetchAbort } = options;
       if (max !== 0 && !isPosInt(max)) {
         throw new TypeError("max option must be a nonnegative integer");
       }
@@ -15110,46 +18083,45 @@ var require_lru_cache = __commonJS((exports, module) => {
       if (!UintArray) {
         throw new Error("invalid max value: " + max);
       }
-      this.max = max;
-      this.maxSize = maxSize;
-      this.maxEntrySize = maxEntrySize || this.maxSize;
-      this.sizeCalculation = sizeCalculation || length;
+      this.#max = max;
+      this.#maxSize = maxSize;
+      this.maxEntrySize = maxEntrySize || this.#maxSize;
+      this.sizeCalculation = sizeCalculation;
       if (this.sizeCalculation) {
-        if (!this.maxSize && !this.maxEntrySize) {
+        if (!this.#maxSize && !this.maxEntrySize) {
           throw new TypeError("cannot set sizeCalculation without setting maxSize or maxEntrySize");
         }
         if (typeof this.sizeCalculation !== "function") {
           throw new TypeError("sizeCalculation set to non-function");
         }
       }
-      this.fetchMethod = fetchMethod || null;
-      if (this.fetchMethod && typeof this.fetchMethod !== "function") {
+      if (fetchMethod !== undefined && typeof fetchMethod !== "function") {
         throw new TypeError("fetchMethod must be a function if specified");
       }
-      this.fetchContext = fetchContext;
-      if (!this.fetchMethod && fetchContext !== undefined) {
-        throw new TypeError("cannot set fetchContext without fetchMethod");
-      }
-      this.keyMap = new Map;
-      this.keyList = new Array(max).fill(null);
-      this.valList = new Array(max).fill(null);
-      this.next = new UintArray(max);
-      this.prev = new UintArray(max);
-      this.head = 0;
-      this.tail = 0;
-      this.free = new Stack(max);
-      this.initialFill = 1;
-      this.size = 0;
+      this.#fetchMethod = fetchMethod;
+      this.#hasFetchMethod = !!fetchMethod;
+      this.#keyMap = new Map;
+      this.#keyList = new Array(max).fill(undefined);
+      this.#valList = new Array(max).fill(undefined);
+      this.#next = new UintArray(max);
+      this.#prev = new UintArray(max);
+      this.#head = 0;
+      this.#tail = 0;
+      this.#free = Stack.create(max);
+      this.#size = 0;
+      this.#calculatedSize = 0;
       if (typeof dispose === "function") {
-        this.dispose = dispose;
+        this.#dispose = dispose;
       }
       if (typeof disposeAfter === "function") {
-        this.disposeAfter = disposeAfter;
-        this.disposed = [];
+        this.#disposeAfter = disposeAfter;
+        this.#disposed = [];
       } else {
-        this.disposeAfter = null;
-        this.disposed = null;
+        this.#disposeAfter = undefined;
+        this.#disposed = undefined;
       }
+      this.#hasDispose = !!this.#dispose;
+      this.#hasDisposeAfter = !!this.#disposeAfter;
       this.noDisposeOnSet = !!noDisposeOnSet;
       this.noUpdateTTL = !!noUpdateTTL;
       this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection;
@@ -15157,33 +18129,33 @@ var require_lru_cache = __commonJS((exports, module) => {
       this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort;
       this.ignoreFetchAbort = !!ignoreFetchAbort;
       if (this.maxEntrySize !== 0) {
-        if (this.maxSize !== 0) {
-          if (!isPosInt(this.maxSize)) {
+        if (this.#maxSize !== 0) {
+          if (!isPosInt(this.#maxSize)) {
             throw new TypeError("maxSize must be a positive integer if specified");
           }
         }
         if (!isPosInt(this.maxEntrySize)) {
           throw new TypeError("maxEntrySize must be a positive integer if specified");
         }
-        this.initializeSizeTracking();
+        this.#initializeSizeTracking();
       }
-      this.allowStale = !!allowStale || !!stale;
+      this.allowStale = !!allowStale;
       this.noDeleteOnStaleGet = !!noDeleteOnStaleGet;
       this.updateAgeOnGet = !!updateAgeOnGet;
       this.updateAgeOnHas = !!updateAgeOnHas;
       this.ttlResolution = isPosInt(ttlResolution) || ttlResolution === 0 ? ttlResolution : 1;
       this.ttlAutopurge = !!ttlAutopurge;
-      this.ttl = ttl || maxAge || 0;
+      this.ttl = ttl || 0;
       if (this.ttl) {
         if (!isPosInt(this.ttl)) {
           throw new TypeError("ttl must be a positive integer if specified");
         }
-        this.initializeTTLTracking();
+        this.#initializeTTLTracking();
       }
-      if (this.max === 0 && this.ttl === 0 && this.maxSize === 0) {
+      if (this.#max === 0 && this.ttl === 0 && this.#maxSize === 0) {
         throw new TypeError("At least one of max, maxSize, or ttl is required");
       }
-      if (!this.ttlAutopurge && !this.max && !this.maxSize) {
+      if (!this.ttlAutopurge && !this.#max && !this.#maxSize) {
         const code = "LRU_CACHE_UNBOUNDED";
         if (shouldWarn(code)) {
           warned.add(code);
@@ -15191,29 +18163,22 @@ var require_lru_cache = __commonJS((exports, module) => {
           emitWarning(msg, "UnboundedCacheWarning", code, LRUCache);
         }
       }
-      if (stale) {
-        deprecatedOption("stale", "allowStale");
-      }
-      if (maxAge) {
-        deprecatedOption("maxAge", "ttl");
-      }
-      if (length) {
-        deprecatedOption("length", "sizeCalculation");
-      }
     }
     getRemainingTTL(key) {
-      return this.has(key, { updateAgeOnHas: false }) ? Infinity : 0;
+      return this.#keyMap.has(key) ? Infinity : 0;
     }
-    initializeTTLTracking() {
-      this.ttls = new ZeroArray(this.max);
-      this.starts = new ZeroArray(this.max);
-      this.setItemTTL = (index, ttl, start = perf.now()) => {
-        this.starts[index] = ttl !== 0 ? start : 0;
-        this.ttls[index] = ttl;
+    #initializeTTLTracking() {
+      const ttls = new ZeroArray(this.#max);
+      const starts = new ZeroArray(this.#max);
+      this.#ttls = ttls;
+      this.#starts = starts;
+      this.#setItemTTL = (index, ttl, start = perf.now()) => {
+        starts[index] = ttl !== 0 ? start : 0;
+        ttls[index] = ttl;
         if (ttl !== 0 && this.ttlAutopurge) {
           const t = setTimeout(() => {
-            if (this.isStale(index)) {
-              this.delete(this.keyList[index]);
+            if (this.#isStale(index)) {
+              this.delete(this.#keyList[index]);
             }
           }, ttl + 1);
           if (t.unref) {
@@ -15221,15 +18186,18 @@ var require_lru_cache = __commonJS((exports, module) => {
           }
         }
       };
-      this.updateItemAge = (index) => {
-        this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0;
+      this.#updateItemAge = (index) => {
+        starts[index] = ttls[index] !== 0 ? perf.now() : 0;
       };
-      this.statusTTL = (status, index) => {
-        if (status) {
-          status.ttl = this.ttls[index];
-          status.start = this.starts[index];
+      this.#statusTTL = (status, index) => {
+        if (ttls[index]) {
+          const ttl = ttls[index];
+          const start = starts[index];
+          status.ttl = ttl;
+          status.start = start;
           status.now = cachedNow || getNow();
-          status.remainingTTL = status.now + status.ttl - status.start;
+          const age = status.now - start;
+          status.remainingTTL = ttl - age;
         }
       };
       let cachedNow = 0;
@@ -15245,34 +18213,39 @@ var require_lru_cache = __commonJS((exports, module) => {
         return n;
       };
       this.getRemainingTTL = (key) => {
-        const index = this.keyMap.get(key);
+        const index = this.#keyMap.get(key);
         if (index === undefined) {
           return 0;
         }
-        return this.ttls[index] === 0 || this.starts[index] === 0 ? Infinity : this.starts[index] + this.ttls[index] - (cachedNow || getNow());
+        const ttl = ttls[index];
+        const start = starts[index];
+        if (ttl === 0 || start === 0) {
+          return Infinity;
+        }
+        const age = (cachedNow || getNow()) - start;
+        return ttl - age;
       };
-      this.isStale = (index) => {
-        return this.ttls[index] !== 0 && this.starts[index] !== 0 && (cachedNow || getNow()) - this.starts[index] > this.ttls[index];
+      this.#isStale = (index) => {
+        return ttls[index] !== 0 && starts[index] !== 0 && (cachedNow || getNow()) - starts[index] > ttls[index];
       };
     }
-    updateItemAge(_index) {
-    }
-    statusTTL(_status, _index) {
-    }
-    setItemTTL(_index, _ttl, _start) {
-    }
-    isStale(_index) {
-      return false;
-    }
-    initializeSizeTracking() {
-      this.calculatedSize = 0;
-      this.sizes = new ZeroArray(this.max);
-      this.removeItemSize = (index) => {
-        this.calculatedSize -= this.sizes[index];
-        this.sizes[index] = 0;
+    #updateItemAge = () => {
+    };
+    #statusTTL = () => {
+    };
+    #setItemTTL = () => {
+    };
+    #isStale = () => false;
+    #initializeSizeTracking() {
+      const sizes = new ZeroArray(this.#max);
+      this.#calculatedSize = 0;
+      this.#sizes = sizes;
+      this.#removeItemSize = (index) => {
+        this.#calculatedSize -= sizes[index];
+        sizes[index] = 0;
       };
-      this.requireSize = (k, v, size, sizeCalculation) => {
-        if (this.isBackgroundFetch(v)) {
+      this.#requireSize = (k, v, size, sizeCalculation) => {
+        if (this.#isBackgroundFetch(v)) {
           return 0;
         }
         if (!isPosInt(size)) {
@@ -15290,150 +18263,151 @@ var require_lru_cache = __commonJS((exports, module) => {
         }
         return size;
       };
-      this.addItemSize = (index, size, status) => {
-        this.sizes[index] = size;
-        if (this.maxSize) {
-          const maxSize = this.maxSize - this.sizes[index];
-          while (this.calculatedSize > maxSize) {
-            this.evict(true);
+      this.#addItemSize = (index, size, status) => {
+        sizes[index] = size;
+        if (this.#maxSize) {
+          const maxSize = this.#maxSize - sizes[index];
+          while (this.#calculatedSize > maxSize) {
+            this.#evict(true);
           }
         }
-        this.calculatedSize += this.sizes[index];
+        this.#calculatedSize += sizes[index];
         if (status) {
           status.entrySize = size;
-          status.totalCalculatedSize = this.calculatedSize;
+          status.totalCalculatedSize = this.#calculatedSize;
         }
       };
     }
-    removeItemSize(_index) {
-    }
-    addItemSize(_index, _size) {
-    }
-    requireSize(_k, _v, size, sizeCalculation) {
+    #removeItemSize = (_i) => {
+    };
+    #addItemSize = (_i, _s, _st) => {
+    };
+    #requireSize = (_k, _v, size, sizeCalculation) => {
       if (size || sizeCalculation) {
         throw new TypeError("cannot set size without setting maxSize or maxEntrySize on cache");
       }
-    }
-    *indexes({ allowStale = this.allowStale } = {}) {
-      if (this.size) {
-        for (let i = this.tail;; ) {
-          if (!this.isValidIndex(i)) {
+      return 0;
+    };
+    *#indexes({ allowStale = this.allowStale } = {}) {
+      if (this.#size) {
+        for (let i = this.#tail;; ) {
+          if (!this.#isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.isStale(i)) {
+          if (allowStale || !this.#isStale(i)) {
             yield i;
           }
-          if (i === this.head) {
+          if (i === this.#head) {
             break;
           } else {
-            i = this.prev[i];
+            i = this.#prev[i];
           }
         }
       }
     }
-    *rindexes({ allowStale = this.allowStale } = {}) {
-      if (this.size) {
-        for (let i = this.head;; ) {
-          if (!this.isValidIndex(i)) {
+    *#rindexes({ allowStale = this.allowStale } = {}) {
+      if (this.#size) {
+        for (let i = this.#head;; ) {
+          if (!this.#isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.isStale(i)) {
+          if (allowStale || !this.#isStale(i)) {
             yield i;
           }
-          if (i === this.tail) {
+          if (i === this.#tail) {
             break;
           } else {
-            i = this.next[i];
+            i = this.#next[i];
           }
         }
       }
     }
-    isValidIndex(index) {
-      return index !== undefined && this.keyMap.get(this.keyList[index]) === index;
+    #isValidIndex(index) {
+      return index !== undefined && this.#keyMap.get(this.#keyList[index]) === index;
     }
     *entries() {
-      for (const i of this.indexes()) {
-        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield [this.keyList[i], this.valList[i]];
+      for (const i of this.#indexes()) {
+        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield [this.#keyList[i], this.#valList[i]];
         }
       }
     }
     *rentries() {
-      for (const i of this.rindexes()) {
-        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield [this.keyList[i], this.valList[i]];
+      for (const i of this.#rindexes()) {
+        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield [this.#keyList[i], this.#valList[i]];
         }
       }
     }
     *keys() {
-      for (const i of this.indexes()) {
-        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.keyList[i];
+      for (const i of this.#indexes()) {
+        const k = this.#keyList[i];
+        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield k;
         }
       }
     }
     *rkeys() {
-      for (const i of this.rindexes()) {
-        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.keyList[i];
+      for (const i of this.#rindexes()) {
+        const k = this.#keyList[i];
+        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield k;
         }
       }
     }
     *values() {
-      for (const i of this.indexes()) {
-        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.valList[i];
+      for (const i of this.#indexes()) {
+        const v = this.#valList[i];
+        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield this.#valList[i];
         }
       }
     }
     *rvalues() {
-      for (const i of this.rindexes()) {
-        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.valList[i];
+      for (const i of this.#rindexes()) {
+        const v = this.#valList[i];
+        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield this.#valList[i];
         }
       }
     }
     [Symbol.iterator]() {
       return this.entries();
     }
-    find(fn, getOptions) {
-      for (const i of this.indexes()) {
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    find(fn, getOptions = {}) {
+      for (const i of this.#indexes()) {
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        if (fn(value, this.keyList[i], this)) {
-          return this.get(this.keyList[i], getOptions);
+        if (fn(value, this.#keyList[i], this)) {
+          return this.get(this.#keyList[i], getOptions);
         }
       }
     }
     forEach(fn, thisp = this) {
-      for (const i of this.indexes()) {
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.#indexes()) {
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.keyList[i], this);
+        fn.call(thisp, value, this.#keyList[i], this);
       }
     }
     rforEach(fn, thisp = this) {
-      for (const i of this.rindexes()) {
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.#rindexes()) {
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.keyList[i], this);
+        fn.call(thisp, value, this.#keyList[i], this);
       }
-    }
-    get prune() {
-      deprecatedMethod("prune", "purgeStale");
-      return this.purgeStale;
     }
     purgeStale() {
       let deleted = false;
-      for (const i of this.rindexes({ allowStale: true })) {
-        if (this.isStale(i)) {
-          this.delete(this.keyList[i]);
+      for (const i of this.#rindexes({ allowStale: true })) {
+        if (this.#isStale(i)) {
+          this.delete(this.#keyList[i]);
           deleted = true;
         }
       }
@@ -15441,20 +18415,20 @@ var require_lru_cache = __commonJS((exports, module) => {
     }
     dump() {
       const arr = [];
-      for (const i of this.indexes({ allowStale: true })) {
-        const key = this.keyList[i];
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
-        if (value === undefined)
+      for (const i of this.#indexes({ allowStale: true })) {
+        const key = this.#keyList[i];
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+        if (value === undefined || key === undefined)
           continue;
         const entry = { value };
-        if (this.ttls) {
-          entry.ttl = this.ttls[i];
-          const age = perf.now() - this.starts[i];
+        if (this.#ttls && this.#starts) {
+          entry.ttl = this.#ttls[i];
+          const age = perf.now() - this.#starts[i];
           entry.start = Math.floor(Date.now() - age);
         }
-        if (this.sizes) {
-          entry.size = this.sizes[i];
+        if (this.#sizes) {
+          entry.size = this.#sizes[i];
         }
         arr.unshift([key, entry]);
       }
@@ -15470,18 +18444,14 @@ var require_lru_cache = __commonJS((exports, module) => {
         this.set(key, entry.value, entry);
       }
     }
-    dispose(_v, _k, _reason) {
-    }
-    set(k, v, {
-      ttl = this.ttl,
-      start,
-      noDisposeOnSet = this.noDisposeOnSet,
-      size = 0,
-      sizeCalculation = this.sizeCalculation,
-      noUpdateTTL = this.noUpdateTTL,
-      status
-    } = {}) {
-      size = this.requireSize(k, v, size, sizeCalculation);
+    set(k, v, setOptions = {}) {
+      if (v === undefined) {
+        this.delete(k);
+        return this;
+      }
+      const { ttl = this.ttl, start, noDisposeOnSet = this.noDisposeOnSet, sizeCalculation = this.sizeCalculation, status } = setOptions;
+      let { noUpdateTTL = this.noUpdateTTL } = setOptions;
+      const size = this.#requireSize(k, v, setOptions.size || 0, sizeCalculation);
       if (this.maxEntrySize && size > this.maxEntrySize) {
         if (status) {
           status.set = "miss";
@@ -15490,41 +18460,49 @@ var require_lru_cache = __commonJS((exports, module) => {
         this.delete(k);
         return this;
       }
-      let index = this.size === 0 ? undefined : this.keyMap.get(k);
+      let index = this.#size === 0 ? undefined : this.#keyMap.get(k);
       if (index === undefined) {
-        index = this.newIndex();
-        this.keyList[index] = k;
-        this.valList[index] = v;
-        this.keyMap.set(k, index);
-        this.next[this.tail] = index;
-        this.prev[index] = this.tail;
-        this.tail = index;
-        this.size++;
-        this.addItemSize(index, size, status);
-        if (status) {
+        index = this.#size === 0 ? this.#tail : this.#free.length !== 0 ? this.#free.pop() : this.#size === this.#max ? this.#evict(false) : this.#size;
+        this.#keyList[index] = k;
+        this.#valList[index] = v;
+        this.#keyMap.set(k, index);
+        this.#next[this.#tail] = index;
+        this.#prev[index] = this.#tail;
+        this.#tail = index;
+        this.#size++;
+        this.#addItemSize(index, size, status);
+        if (status)
           status.set = "add";
-        }
         noUpdateTTL = false;
       } else {
-        this.moveToTail(index);
-        const oldVal = this.valList[index];
+        this.#moveToTail(index);
+        const oldVal = this.#valList[index];
         if (v !== oldVal) {
-          if (this.isBackgroundFetch(oldVal)) {
+          if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
             oldVal.__abortController.abort(new Error("replaced"));
-          } else {
-            if (!noDisposeOnSet) {
-              this.dispose(oldVal, k, "set");
-              if (this.disposeAfter) {
-                this.disposed.push([oldVal, k, "set"]);
+            const { __staleWhileFetching: s } = oldVal;
+            if (s !== undefined && !noDisposeOnSet) {
+              if (this.#hasDispose) {
+                this.#dispose?.(s, k, "set");
+              }
+              if (this.#hasDisposeAfter) {
+                this.#disposed?.push([s, k, "set"]);
               }
             }
+          } else if (!noDisposeOnSet) {
+            if (this.#hasDispose) {
+              this.#dispose?.(oldVal, k, "set");
+            }
+            if (this.#hasDisposeAfter) {
+              this.#disposed?.push([oldVal, k, "set"]);
+            }
           }
-          this.removeItemSize(index);
-          this.valList[index] = v;
-          this.addItemSize(index, size, status);
+          this.#removeItemSize(index);
+          this.#addItemSize(index, size, status);
+          this.#valList[index] = v;
           if (status) {
             status.set = "replace";
-            const oldValue = oldVal && this.isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
+            const oldValue = oldVal && this.#isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
             if (oldValue !== undefined)
               status.oldValue = oldValue;
           }
@@ -15532,98 +18510,122 @@ var require_lru_cache = __commonJS((exports, module) => {
           status.set = "update";
         }
       }
-      if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
-        this.initializeTTLTracking();
+      if (ttl !== 0 && !this.#ttls) {
+        this.#initializeTTLTracking();
       }
-      if (!noUpdateTTL) {
-        this.setItemTTL(index, ttl, start);
+      if (this.#ttls) {
+        if (!noUpdateTTL) {
+          this.#setItemTTL(index, ttl, start);
+        }
+        if (status)
+          this.#statusTTL(status, index);
       }
-      this.statusTTL(status, index);
-      if (this.disposeAfter) {
-        while (this.disposed.length) {
-          this.disposeAfter(...this.disposed.shift());
+      if (!noDisposeOnSet && this.#hasDisposeAfter && this.#disposed) {
+        const dt = this.#disposed;
+        let task;
+        while (task = dt?.shift()) {
+          this.#disposeAfter?.(...task);
         }
       }
       return this;
     }
-    newIndex() {
-      if (this.size === 0) {
-        return this.tail;
-      }
-      if (this.size === this.max && this.max !== 0) {
-        return this.evict(false);
-      }
-      if (this.free.length !== 0) {
-        return this.free.pop();
-      }
-      return this.initialFill++;
-    }
     pop() {
-      if (this.size) {
-        const val = this.valList[this.head];
-        this.evict(true);
-        return val;
-      }
-    }
-    evict(free) {
-      const head = this.head;
-      const k = this.keyList[head];
-      const v = this.valList[head];
-      if (this.isBackgroundFetch(v)) {
-        v.__abortController.abort(new Error("evicted"));
-      } else {
-        this.dispose(v, k, "evict");
-        if (this.disposeAfter) {
-          this.disposed.push([v, k, "evict"]);
+      try {
+        while (this.#size) {
+          const val = this.#valList[this.#head];
+          this.#evict(true);
+          if (this.#isBackgroundFetch(val)) {
+            if (val.__staleWhileFetching) {
+              return val.__staleWhileFetching;
+            }
+          } else if (val !== undefined) {
+            return val;
+          }
+        }
+      } finally {
+        if (this.#hasDisposeAfter && this.#disposed) {
+          const dt = this.#disposed;
+          let task;
+          while (task = dt?.shift()) {
+            this.#disposeAfter?.(...task);
+          }
         }
       }
-      this.removeItemSize(head);
-      if (free) {
-        this.keyList[head] = null;
-        this.valList[head] = null;
-        this.free.push(head);
+    }
+    #evict(free) {
+      const head = this.#head;
+      const k = this.#keyList[head];
+      const v = this.#valList[head];
+      if (this.#hasFetchMethod && this.#isBackgroundFetch(v)) {
+        v.__abortController.abort(new Error("evicted"));
+      } else if (this.#hasDispose || this.#hasDisposeAfter) {
+        if (this.#hasDispose) {
+          this.#dispose?.(v, k, "evict");
+        }
+        if (this.#hasDisposeAfter) {
+          this.#disposed?.push([v, k, "evict"]);
+        }
       }
-      this.head = this.next[head];
-      this.keyMap.delete(k);
-      this.size--;
+      this.#removeItemSize(head);
+      if (free) {
+        this.#keyList[head] = undefined;
+        this.#valList[head] = undefined;
+        this.#free.push(head);
+      }
+      if (this.#size === 1) {
+        this.#head = this.#tail = 0;
+        this.#free.length = 0;
+      } else {
+        this.#head = this.#next[head];
+      }
+      this.#keyMap.delete(k);
+      this.#size--;
       return head;
     }
-    has(k, { updateAgeOnHas = this.updateAgeOnHas, status } = {}) {
-      const index = this.keyMap.get(k);
+    has(k, hasOptions = {}) {
+      const { updateAgeOnHas = this.updateAgeOnHas, status } = hasOptions;
+      const index = this.#keyMap.get(k);
       if (index !== undefined) {
-        if (!this.isStale(index)) {
+        const v = this.#valList[index];
+        if (this.#isBackgroundFetch(v) && v.__staleWhileFetching === undefined) {
+          return false;
+        }
+        if (!this.#isStale(index)) {
           if (updateAgeOnHas) {
-            this.updateItemAge(index);
+            this.#updateItemAge(index);
           }
-          if (status)
+          if (status) {
             status.has = "hit";
-          this.statusTTL(status, index);
+            this.#statusTTL(status, index);
+          }
           return true;
         } else if (status) {
           status.has = "stale";
-          this.statusTTL(status, index);
+          this.#statusTTL(status, index);
         }
       } else if (status) {
         status.has = "miss";
       }
       return false;
     }
-    peek(k, { allowStale = this.allowStale } = {}) {
-      const index = this.keyMap.get(k);
-      if (index !== undefined && (allowStale || !this.isStale(index))) {
-        const v = this.valList[index];
-        return this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    peek(k, peekOptions = {}) {
+      const { allowStale = this.allowStale } = peekOptions;
+      const index = this.#keyMap.get(k);
+      if (index !== undefined && (allowStale || !this.#isStale(index))) {
+        const v = this.#valList[index];
+        return this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
       }
     }
-    backgroundFetch(k, index, options, context) {
-      const v = index === undefined ? undefined : this.valList[index];
-      if (this.isBackgroundFetch(v)) {
+    #backgroundFetch(k, index, options, context) {
+      const v = index === undefined ? undefined : this.#valList[index];
+      if (this.#isBackgroundFetch(v)) {
         return v;
       }
       const ac = new AC;
-      if (options.signal) {
-        options.signal.addEventListener("abort", () => ac.abort(options.signal.reason));
-      }
+      const { signal } = options;
+      signal?.addEventListener("abort", () => ac.abort(signal.reason), {
+        signal: ac.signal
+      });
       const fetchOpts = {
         signal: ac.signal,
         options,
@@ -15645,10 +18647,11 @@ var require_lru_cache = __commonJS((exports, module) => {
         if (aborted && !ignoreAbort && !updateCache) {
           return fetchFail(ac.signal.reason);
         }
-        if (this.valList[index] === p) {
+        const bf2 = p;
+        if (this.#valList[index] === p) {
           if (v2 === undefined) {
-            if (p.__staleWhileFetching) {
-              this.valList[index] = p.__staleWhileFetching;
+            if (bf2.__staleWhileFetching) {
+              this.#valList[index] = bf2.__staleWhileFetching;
             } else {
               this.delete(k);
             }
@@ -15672,28 +18675,32 @@ var require_lru_cache = __commonJS((exports, module) => {
         const allowStaleAborted = aborted && options.allowStaleOnFetchAbort;
         const allowStale = allowStaleAborted || options.allowStaleOnFetchRejection;
         const noDelete = allowStale || options.noDeleteOnFetchRejection;
-        if (this.valList[index] === p) {
-          const del = !noDelete || p.__staleWhileFetching === undefined;
+        const bf2 = p;
+        if (this.#valList[index] === p) {
+          const del = !noDelete || bf2.__staleWhileFetching === undefined;
           if (del) {
             this.delete(k);
           } else if (!allowStaleAborted) {
-            this.valList[index] = p.__staleWhileFetching;
+            this.#valList[index] = bf2.__staleWhileFetching;
           }
         }
         if (allowStale) {
-          if (options.status && p.__staleWhileFetching !== undefined) {
+          if (options.status && bf2.__staleWhileFetching !== undefined) {
             options.status.returnedStale = true;
           }
-          return p.__staleWhileFetching;
-        } else if (p.__returned === p) {
+          return bf2.__staleWhileFetching;
+        } else if (bf2.__returned === bf2) {
           throw er;
         }
       };
       const pcall = (res, rej) => {
-        this.fetchMethod(k, v, fetchOpts).then((v2) => res(v2), rej);
+        const fmp = this.#fetchMethod?.(k, v, fetchOpts);
+        if (fmp && fmp instanceof Promise) {
+          fmp.then((v2) => res(v2 === undefined ? undefined : v2), rej);
+        }
         ac.signal.addEventListener("abort", () => {
           if (!options.ignoreFetchAbort || options.allowStaleOnFetchAbort) {
-            res();
+            res(undefined);
             if (options.allowStaleOnFetchAbort) {
               res = (v2) => cb(v2, true);
             }
@@ -15703,39 +18710,45 @@ var require_lru_cache = __commonJS((exports, module) => {
       if (options.status)
         options.status.fetchDispatched = true;
       const p = new Promise(pcall).then(cb, eb);
-      p.__abortController = ac;
-      p.__staleWhileFetching = v;
-      p.__returned = null;
+      const bf = Object.assign(p, {
+        __abortController: ac,
+        __staleWhileFetching: v,
+        __returned: undefined
+      });
       if (index === undefined) {
-        this.set(k, p, { ...fetchOpts.options, status: undefined });
-        index = this.keyMap.get(k);
+        this.set(k, bf, { ...fetchOpts.options, status: undefined });
+        index = this.#keyMap.get(k);
       } else {
-        this.valList[index] = p;
+        this.#valList[index] = bf;
       }
-      return p;
+      return bf;
     }
-    isBackgroundFetch(p) {
-      return p && typeof p === "object" && typeof p.then === "function" && Object.prototype.hasOwnProperty.call(p, "__staleWhileFetching") && Object.prototype.hasOwnProperty.call(p, "__returned") && (p.__returned === p || p.__returned === null);
+    #isBackgroundFetch(p) {
+      if (!this.#hasFetchMethod)
+        return false;
+      const b = p;
+      return !!b && b instanceof Promise && b.hasOwnProperty("__staleWhileFetching") && b.__abortController instanceof AC;
     }
-    async fetch(k, {
-      allowStale = this.allowStale,
-      updateAgeOnGet = this.updateAgeOnGet,
-      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
-      ttl = this.ttl,
-      noDisposeOnSet = this.noDisposeOnSet,
-      size = 0,
-      sizeCalculation = this.sizeCalculation,
-      noUpdateTTL = this.noUpdateTTL,
-      noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
-      allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
-      ignoreFetchAbort = this.ignoreFetchAbort,
-      allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
-      fetchContext = this.fetchContext,
-      forceRefresh = false,
-      status,
-      signal
-    } = {}) {
-      if (!this.fetchMethod) {
+    async fetch(k, fetchOptions = {}) {
+      const {
+        allowStale = this.allowStale,
+        updateAgeOnGet = this.updateAgeOnGet,
+        noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+        ttl = this.ttl,
+        noDisposeOnSet = this.noDisposeOnSet,
+        size = 0,
+        sizeCalculation = this.sizeCalculation,
+        noUpdateTTL = this.noUpdateTTL,
+        noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
+        allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
+        ignoreFetchAbort = this.ignoreFetchAbort,
+        allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
+        context,
+        forceRefresh = false,
+        status,
+        signal
+      } = fetchOptions;
+      if (!this.#hasFetchMethod) {
         if (status)
           status.fetch = "get";
         return this.get(k, {
@@ -15761,15 +18774,15 @@ var require_lru_cache = __commonJS((exports, module) => {
         status,
         signal
       };
-      let index = this.keyMap.get(k);
+      let index = this.#keyMap.get(k);
       if (index === undefined) {
         if (status)
           status.fetch = "miss";
-        const p = this.backgroundFetch(k, index, options, fetchContext);
+        const p = this.#backgroundFetch(k, index, options, context);
         return p.__returned = p;
       } else {
-        const v = this.valList[index];
-        if (this.isBackgroundFetch(v)) {
+        const v = this.#valList[index];
+        if (this.#isBackgroundFetch(v)) {
           const stale = allowStale && v.__staleWhileFetching !== undefined;
           if (status) {
             status.fetch = "inflight";
@@ -15778,52 +18791,50 @@ var require_lru_cache = __commonJS((exports, module) => {
           }
           return stale ? v.__staleWhileFetching : v.__returned = v;
         }
-        const isStale = this.isStale(index);
+        const isStale = this.#isStale(index);
         if (!forceRefresh && !isStale) {
           if (status)
             status.fetch = "hit";
-          this.moveToTail(index);
+          this.#moveToTail(index);
           if (updateAgeOnGet) {
-            this.updateItemAge(index);
+            this.#updateItemAge(index);
           }
-          this.statusTTL(status, index);
+          if (status)
+            this.#statusTTL(status, index);
           return v;
         }
-        const p = this.backgroundFetch(k, index, options, fetchContext);
+        const p = this.#backgroundFetch(k, index, options, context);
         const hasStale = p.__staleWhileFetching !== undefined;
         const staleVal = hasStale && allowStale;
         if (status) {
-          status.fetch = hasStale && isStale ? "stale" : "refresh";
+          status.fetch = isStale ? "stale" : "refresh";
           if (staleVal && isStale)
             status.returnedStale = true;
         }
         return staleVal ? p.__staleWhileFetching : p.__returned = p;
       }
     }
-    get(k, {
-      allowStale = this.allowStale,
-      updateAgeOnGet = this.updateAgeOnGet,
-      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
-      status
-    } = {}) {
-      const index = this.keyMap.get(k);
+    get(k, getOptions = {}) {
+      const { allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, status } = getOptions;
+      const index = this.#keyMap.get(k);
       if (index !== undefined) {
-        const value = this.valList[index];
-        const fetching = this.isBackgroundFetch(value);
-        this.statusTTL(status, index);
-        if (this.isStale(index)) {
+        const value = this.#valList[index];
+        const fetching = this.#isBackgroundFetch(value);
+        if (status)
+          this.#statusTTL(status, index);
+        if (this.#isStale(index)) {
           if (status)
             status.get = "stale";
           if (!fetching) {
             if (!noDeleteOnStaleGet) {
               this.delete(k);
             }
-            if (status)
-              status.returnedStale = allowStale;
+            if (status && allowStale)
+              status.returnedStale = true;
             return allowStale ? value : undefined;
           } else {
-            if (status) {
-              status.returnedStale = allowStale && value.__staleWhileFetching !== undefined;
+            if (status && allowStale && value.__staleWhileFetching !== undefined) {
+              status.returnedStale = true;
             }
             return allowStale ? value.__staleWhileFetching : undefined;
           }
@@ -15833,9 +18844,9 @@ var require_lru_cache = __commonJS((exports, module) => {
           if (fetching) {
             return value.__staleWhileFetching;
           }
-          this.moveToTail(index);
+          this.#moveToTail(index);
           if (updateAgeOnGet) {
-            this.updateItemAge(index);
+            this.#updateItemAge(index);
           }
           return value;
         }
@@ -15843,118 +18854,107 @@ var require_lru_cache = __commonJS((exports, module) => {
         status.get = "miss";
       }
     }
-    connect(p, n) {
-      this.prev[n] = p;
-      this.next[p] = n;
+    #connect(p, n) {
+      this.#prev[n] = p;
+      this.#next[p] = n;
     }
-    moveToTail(index) {
-      if (index !== this.tail) {
-        if (index === this.head) {
-          this.head = this.next[index];
+    #moveToTail(index) {
+      if (index !== this.#tail) {
+        if (index === this.#head) {
+          this.#head = this.#next[index];
         } else {
-          this.connect(this.prev[index], this.next[index]);
+          this.#connect(this.#prev[index], this.#next[index]);
         }
-        this.connect(this.tail, index);
-        this.tail = index;
+        this.#connect(this.#tail, index);
+        this.#tail = index;
       }
-    }
-    get del() {
-      deprecatedMethod("del", "delete");
-      return this.delete;
     }
     delete(k) {
       let deleted = false;
-      if (this.size !== 0) {
-        const index = this.keyMap.get(k);
+      if (this.#size !== 0) {
+        const index = this.#keyMap.get(k);
         if (index !== undefined) {
           deleted = true;
-          if (this.size === 1) {
+          if (this.#size === 1) {
             this.clear();
           } else {
-            this.removeItemSize(index);
-            const v = this.valList[index];
-            if (this.isBackgroundFetch(v)) {
+            this.#removeItemSize(index);
+            const v = this.#valList[index];
+            if (this.#isBackgroundFetch(v)) {
               v.__abortController.abort(new Error("deleted"));
-            } else {
-              this.dispose(v, k, "delete");
-              if (this.disposeAfter) {
-                this.disposed.push([v, k, "delete"]);
+            } else if (this.#hasDispose || this.#hasDisposeAfter) {
+              if (this.#hasDispose) {
+                this.#dispose?.(v, k, "delete");
+              }
+              if (this.#hasDisposeAfter) {
+                this.#disposed?.push([v, k, "delete"]);
               }
             }
-            this.keyMap.delete(k);
-            this.keyList[index] = null;
-            this.valList[index] = null;
-            if (index === this.tail) {
-              this.tail = this.prev[index];
-            } else if (index === this.head) {
-              this.head = this.next[index];
+            this.#keyMap.delete(k);
+            this.#keyList[index] = undefined;
+            this.#valList[index] = undefined;
+            if (index === this.#tail) {
+              this.#tail = this.#prev[index];
+            } else if (index === this.#head) {
+              this.#head = this.#next[index];
             } else {
-              this.next[this.prev[index]] = this.next[index];
-              this.prev[this.next[index]] = this.prev[index];
+              this.#next[this.#prev[index]] = this.#next[index];
+              this.#prev[this.#next[index]] = this.#prev[index];
             }
-            this.size--;
-            this.free.push(index);
+            this.#size--;
+            this.#free.push(index);
           }
         }
       }
-      if (this.disposed) {
-        while (this.disposed.length) {
-          this.disposeAfter(...this.disposed.shift());
+      if (this.#hasDisposeAfter && this.#disposed?.length) {
+        const dt = this.#disposed;
+        let task;
+        while (task = dt?.shift()) {
+          this.#disposeAfter?.(...task);
         }
       }
       return deleted;
     }
     clear() {
-      for (const index of this.rindexes({ allowStale: true })) {
-        const v = this.valList[index];
-        if (this.isBackgroundFetch(v)) {
+      for (const index of this.#rindexes({ allowStale: true })) {
+        const v = this.#valList[index];
+        if (this.#isBackgroundFetch(v)) {
           v.__abortController.abort(new Error("deleted"));
         } else {
-          const k = this.keyList[index];
-          this.dispose(v, k, "delete");
-          if (this.disposeAfter) {
-            this.disposed.push([v, k, "delete"]);
+          const k = this.#keyList[index];
+          if (this.#hasDispose) {
+            this.#dispose?.(v, k, "delete");
+          }
+          if (this.#hasDisposeAfter) {
+            this.#disposed?.push([v, k, "delete"]);
           }
         }
       }
-      this.keyMap.clear();
-      this.valList.fill(null);
-      this.keyList.fill(null);
-      if (this.ttls) {
-        this.ttls.fill(0);
-        this.starts.fill(0);
+      this.#keyMap.clear();
+      this.#valList.fill(undefined);
+      this.#keyList.fill(undefined);
+      if (this.#ttls && this.#starts) {
+        this.#ttls.fill(0);
+        this.#starts.fill(0);
       }
-      if (this.sizes) {
-        this.sizes.fill(0);
+      if (this.#sizes) {
+        this.#sizes.fill(0);
       }
-      this.head = 0;
-      this.tail = 0;
-      this.initialFill = 1;
-      this.free.length = 0;
-      this.calculatedSize = 0;
-      this.size = 0;
-      if (this.disposed) {
-        while (this.disposed.length) {
-          this.disposeAfter(...this.disposed.shift());
+      this.#head = 0;
+      this.#tail = 0;
+      this.#free.length = 0;
+      this.#calculatedSize = 0;
+      this.#size = 0;
+      if (this.#hasDisposeAfter && this.#disposed) {
+        const dt = this.#disposed;
+        let task;
+        while (task = dt?.shift()) {
+          this.#disposeAfter?.(...task);
         }
       }
     }
-    get reset() {
-      deprecatedMethod("reset", "clear");
-      return this.clear;
-    }
-    get length() {
-      deprecatedProperty("length", "size");
-      return this.size;
-    }
-    static get AbortController() {
-      return AC;
-    }
-    static get AbortSignal() {
-      return AS;
-    }
   }
-  module.exports = LRUCache;
+  exports.LRUCache = LRUCache;
 });
 
 // node_modules/hosted-git-info/lib/hosts.js
@@ -16262,11 +19262,11 @@ var require_from_url = __commonJS((exports, module) => {
 
 // node_modules/hosted-git-info/lib/index.js
 var require_lib5 = __commonJS((exports, module) => {
-  var LRU = require_lru_cache();
+  var { LRUCache } = require_cjs6();
   var hosts = require_hosts();
   var fromUrl = require_from_url();
   var parseUrl = require_parse_url();
-  var cache = new LRU({ max: 1000 });
+  var cache = new LRUCache({ max: 1000 });
 
   class GitHost {
     constructor(type, user, auth, project, committish, defaultRepresentation, opts = {}) {
@@ -16569,7 +19569,7 @@ var require_core2 = __commonJS((exports, module) => {
     sys: [">= 0.4 && < 0.7", ">= 0.8"],
     "node:sys": [">= 14.18 && < 15", ">= 16"],
     "test/reporters": ">= 19.9 && < 20.2",
-    "node:test/reporters": [">= 19.9", ">= 20"],
+    "node:test/reporters": [">= 18.17 && < 19", ">= 19.9", ">= 20"],
     "node:test": [">= 16.17 && < 17", ">= 18"],
     timers: true,
     "node:timers": [">= 14.18 && < 15", ">= 16"],
@@ -16603,8 +19603,8 @@ var require_core2 = __commonJS((exports, module) => {
     "node:v8": [">= 14.18 && < 15", ">= 16"],
     vm: true,
     "node:vm": [">= 14.18 && < 15", ">= 16"],
-    wasi: [">= 13.4 && < 13.5", ">= 20"],
-    "node:wasi": ">= 20",
+    wasi: [">= 13.4 && < 13.5", ">= 18.17 && < 19", ">= 20"],
+    "node:wasi": [">= 18.17 && < 19", ">= 20"],
     worker_threads: ">= 11.7",
     "node:worker_threads": [">= 14.18 && < 15", ">= 16"],
     zlib: ">= 0.5",
@@ -17272,131 +20272,164 @@ var require_inflight = __commonJS((exports, module) => {
   inflight.active = active;
 });
 
-// node_modules/isexe/windows.js
-var require_windows = __commonJS((exports, module) => {
-  var checkPathExt = function(path, options) {
-    var pathext = options.pathExt !== undefined ? options.pathExt : process.env.PATHEXT;
-    if (!pathext) {
+// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/posix.js
+var require_posix = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.sync = exports.isexe = undefined;
+  var fs_1 = __require("fs");
+  var promises_1 = __require("fs/promises");
+  var isexe = async (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat(await (0, promises_1.stat)(path), options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.isexe = isexe;
+  var sync = (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat((0, fs_1.statSync)(path), options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.sync = sync;
+  var checkStat = (stat, options) => stat.isFile() && checkMode(stat, options);
+  var checkMode = (stat, options) => {
+    const myUid = options.uid ?? process.getuid?.();
+    const myGroups = options.groups ?? process.getgroups?.() ?? [];
+    const myGid = options.gid ?? process.getgid?.() ?? myGroups[0];
+    if (myUid === undefined || myGid === undefined) {
+      throw new Error("cannot get uid or gid");
+    }
+    const groups = new Set([myGid, ...myGroups]);
+    const mod = stat.mode;
+    const uid = stat.uid;
+    const gid = stat.gid;
+    const u = parseInt("100", 8);
+    const g = parseInt("010", 8);
+    const o = parseInt("001", 8);
+    const ug = u | g;
+    return !!(mod & o || mod & g && groups.has(gid) || mod & u && uid === myUid || mod & ug && myUid === 0);
+  };
+});
+
+// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/win32.js
+var require_win32 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.sync = exports.isexe = undefined;
+  var fs_1 = __require("fs");
+  var promises_1 = __require("fs/promises");
+  var isexe = async (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat(await (0, promises_1.stat)(path), path, options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.isexe = isexe;
+  var sync = (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat((0, fs_1.statSync)(path), path, options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.sync = sync;
+  var checkPathExt = (path, options) => {
+    const { pathExt = process.env.PATHEXT || "" } = options;
+    const peSplit = pathExt.split(";");
+    if (peSplit.indexOf("") !== -1) {
       return true;
     }
-    pathext = pathext.split(";");
-    if (pathext.indexOf("") !== -1) {
-      return true;
-    }
-    for (var i = 0;i < pathext.length; i++) {
-      var p = pathext[i].toLowerCase();
-      if (p && path.substr(-p.length).toLowerCase() === p) {
+    for (let i = 0;i < peSplit.length; i++) {
+      const p = peSplit[i].toLowerCase();
+      const ext = path.substring(path.length - p.length).toLowerCase();
+      if (p && ext === p) {
         return true;
       }
     }
     return false;
   };
-  var checkStat = function(stat, path, options) {
-    if (!stat.isSymbolicLink() && !stat.isFile()) {
-      return false;
-    }
-    return checkPathExt(path, options);
-  };
-  var isexe = function(path, options, cb) {
-    fs.stat(path, function(er, stat) {
-      cb(er, er ? false : checkStat(stat, path, options));
-    });
-  };
-  var sync = function(path, options) {
-    return checkStat(fs.statSync(path), path, options);
-  };
-  module.exports = isexe;
-  isexe.sync = sync;
-  var fs = __require("fs");
+  var checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, options);
 });
 
-// node_modules/isexe/mode.js
-var require_mode = __commonJS((exports, module) => {
-  var isexe = function(path, options, cb) {
-    fs.stat(path, function(er, stat) {
-      cb(er, er ? false : checkStat(stat, options));
-    });
-  };
-  var sync = function(path, options) {
-    return checkStat(fs.statSync(path), options);
-  };
-  var checkStat = function(stat, options) {
-    return stat.isFile() && checkMode(stat, options);
-  };
-  var checkMode = function(stat, options) {
-    var mod = stat.mode;
-    var uid = stat.uid;
-    var gid = stat.gid;
-    var myUid = options.uid !== undefined ? options.uid : process.getuid && process.getuid();
-    var myGid = options.gid !== undefined ? options.gid : process.getgid && process.getgid();
-    var u = parseInt("100", 8);
-    var g = parseInt("010", 8);
-    var o = parseInt("001", 8);
-    var ug = u | g;
-    var ret = mod & o || mod & g && gid === myGid || mod & u && uid === myUid || mod & ug && myUid === 0;
-    return ret;
-  };
-  module.exports = isexe;
-  isexe.sync = sync;
-  var fs = __require("fs");
+// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/options.js
+var require_options = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
 });
 
-// node_modules/isexe/index.js
-var require_isexe = __commonJS((exports, module) => {
-  var isexe = function(path, options, cb) {
-    if (typeof options === "function") {
-      cb = options;
-      options = {};
+// node_modules/@npmcli/promise-spawn/node_modules/which/node_modules/isexe/dist/cjs/index.js
+var require_cjs7 = __commonJS((exports) => {
+  var __createBinding = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() {
+        return m[k];
+      } };
     }
-    if (!cb) {
-      if (typeof Promise !== "function") {
-        throw new TypeError("callback not provided");
-      }
-      return new Promise(function(resolve, reject) {
-        isexe(path, options || {}, function(er, is) {
-          if (er) {
-            reject(er);
-          } else {
-            resolve(is);
-          }
-        });
-      });
+    Object.defineProperty(o, k2, desc);
+  } : function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    o[k2] = m[k];
+  });
+  var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+  } : function(o, v) {
+    o["default"] = v;
+  });
+  var __importStar = exports && exports.__importStar || function(mod) {
+    if (mod && mod.__esModule)
+      return mod;
+    var result = {};
+    if (mod != null) {
+      for (var k in mod)
+        if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k))
+          __createBinding(result, mod, k);
     }
-    core(path, options || {}, function(er, is) {
-      if (er) {
-        if (er.code === "EACCES" || options && options.ignoreErrors) {
-          er = null;
-          is = false;
-        }
-      }
-      cb(er, is);
-    });
+    __setModuleDefault(result, mod);
+    return result;
   };
-  var sync = function(path, options) {
-    try {
-      return core.sync(path, options || {});
-    } catch (er) {
-      if (options && options.ignoreErrors || er.code === "EACCES") {
-        return false;
-      } else {
-        throw er;
-      }
-    }
+  var __exportStar = exports && exports.__exportStar || function(m, exports2) {
+    for (var p in m)
+      if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p))
+        __createBinding(exports2, m, p);
   };
-  var fs = __require("fs");
-  var core;
-  if (process.platform === "win32" || global.TESTING_WINDOWS) {
-    core = require_windows();
-  } else {
-    core = require_mode();
-  }
-  module.exports = isexe;
-  isexe.sync = sync;
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.sync = exports.isexe = exports.posix = exports.win32 = undefined;
+  var posix = __importStar(require_posix());
+  exports.posix = posix;
+  var win32 = __importStar(require_win32());
+  exports.win32 = win32;
+  __exportStar(require_options(), exports);
+  var platform = process.env._ISEXE_TEST_PLATFORM_ || process.platform;
+  var impl = platform === "win32" ? win32 : posix;
+  exports.isexe = impl.isexe;
+  exports.sync = impl.sync;
 });
 
 // node_modules/@npmcli/promise-spawn/node_modules/which/lib/index.js
 var require_lib7 = __commonJS((exports, module) => {
-  var isexe = require_isexe();
+  var { isexe, sync: isexeSync } = require_cjs7();
   var { join, delimiter, sep, posix } = __require("path");
   var isWindows = process.platform === "win32";
   var rSlash = new RegExp(`[${posix.sep}${sep === posix.sep ? "" : sep}]`.replace(/(\\)/g, "\\$1"));
@@ -17413,11 +20446,7 @@ var require_lib7 = __commonJS((exports, module) => {
     ];
     if (isWindows) {
       const pathExtExe = optPathExt || [".EXE", ".CMD", ".BAT", ".COM"].join(optDelimiter);
-      const pathExt = pathExtExe.split(optDelimiter).reduce((acc, item) => {
-        acc.push(item);
-        acc.push(item.toLowerCase());
-        return acc;
-      }, []);
+      const pathExt = pathExtExe.split(optDelimiter).flatMap((item) => [item, item.toLowerCase()]);
       if (cmd.includes(".") && pathExt[0] !== "") {
         pathExt.unshift("");
       }
@@ -17461,7 +20490,7 @@ var require_lib7 = __commonJS((exports, module) => {
       const p = getPathPart(pathEnvPart, cmd);
       for (const ext of pathExt) {
         const withExt = p + ext;
-        const is = isexe.sync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
+        const is = isexeSync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
         if (is) {
           if (!opt.all) {
             return withExt;
@@ -18047,9 +21076,164 @@ var require_make_error = __commonJS((exports, module) => {
   module.exports = makeError;
 });
 
+// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/posix.js
+var require_posix2 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.sync = exports.isexe = undefined;
+  var fs_1 = __require("fs");
+  var promises_1 = __require("fs/promises");
+  var isexe = async (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat(await (0, promises_1.stat)(path), options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.isexe = isexe;
+  var sync = (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat((0, fs_1.statSync)(path), options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.sync = sync;
+  var checkStat = (stat, options) => stat.isFile() && checkMode(stat, options);
+  var checkMode = (stat, options) => {
+    const myUid = options.uid ?? process.getuid?.();
+    const myGroups = options.groups ?? process.getgroups?.() ?? [];
+    const myGid = options.gid ?? process.getgid?.() ?? myGroups[0];
+    if (myUid === undefined || myGid === undefined) {
+      throw new Error("cannot get uid or gid");
+    }
+    const groups = new Set([myGid, ...myGroups]);
+    const mod = stat.mode;
+    const uid = stat.uid;
+    const gid = stat.gid;
+    const u = parseInt("100", 8);
+    const g = parseInt("010", 8);
+    const o = parseInt("001", 8);
+    const ug = u | g;
+    return !!(mod & o || mod & g && groups.has(gid) || mod & u && uid === myUid || mod & ug && myUid === 0);
+  };
+});
+
+// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/win32.js
+var require_win322 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.sync = exports.isexe = undefined;
+  var fs_1 = __require("fs");
+  var promises_1 = __require("fs/promises");
+  var isexe = async (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat(await (0, promises_1.stat)(path), path, options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.isexe = isexe;
+  var sync = (path, options = {}) => {
+    const { ignoreErrors = false } = options;
+    try {
+      return checkStat((0, fs_1.statSync)(path), path, options);
+    } catch (e) {
+      const er = e;
+      if (ignoreErrors || er.code === "EACCES")
+        return false;
+      throw er;
+    }
+  };
+  exports.sync = sync;
+  var checkPathExt = (path, options) => {
+    const { pathExt = process.env.PATHEXT || "" } = options;
+    const peSplit = pathExt.split(";");
+    if (peSplit.indexOf("") !== -1) {
+      return true;
+    }
+    for (let i = 0;i < peSplit.length; i++) {
+      const p = peSplit[i].toLowerCase();
+      const ext = path.substring(path.length - p.length).toLowerCase();
+      if (p && ext === p) {
+        return true;
+      }
+    }
+    return false;
+  };
+  var checkStat = (stat, path, options) => stat.isFile() && checkPathExt(path, options);
+});
+
+// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/options.js
+var require_options2 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+});
+
+// node_modules/@npmcli/git/node_modules/which/node_modules/isexe/dist/cjs/index.js
+var require_cjs8 = __commonJS((exports) => {
+  var __createBinding = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() {
+        return m[k];
+      } };
+    }
+    Object.defineProperty(o, k2, desc);
+  } : function(o, m, k, k2) {
+    if (k2 === undefined)
+      k2 = k;
+    o[k2] = m[k];
+  });
+  var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+  } : function(o, v) {
+    o["default"] = v;
+  });
+  var __importStar = exports && exports.__importStar || function(mod) {
+    if (mod && mod.__esModule)
+      return mod;
+    var result = {};
+    if (mod != null) {
+      for (var k in mod)
+        if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k))
+          __createBinding(result, mod, k);
+    }
+    __setModuleDefault(result, mod);
+    return result;
+  };
+  var __exportStar = exports && exports.__exportStar || function(m, exports2) {
+    for (var p in m)
+      if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p))
+        __createBinding(exports2, m, p);
+  };
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.sync = exports.isexe = exports.posix = exports.win32 = undefined;
+  var posix = __importStar(require_posix2());
+  exports.posix = posix;
+  var win32 = __importStar(require_win322());
+  exports.win32 = win32;
+  __exportStar(require_options2(), exports);
+  var platform = process.env._ISEXE_TEST_PLATFORM_ || process.platform;
+  var impl = platform === "win32" ? win32 : posix;
+  exports.isexe = impl.isexe;
+  exports.sync = impl.sync;
+});
+
 // node_modules/@npmcli/git/node_modules/which/lib/index.js
 var require_lib9 = __commonJS((exports, module) => {
-  var isexe = require_isexe();
+  var { isexe, sync: isexeSync } = require_cjs8();
   var { join, delimiter, sep, posix } = __require("path");
   var isWindows = process.platform === "win32";
   var rSlash = new RegExp(`[${posix.sep}${sep === posix.sep ? "" : sep}]`.replace(/(\\)/g, "\\$1"));
@@ -18066,11 +21250,7 @@ var require_lib9 = __commonJS((exports, module) => {
     ];
     if (isWindows) {
       const pathExtExe = optPathExt || [".EXE", ".CMD", ".BAT", ".COM"].join(optDelimiter);
-      const pathExt = pathExtExe.split(optDelimiter).reduce((acc, item) => {
-        acc.push(item);
-        acc.push(item.toLowerCase());
-        return acc;
-      }, []);
+      const pathExt = pathExtExe.split(optDelimiter).flatMap((item) => [item, item.toLowerCase()]);
       if (cmd.includes(".") && pathExt[0] !== "") {
         pathExt.unshift("");
       }
@@ -18114,7 +21294,7 @@ var require_lib9 = __commonJS((exports, module) => {
       const p = getPathPart(pathEnvPart, cmd);
       for (const ext of pathExt) {
         const withExt = p + ext;
-        const is = isexe.sync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
+        const is = isexeSync(withExt, { pathExt: pathExtExe, ignoreErrors: true });
         if (is) {
           if (!opt.all) {
             return withExt;
@@ -18206,83 +21386,54 @@ var require_spawn = __commonJS((exports, module) => {
   };
 });
 
-// node_modules/@npmcli/git/node_modules/lru-cache/index.js
-var require_lru_cache2 = __commonJS((exports, module) => {
+// node_modules/@npmcli/git/node_modules/lru-cache/dist/cjs/index.js
+var require_cjs9 = __commonJS((exports) => {
+  Object.defineProperty(exports, "__esModule", { value: true });
+  exports.LRUCache = undefined;
   var perf = typeof performance === "object" && performance && typeof performance.now === "function" ? performance : Date;
-  var hasAbortController = typeof AbortController === "function";
-  var AC = hasAbortController ? AbortController : class AbortController2 {
-    constructor() {
-      this.signal = new AS;
-    }
-    abort(reason = new Error("This operation was aborted")) {
-      this.signal.reason = this.signal.reason || reason;
-      this.signal.aborted = true;
-      this.signal.dispatchEvent({
-        type: "abort",
-        target: this.signal
-      });
-    }
-  };
-  var hasAbortSignal = typeof AbortSignal === "function";
-  var hasACAbortSignal = typeof AC.AbortSignal === "function";
-  var AS = hasAbortSignal ? AbortSignal : hasACAbortSignal ? AC.AbortController : class AbortSignal2 {
-    constructor() {
-      this.reason = undefined;
-      this.aborted = false;
-      this._listeners = [];
-    }
-    dispatchEvent(e) {
-      if (e.type === "abort") {
-        this.aborted = true;
-        this.onabort(e);
-        this._listeners.forEach((f) => f(e), this);
-      }
-    }
-    onabort() {
-    }
-    addEventListener(ev, fn) {
-      if (ev === "abort") {
-        this._listeners.push(fn);
-      }
-    }
-    removeEventListener(ev, fn) {
-      if (ev === "abort") {
-        this._listeners = this._listeners.filter((f) => f !== fn);
-      }
-    }
-  };
   var warned = new Set;
-  var deprecatedOption = (opt, instead) => {
-    const code = `LRU_CACHE_OPTION_${opt}`;
-    if (shouldWarn(code)) {
-      warn(code, `${opt} option`, `options.${instead}`, LRUCache);
-    }
+  var PROCESS = typeof process === "object" && !!process ? process : {};
+  var emitWarning = (msg, type, code, fn) => {
+    typeof PROCESS.emitWarning === "function" ? PROCESS.emitWarning(msg, type, code, fn) : console.error(`[${code}] ${type}: ${msg}`);
   };
-  var deprecatedMethod = (method, instead) => {
-    const code = `LRU_CACHE_METHOD_${method}`;
-    if (shouldWarn(code)) {
-      const { prototype } = LRUCache;
-      const { get } = Object.getOwnPropertyDescriptor(prototype, method);
-      warn(code, `${method} method`, `cache.${instead}()`, get);
-    }
-  };
-  var deprecatedProperty = (field, instead) => {
-    const code = `LRU_CACHE_PROPERTY_${field}`;
-    if (shouldWarn(code)) {
-      const { prototype } = LRUCache;
-      const { get } = Object.getOwnPropertyDescriptor(prototype, field);
-      warn(code, `${field} property`, `cache.${instead}`, get);
-    }
-  };
-  var emitWarning = (...a) => {
-    typeof process === "object" && process && typeof process.emitWarning === "function" ? process.emitWarning(...a) : console.error(...a);
-  };
+  var AC = globalThis.AbortController;
+  var AS = globalThis.AbortSignal;
+  if (typeof AC === "undefined") {
+    AS = class AbortSignal {
+      onabort;
+      _onabort = [];
+      reason;
+      aborted = false;
+      addEventListener(_, fn) {
+        this._onabort.push(fn);
+      }
+    };
+    AC = class AbortController {
+      constructor() {
+        warnACPolyfill();
+      }
+      signal = new AS;
+      abort(reason) {
+        if (this.signal.aborted)
+          return;
+        this.signal.reason = reason;
+        this.signal.aborted = true;
+        for (const fn of this.signal._onabort) {
+          fn(reason);
+        }
+        this.signal.onabort?.(reason);
+      }
+    };
+    let printACPolyfillWarning = PROCESS.env?.LRU_CACHE_IGNORE_AC_WARNING !== "1";
+    const warnACPolyfill = () => {
+      if (!printACPolyfillWarning)
+        return;
+      printACPolyfillWarning = false;
+      emitWarning("AbortController is not defined. If using lru-cache in node 14, load an AbortController polyfill from the `node-abort-controller` package. A minimal polyfill is provided for use by LRUCache.fetch(), but it should not be relied upon in other contexts (eg, passing it to other APIs that use AbortController/AbortSignal might have undesirable effects). You may disable this with LRU_CACHE_IGNORE_AC_WARNING=1 in the env.", "NO_ABORT_CONTROLLER", "ENOTSUP", warnACPolyfill);
+    };
+  }
   var shouldWarn = (code) => !warned.has(code);
-  var warn = (code, what, instead, fn) => {
-    warned.add(code);
-    const msg = `The ${what} is deprecated. Please use ${instead} instead.`;
-    emitWarning(msg, "DeprecationWarning", code, fn);
-  };
+  var TYPE = Symbol("type");
   var isPosInt = (n) => n && n === Math.floor(n) && n > 0 && isFinite(n);
   var getUintArray = (max) => !isPosInt(max) ? null : max <= Math.pow(2, 8) ? Uint8Array : max <= Math.pow(2, 16) ? Uint16Array : max <= Math.pow(2, 32) ? Uint32Array : max <= Number.MAX_SAFE_INTEGER ? ZeroArray : null;
 
@@ -18294,12 +21445,23 @@ var require_lru_cache2 = __commonJS((exports, module) => {
   }
 
   class Stack {
-    constructor(max) {
-      if (max === 0) {
+    heap;
+    length;
+    static #constructing = false;
+    static create(max) {
+      const HeapCls = getUintArray(max);
+      if (!HeapCls)
         return [];
+      Stack.#constructing = true;
+      const s = new Stack(max, HeapCls);
+      Stack.#constructing = false;
+      return s;
+    }
+    constructor(max, HeapCls) {
+      if (!Stack.#constructing) {
+        throw new TypeError("instantiate Stack using Stack.create(n)");
       }
-      const UintArray = getUintArray(max);
-      this.heap = new UintArray(max);
+      this.heap = new HeapCls(max);
       this.length = 0;
     }
     push(n) {
@@ -18311,31 +21473,91 @@ var require_lru_cache2 = __commonJS((exports, module) => {
   }
 
   class LRUCache {
-    constructor(options = {}) {
-      const {
-        max = 0,
-        ttl,
-        ttlResolution = 1,
-        ttlAutopurge,
-        updateAgeOnGet,
-        updateAgeOnHas,
-        allowStale,
-        dispose,
-        disposeAfter,
-        noDisposeOnSet,
-        noUpdateTTL,
-        maxSize = 0,
-        maxEntrySize = 0,
-        sizeCalculation,
-        fetchMethod,
-        fetchContext,
-        noDeleteOnFetchRejection,
-        noDeleteOnStaleGet,
-        allowStaleOnFetchRejection,
-        allowStaleOnFetchAbort,
-        ignoreFetchAbort
-      } = options;
-      const { length, maxAge, stale } = options instanceof LRUCache ? {} : options;
+    #max;
+    #maxSize;
+    #dispose;
+    #disposeAfter;
+    #fetchMethod;
+    ttl;
+    ttlResolution;
+    ttlAutopurge;
+    updateAgeOnGet;
+    updateAgeOnHas;
+    allowStale;
+    noDisposeOnSet;
+    noUpdateTTL;
+    maxEntrySize;
+    sizeCalculation;
+    noDeleteOnFetchRejection;
+    noDeleteOnStaleGet;
+    allowStaleOnFetchAbort;
+    allowStaleOnFetchRejection;
+    ignoreFetchAbort;
+    #size;
+    #calculatedSize;
+    #keyMap;
+    #keyList;
+    #valList;
+    #next;
+    #prev;
+    #head;
+    #tail;
+    #free;
+    #disposed;
+    #sizes;
+    #starts;
+    #ttls;
+    #hasDispose;
+    #hasFetchMethod;
+    #hasDisposeAfter;
+    static unsafeExposeInternals(c) {
+      return {
+        starts: c.#starts,
+        ttls: c.#ttls,
+        sizes: c.#sizes,
+        keyMap: c.#keyMap,
+        keyList: c.#keyList,
+        valList: c.#valList,
+        next: c.#next,
+        prev: c.#prev,
+        get head() {
+          return c.#head;
+        },
+        get tail() {
+          return c.#tail;
+        },
+        free: c.#free,
+        isBackgroundFetch: (p) => c.#isBackgroundFetch(p),
+        backgroundFetch: (k, index, options, context) => c.#backgroundFetch(k, index, options, context),
+        moveToTail: (index) => c.#moveToTail(index),
+        indexes: (options) => c.#indexes(options),
+        rindexes: (options) => c.#rindexes(options),
+        isStale: (index) => c.#isStale(index)
+      };
+    }
+    get max() {
+      return this.#max;
+    }
+    get maxSize() {
+      return this.#maxSize;
+    }
+    get calculatedSize() {
+      return this.#calculatedSize;
+    }
+    get size() {
+      return this.#size;
+    }
+    get fetchMethod() {
+      return this.#fetchMethod;
+    }
+    get dispose() {
+      return this.#dispose;
+    }
+    get disposeAfter() {
+      return this.#disposeAfter;
+    }
+    constructor(options) {
+      const { max = 0, ttl, ttlResolution = 1, ttlAutopurge, updateAgeOnGet, updateAgeOnHas, allowStale, dispose, disposeAfter, noDisposeOnSet, noUpdateTTL, maxSize = 0, maxEntrySize = 0, sizeCalculation, fetchMethod, noDeleteOnFetchRejection, noDeleteOnStaleGet, allowStaleOnFetchRejection, allowStaleOnFetchAbort, ignoreFetchAbort } = options;
       if (max !== 0 && !isPosInt(max)) {
         throw new TypeError("max option must be a nonnegative integer");
       }
@@ -18343,46 +21565,45 @@ var require_lru_cache2 = __commonJS((exports, module) => {
       if (!UintArray) {
         throw new Error("invalid max value: " + max);
       }
-      this.max = max;
-      this.maxSize = maxSize;
-      this.maxEntrySize = maxEntrySize || this.maxSize;
-      this.sizeCalculation = sizeCalculation || length;
+      this.#max = max;
+      this.#maxSize = maxSize;
+      this.maxEntrySize = maxEntrySize || this.#maxSize;
+      this.sizeCalculation = sizeCalculation;
       if (this.sizeCalculation) {
-        if (!this.maxSize && !this.maxEntrySize) {
+        if (!this.#maxSize && !this.maxEntrySize) {
           throw new TypeError("cannot set sizeCalculation without setting maxSize or maxEntrySize");
         }
         if (typeof this.sizeCalculation !== "function") {
           throw new TypeError("sizeCalculation set to non-function");
         }
       }
-      this.fetchMethod = fetchMethod || null;
-      if (this.fetchMethod && typeof this.fetchMethod !== "function") {
+      if (fetchMethod !== undefined && typeof fetchMethod !== "function") {
         throw new TypeError("fetchMethod must be a function if specified");
       }
-      this.fetchContext = fetchContext;
-      if (!this.fetchMethod && fetchContext !== undefined) {
-        throw new TypeError("cannot set fetchContext without fetchMethod");
-      }
-      this.keyMap = new Map;
-      this.keyList = new Array(max).fill(null);
-      this.valList = new Array(max).fill(null);
-      this.next = new UintArray(max);
-      this.prev = new UintArray(max);
-      this.head = 0;
-      this.tail = 0;
-      this.free = new Stack(max);
-      this.initialFill = 1;
-      this.size = 0;
+      this.#fetchMethod = fetchMethod;
+      this.#hasFetchMethod = !!fetchMethod;
+      this.#keyMap = new Map;
+      this.#keyList = new Array(max).fill(undefined);
+      this.#valList = new Array(max).fill(undefined);
+      this.#next = new UintArray(max);
+      this.#prev = new UintArray(max);
+      this.#head = 0;
+      this.#tail = 0;
+      this.#free = Stack.create(max);
+      this.#size = 0;
+      this.#calculatedSize = 0;
       if (typeof dispose === "function") {
-        this.dispose = dispose;
+        this.#dispose = dispose;
       }
       if (typeof disposeAfter === "function") {
-        this.disposeAfter = disposeAfter;
-        this.disposed = [];
+        this.#disposeAfter = disposeAfter;
+        this.#disposed = [];
       } else {
-        this.disposeAfter = null;
-        this.disposed = null;
+        this.#disposeAfter = undefined;
+        this.#disposed = undefined;
       }
+      this.#hasDispose = !!this.#dispose;
+      this.#hasDisposeAfter = !!this.#disposeAfter;
       this.noDisposeOnSet = !!noDisposeOnSet;
       this.noUpdateTTL = !!noUpdateTTL;
       this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection;
@@ -18390,33 +21611,33 @@ var require_lru_cache2 = __commonJS((exports, module) => {
       this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort;
       this.ignoreFetchAbort = !!ignoreFetchAbort;
       if (this.maxEntrySize !== 0) {
-        if (this.maxSize !== 0) {
-          if (!isPosInt(this.maxSize)) {
+        if (this.#maxSize !== 0) {
+          if (!isPosInt(this.#maxSize)) {
             throw new TypeError("maxSize must be a positive integer if specified");
           }
         }
         if (!isPosInt(this.maxEntrySize)) {
           throw new TypeError("maxEntrySize must be a positive integer if specified");
         }
-        this.initializeSizeTracking();
+        this.#initializeSizeTracking();
       }
-      this.allowStale = !!allowStale || !!stale;
+      this.allowStale = !!allowStale;
       this.noDeleteOnStaleGet = !!noDeleteOnStaleGet;
       this.updateAgeOnGet = !!updateAgeOnGet;
       this.updateAgeOnHas = !!updateAgeOnHas;
       this.ttlResolution = isPosInt(ttlResolution) || ttlResolution === 0 ? ttlResolution : 1;
       this.ttlAutopurge = !!ttlAutopurge;
-      this.ttl = ttl || maxAge || 0;
+      this.ttl = ttl || 0;
       if (this.ttl) {
         if (!isPosInt(this.ttl)) {
           throw new TypeError("ttl must be a positive integer if specified");
         }
-        this.initializeTTLTracking();
+        this.#initializeTTLTracking();
       }
-      if (this.max === 0 && this.ttl === 0 && this.maxSize === 0) {
+      if (this.#max === 0 && this.ttl === 0 && this.#maxSize === 0) {
         throw new TypeError("At least one of max, maxSize, or ttl is required");
       }
-      if (!this.ttlAutopurge && !this.max && !this.maxSize) {
+      if (!this.ttlAutopurge && !this.#max && !this.#maxSize) {
         const code = "LRU_CACHE_UNBOUNDED";
         if (shouldWarn(code)) {
           warned.add(code);
@@ -18424,29 +21645,22 @@ var require_lru_cache2 = __commonJS((exports, module) => {
           emitWarning(msg, "UnboundedCacheWarning", code, LRUCache);
         }
       }
-      if (stale) {
-        deprecatedOption("stale", "allowStale");
-      }
-      if (maxAge) {
-        deprecatedOption("maxAge", "ttl");
-      }
-      if (length) {
-        deprecatedOption("length", "sizeCalculation");
-      }
     }
     getRemainingTTL(key) {
-      return this.has(key, { updateAgeOnHas: false }) ? Infinity : 0;
+      return this.#keyMap.has(key) ? Infinity : 0;
     }
-    initializeTTLTracking() {
-      this.ttls = new ZeroArray(this.max);
-      this.starts = new ZeroArray(this.max);
-      this.setItemTTL = (index, ttl, start = perf.now()) => {
-        this.starts[index] = ttl !== 0 ? start : 0;
-        this.ttls[index] = ttl;
+    #initializeTTLTracking() {
+      const ttls = new ZeroArray(this.#max);
+      const starts = new ZeroArray(this.#max);
+      this.#ttls = ttls;
+      this.#starts = starts;
+      this.#setItemTTL = (index, ttl, start = perf.now()) => {
+        starts[index] = ttl !== 0 ? start : 0;
+        ttls[index] = ttl;
         if (ttl !== 0 && this.ttlAutopurge) {
           const t = setTimeout(() => {
-            if (this.isStale(index)) {
-              this.delete(this.keyList[index]);
+            if (this.#isStale(index)) {
+              this.delete(this.#keyList[index]);
             }
           }, ttl + 1);
           if (t.unref) {
@@ -18454,15 +21668,18 @@ var require_lru_cache2 = __commonJS((exports, module) => {
           }
         }
       };
-      this.updateItemAge = (index) => {
-        this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0;
+      this.#updateItemAge = (index) => {
+        starts[index] = ttls[index] !== 0 ? perf.now() : 0;
       };
-      this.statusTTL = (status, index) => {
-        if (status) {
-          status.ttl = this.ttls[index];
-          status.start = this.starts[index];
+      this.#statusTTL = (status, index) => {
+        if (ttls[index]) {
+          const ttl = ttls[index];
+          const start = starts[index];
+          status.ttl = ttl;
+          status.start = start;
           status.now = cachedNow || getNow();
-          status.remainingTTL = status.now + status.ttl - status.start;
+          const age = status.now - start;
+          status.remainingTTL = ttl - age;
         }
       };
       let cachedNow = 0;
@@ -18478,34 +21695,39 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         return n;
       };
       this.getRemainingTTL = (key) => {
-        const index = this.keyMap.get(key);
+        const index = this.#keyMap.get(key);
         if (index === undefined) {
           return 0;
         }
-        return this.ttls[index] === 0 || this.starts[index] === 0 ? Infinity : this.starts[index] + this.ttls[index] - (cachedNow || getNow());
+        const ttl = ttls[index];
+        const start = starts[index];
+        if (ttl === 0 || start === 0) {
+          return Infinity;
+        }
+        const age = (cachedNow || getNow()) - start;
+        return ttl - age;
       };
-      this.isStale = (index) => {
-        return this.ttls[index] !== 0 && this.starts[index] !== 0 && (cachedNow || getNow()) - this.starts[index] > this.ttls[index];
+      this.#isStale = (index) => {
+        return ttls[index] !== 0 && starts[index] !== 0 && (cachedNow || getNow()) - starts[index] > ttls[index];
       };
     }
-    updateItemAge(_index) {
-    }
-    statusTTL(_status, _index) {
-    }
-    setItemTTL(_index, _ttl, _start) {
-    }
-    isStale(_index) {
-      return false;
-    }
-    initializeSizeTracking() {
-      this.calculatedSize = 0;
-      this.sizes = new ZeroArray(this.max);
-      this.removeItemSize = (index) => {
-        this.calculatedSize -= this.sizes[index];
-        this.sizes[index] = 0;
+    #updateItemAge = () => {
+    };
+    #statusTTL = () => {
+    };
+    #setItemTTL = () => {
+    };
+    #isStale = () => false;
+    #initializeSizeTracking() {
+      const sizes = new ZeroArray(this.#max);
+      this.#calculatedSize = 0;
+      this.#sizes = sizes;
+      this.#removeItemSize = (index) => {
+        this.#calculatedSize -= sizes[index];
+        sizes[index] = 0;
       };
-      this.requireSize = (k, v, size, sizeCalculation) => {
-        if (this.isBackgroundFetch(v)) {
+      this.#requireSize = (k, v, size, sizeCalculation) => {
+        if (this.#isBackgroundFetch(v)) {
           return 0;
         }
         if (!isPosInt(size)) {
@@ -18523,150 +21745,151 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         }
         return size;
       };
-      this.addItemSize = (index, size, status) => {
-        this.sizes[index] = size;
-        if (this.maxSize) {
-          const maxSize = this.maxSize - this.sizes[index];
-          while (this.calculatedSize > maxSize) {
-            this.evict(true);
+      this.#addItemSize = (index, size, status) => {
+        sizes[index] = size;
+        if (this.#maxSize) {
+          const maxSize = this.#maxSize - sizes[index];
+          while (this.#calculatedSize > maxSize) {
+            this.#evict(true);
           }
         }
-        this.calculatedSize += this.sizes[index];
+        this.#calculatedSize += sizes[index];
         if (status) {
           status.entrySize = size;
-          status.totalCalculatedSize = this.calculatedSize;
+          status.totalCalculatedSize = this.#calculatedSize;
         }
       };
     }
-    removeItemSize(_index) {
-    }
-    addItemSize(_index, _size) {
-    }
-    requireSize(_k, _v, size, sizeCalculation) {
+    #removeItemSize = (_i) => {
+    };
+    #addItemSize = (_i, _s, _st) => {
+    };
+    #requireSize = (_k, _v, size, sizeCalculation) => {
       if (size || sizeCalculation) {
         throw new TypeError("cannot set size without setting maxSize or maxEntrySize on cache");
       }
-    }
-    *indexes({ allowStale = this.allowStale } = {}) {
-      if (this.size) {
-        for (let i = this.tail;; ) {
-          if (!this.isValidIndex(i)) {
+      return 0;
+    };
+    *#indexes({ allowStale = this.allowStale } = {}) {
+      if (this.#size) {
+        for (let i = this.#tail;; ) {
+          if (!this.#isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.isStale(i)) {
+          if (allowStale || !this.#isStale(i)) {
             yield i;
           }
-          if (i === this.head) {
+          if (i === this.#head) {
             break;
           } else {
-            i = this.prev[i];
+            i = this.#prev[i];
           }
         }
       }
     }
-    *rindexes({ allowStale = this.allowStale } = {}) {
-      if (this.size) {
-        for (let i = this.head;; ) {
-          if (!this.isValidIndex(i)) {
+    *#rindexes({ allowStale = this.allowStale } = {}) {
+      if (this.#size) {
+        for (let i = this.#head;; ) {
+          if (!this.#isValidIndex(i)) {
             break;
           }
-          if (allowStale || !this.isStale(i)) {
+          if (allowStale || !this.#isStale(i)) {
             yield i;
           }
-          if (i === this.tail) {
+          if (i === this.#tail) {
             break;
           } else {
-            i = this.next[i];
+            i = this.#next[i];
           }
         }
       }
     }
-    isValidIndex(index) {
-      return index !== undefined && this.keyMap.get(this.keyList[index]) === index;
+    #isValidIndex(index) {
+      return index !== undefined && this.#keyMap.get(this.#keyList[index]) === index;
     }
     *entries() {
-      for (const i of this.indexes()) {
-        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield [this.keyList[i], this.valList[i]];
+      for (const i of this.#indexes()) {
+        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield [this.#keyList[i], this.#valList[i]];
         }
       }
     }
     *rentries() {
-      for (const i of this.rindexes()) {
-        if (this.valList[i] !== undefined && this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield [this.keyList[i], this.valList[i]];
+      for (const i of this.#rindexes()) {
+        if (this.#valList[i] !== undefined && this.#keyList[i] !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield [this.#keyList[i], this.#valList[i]];
         }
       }
     }
     *keys() {
-      for (const i of this.indexes()) {
-        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.keyList[i];
+      for (const i of this.#indexes()) {
+        const k = this.#keyList[i];
+        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield k;
         }
       }
     }
     *rkeys() {
-      for (const i of this.rindexes()) {
-        if (this.keyList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.keyList[i];
+      for (const i of this.#rindexes()) {
+        const k = this.#keyList[i];
+        if (k !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield k;
         }
       }
     }
     *values() {
-      for (const i of this.indexes()) {
-        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.valList[i];
+      for (const i of this.#indexes()) {
+        const v = this.#valList[i];
+        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield this.#valList[i];
         }
       }
     }
     *rvalues() {
-      for (const i of this.rindexes()) {
-        if (this.valList[i] !== undefined && !this.isBackgroundFetch(this.valList[i])) {
-          yield this.valList[i];
+      for (const i of this.#rindexes()) {
+        const v = this.#valList[i];
+        if (v !== undefined && !this.#isBackgroundFetch(this.#valList[i])) {
+          yield this.#valList[i];
         }
       }
     }
     [Symbol.iterator]() {
       return this.entries();
     }
-    find(fn, getOptions) {
-      for (const i of this.indexes()) {
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    find(fn, getOptions = {}) {
+      for (const i of this.#indexes()) {
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        if (fn(value, this.keyList[i], this)) {
-          return this.get(this.keyList[i], getOptions);
+        if (fn(value, this.#keyList[i], this)) {
+          return this.get(this.#keyList[i], getOptions);
         }
       }
     }
     forEach(fn, thisp = this) {
-      for (const i of this.indexes()) {
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.#indexes()) {
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.keyList[i], this);
+        fn.call(thisp, value, this.#keyList[i], this);
       }
     }
     rforEach(fn, thisp = this) {
-      for (const i of this.rindexes()) {
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+      for (const i of this.#rindexes()) {
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
         if (value === undefined)
           continue;
-        fn.call(thisp, value, this.keyList[i], this);
+        fn.call(thisp, value, this.#keyList[i], this);
       }
-    }
-    get prune() {
-      deprecatedMethod("prune", "purgeStale");
-      return this.purgeStale;
     }
     purgeStale() {
       let deleted = false;
-      for (const i of this.rindexes({ allowStale: true })) {
-        if (this.isStale(i)) {
-          this.delete(this.keyList[i]);
+      for (const i of this.#rindexes({ allowStale: true })) {
+        if (this.#isStale(i)) {
+          this.delete(this.#keyList[i]);
           deleted = true;
         }
       }
@@ -18674,20 +21897,20 @@ var require_lru_cache2 = __commonJS((exports, module) => {
     }
     dump() {
       const arr = [];
-      for (const i of this.indexes({ allowStale: true })) {
-        const key = this.keyList[i];
-        const v = this.valList[i];
-        const value = this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
-        if (value === undefined)
+      for (const i of this.#indexes({ allowStale: true })) {
+        const key = this.#keyList[i];
+        const v = this.#valList[i];
+        const value = this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+        if (value === undefined || key === undefined)
           continue;
         const entry = { value };
-        if (this.ttls) {
-          entry.ttl = this.ttls[i];
-          const age = perf.now() - this.starts[i];
+        if (this.#ttls && this.#starts) {
+          entry.ttl = this.#ttls[i];
+          const age = perf.now() - this.#starts[i];
           entry.start = Math.floor(Date.now() - age);
         }
-        if (this.sizes) {
-          entry.size = this.sizes[i];
+        if (this.#sizes) {
+          entry.size = this.#sizes[i];
         }
         arr.unshift([key, entry]);
       }
@@ -18703,18 +21926,14 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         this.set(key, entry.value, entry);
       }
     }
-    dispose(_v, _k, _reason) {
-    }
-    set(k, v, {
-      ttl = this.ttl,
-      start,
-      noDisposeOnSet = this.noDisposeOnSet,
-      size = 0,
-      sizeCalculation = this.sizeCalculation,
-      noUpdateTTL = this.noUpdateTTL,
-      status
-    } = {}) {
-      size = this.requireSize(k, v, size, sizeCalculation);
+    set(k, v, setOptions = {}) {
+      if (v === undefined) {
+        this.delete(k);
+        return this;
+      }
+      const { ttl = this.ttl, start, noDisposeOnSet = this.noDisposeOnSet, sizeCalculation = this.sizeCalculation, status } = setOptions;
+      let { noUpdateTTL = this.noUpdateTTL } = setOptions;
+      const size = this.#requireSize(k, v, setOptions.size || 0, sizeCalculation);
       if (this.maxEntrySize && size > this.maxEntrySize) {
         if (status) {
           status.set = "miss";
@@ -18723,41 +21942,49 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         this.delete(k);
         return this;
       }
-      let index = this.size === 0 ? undefined : this.keyMap.get(k);
+      let index = this.#size === 0 ? undefined : this.#keyMap.get(k);
       if (index === undefined) {
-        index = this.newIndex();
-        this.keyList[index] = k;
-        this.valList[index] = v;
-        this.keyMap.set(k, index);
-        this.next[this.tail] = index;
-        this.prev[index] = this.tail;
-        this.tail = index;
-        this.size++;
-        this.addItemSize(index, size, status);
-        if (status) {
+        index = this.#size === 0 ? this.#tail : this.#free.length !== 0 ? this.#free.pop() : this.#size === this.#max ? this.#evict(false) : this.#size;
+        this.#keyList[index] = k;
+        this.#valList[index] = v;
+        this.#keyMap.set(k, index);
+        this.#next[this.#tail] = index;
+        this.#prev[index] = this.#tail;
+        this.#tail = index;
+        this.#size++;
+        this.#addItemSize(index, size, status);
+        if (status)
           status.set = "add";
-        }
         noUpdateTTL = false;
       } else {
-        this.moveToTail(index);
-        const oldVal = this.valList[index];
+        this.#moveToTail(index);
+        const oldVal = this.#valList[index];
         if (v !== oldVal) {
-          if (this.isBackgroundFetch(oldVal)) {
+          if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
             oldVal.__abortController.abort(new Error("replaced"));
-          } else {
-            if (!noDisposeOnSet) {
-              this.dispose(oldVal, k, "set");
-              if (this.disposeAfter) {
-                this.disposed.push([oldVal, k, "set"]);
+            const { __staleWhileFetching: s } = oldVal;
+            if (s !== undefined && !noDisposeOnSet) {
+              if (this.#hasDispose) {
+                this.#dispose?.(s, k, "set");
+              }
+              if (this.#hasDisposeAfter) {
+                this.#disposed?.push([s, k, "set"]);
               }
             }
+          } else if (!noDisposeOnSet) {
+            if (this.#hasDispose) {
+              this.#dispose?.(oldVal, k, "set");
+            }
+            if (this.#hasDisposeAfter) {
+              this.#disposed?.push([oldVal, k, "set"]);
+            }
           }
-          this.removeItemSize(index);
-          this.valList[index] = v;
-          this.addItemSize(index, size, status);
+          this.#removeItemSize(index);
+          this.#addItemSize(index, size, status);
+          this.#valList[index] = v;
           if (status) {
             status.set = "replace";
-            const oldValue = oldVal && this.isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
+            const oldValue = oldVal && this.#isBackgroundFetch(oldVal) ? oldVal.__staleWhileFetching : oldVal;
             if (oldValue !== undefined)
               status.oldValue = oldValue;
           }
@@ -18765,98 +21992,122 @@ var require_lru_cache2 = __commonJS((exports, module) => {
           status.set = "update";
         }
       }
-      if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
-        this.initializeTTLTracking();
+      if (ttl !== 0 && !this.#ttls) {
+        this.#initializeTTLTracking();
       }
-      if (!noUpdateTTL) {
-        this.setItemTTL(index, ttl, start);
+      if (this.#ttls) {
+        if (!noUpdateTTL) {
+          this.#setItemTTL(index, ttl, start);
+        }
+        if (status)
+          this.#statusTTL(status, index);
       }
-      this.statusTTL(status, index);
-      if (this.disposeAfter) {
-        while (this.disposed.length) {
-          this.disposeAfter(...this.disposed.shift());
+      if (!noDisposeOnSet && this.#hasDisposeAfter && this.#disposed) {
+        const dt = this.#disposed;
+        let task;
+        while (task = dt?.shift()) {
+          this.#disposeAfter?.(...task);
         }
       }
       return this;
     }
-    newIndex() {
-      if (this.size === 0) {
-        return this.tail;
-      }
-      if (this.size === this.max && this.max !== 0) {
-        return this.evict(false);
-      }
-      if (this.free.length !== 0) {
-        return this.free.pop();
-      }
-      return this.initialFill++;
-    }
     pop() {
-      if (this.size) {
-        const val = this.valList[this.head];
-        this.evict(true);
-        return val;
-      }
-    }
-    evict(free) {
-      const head = this.head;
-      const k = this.keyList[head];
-      const v = this.valList[head];
-      if (this.isBackgroundFetch(v)) {
-        v.__abortController.abort(new Error("evicted"));
-      } else {
-        this.dispose(v, k, "evict");
-        if (this.disposeAfter) {
-          this.disposed.push([v, k, "evict"]);
+      try {
+        while (this.#size) {
+          const val = this.#valList[this.#head];
+          this.#evict(true);
+          if (this.#isBackgroundFetch(val)) {
+            if (val.__staleWhileFetching) {
+              return val.__staleWhileFetching;
+            }
+          } else if (val !== undefined) {
+            return val;
+          }
+        }
+      } finally {
+        if (this.#hasDisposeAfter && this.#disposed) {
+          const dt = this.#disposed;
+          let task;
+          while (task = dt?.shift()) {
+            this.#disposeAfter?.(...task);
+          }
         }
       }
-      this.removeItemSize(head);
-      if (free) {
-        this.keyList[head] = null;
-        this.valList[head] = null;
-        this.free.push(head);
+    }
+    #evict(free) {
+      const head = this.#head;
+      const k = this.#keyList[head];
+      const v = this.#valList[head];
+      if (this.#hasFetchMethod && this.#isBackgroundFetch(v)) {
+        v.__abortController.abort(new Error("evicted"));
+      } else if (this.#hasDispose || this.#hasDisposeAfter) {
+        if (this.#hasDispose) {
+          this.#dispose?.(v, k, "evict");
+        }
+        if (this.#hasDisposeAfter) {
+          this.#disposed?.push([v, k, "evict"]);
+        }
       }
-      this.head = this.next[head];
-      this.keyMap.delete(k);
-      this.size--;
+      this.#removeItemSize(head);
+      if (free) {
+        this.#keyList[head] = undefined;
+        this.#valList[head] = undefined;
+        this.#free.push(head);
+      }
+      if (this.#size === 1) {
+        this.#head = this.#tail = 0;
+        this.#free.length = 0;
+      } else {
+        this.#head = this.#next[head];
+      }
+      this.#keyMap.delete(k);
+      this.#size--;
       return head;
     }
-    has(k, { updateAgeOnHas = this.updateAgeOnHas, status } = {}) {
-      const index = this.keyMap.get(k);
+    has(k, hasOptions = {}) {
+      const { updateAgeOnHas = this.updateAgeOnHas, status } = hasOptions;
+      const index = this.#keyMap.get(k);
       if (index !== undefined) {
-        if (!this.isStale(index)) {
+        const v = this.#valList[index];
+        if (this.#isBackgroundFetch(v) && v.__staleWhileFetching === undefined) {
+          return false;
+        }
+        if (!this.#isStale(index)) {
           if (updateAgeOnHas) {
-            this.updateItemAge(index);
+            this.#updateItemAge(index);
           }
-          if (status)
+          if (status) {
             status.has = "hit";
-          this.statusTTL(status, index);
+            this.#statusTTL(status, index);
+          }
           return true;
         } else if (status) {
           status.has = "stale";
-          this.statusTTL(status, index);
+          this.#statusTTL(status, index);
         }
       } else if (status) {
         status.has = "miss";
       }
       return false;
     }
-    peek(k, { allowStale = this.allowStale } = {}) {
-      const index = this.keyMap.get(k);
-      if (index !== undefined && (allowStale || !this.isStale(index))) {
-        const v = this.valList[index];
-        return this.isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+    peek(k, peekOptions = {}) {
+      const { allowStale = this.allowStale } = peekOptions;
+      const index = this.#keyMap.get(k);
+      if (index !== undefined && (allowStale || !this.#isStale(index))) {
+        const v = this.#valList[index];
+        return this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
       }
     }
-    backgroundFetch(k, index, options, context) {
-      const v = index === undefined ? undefined : this.valList[index];
-      if (this.isBackgroundFetch(v)) {
+    #backgroundFetch(k, index, options, context) {
+      const v = index === undefined ? undefined : this.#valList[index];
+      if (this.#isBackgroundFetch(v)) {
         return v;
       }
       const ac = new AC;
-      if (options.signal) {
-        options.signal.addEventListener("abort", () => ac.abort(options.signal.reason));
-      }
+      const { signal } = options;
+      signal?.addEventListener("abort", () => ac.abort(signal.reason), {
+        signal: ac.signal
+      });
       const fetchOpts = {
         signal: ac.signal,
         options,
@@ -18878,10 +22129,11 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         if (aborted && !ignoreAbort && !updateCache) {
           return fetchFail(ac.signal.reason);
         }
-        if (this.valList[index] === p) {
+        const bf2 = p;
+        if (this.#valList[index] === p) {
           if (v2 === undefined) {
-            if (p.__staleWhileFetching) {
-              this.valList[index] = p.__staleWhileFetching;
+            if (bf2.__staleWhileFetching) {
+              this.#valList[index] = bf2.__staleWhileFetching;
             } else {
               this.delete(k);
             }
@@ -18905,28 +22157,32 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         const allowStaleAborted = aborted && options.allowStaleOnFetchAbort;
         const allowStale = allowStaleAborted || options.allowStaleOnFetchRejection;
         const noDelete = allowStale || options.noDeleteOnFetchRejection;
-        if (this.valList[index] === p) {
-          const del = !noDelete || p.__staleWhileFetching === undefined;
+        const bf2 = p;
+        if (this.#valList[index] === p) {
+          const del = !noDelete || bf2.__staleWhileFetching === undefined;
           if (del) {
             this.delete(k);
           } else if (!allowStaleAborted) {
-            this.valList[index] = p.__staleWhileFetching;
+            this.#valList[index] = bf2.__staleWhileFetching;
           }
         }
         if (allowStale) {
-          if (options.status && p.__staleWhileFetching !== undefined) {
+          if (options.status && bf2.__staleWhileFetching !== undefined) {
             options.status.returnedStale = true;
           }
-          return p.__staleWhileFetching;
-        } else if (p.__returned === p) {
+          return bf2.__staleWhileFetching;
+        } else if (bf2.__returned === bf2) {
           throw er;
         }
       };
       const pcall = (res, rej) => {
-        this.fetchMethod(k, v, fetchOpts).then((v2) => res(v2), rej);
+        const fmp = this.#fetchMethod?.(k, v, fetchOpts);
+        if (fmp && fmp instanceof Promise) {
+          fmp.then((v2) => res(v2 === undefined ? undefined : v2), rej);
+        }
         ac.signal.addEventListener("abort", () => {
           if (!options.ignoreFetchAbort || options.allowStaleOnFetchAbort) {
-            res();
+            res(undefined);
             if (options.allowStaleOnFetchAbort) {
               res = (v2) => cb(v2, true);
             }
@@ -18936,39 +22192,45 @@ var require_lru_cache2 = __commonJS((exports, module) => {
       if (options.status)
         options.status.fetchDispatched = true;
       const p = new Promise(pcall).then(cb, eb);
-      p.__abortController = ac;
-      p.__staleWhileFetching = v;
-      p.__returned = null;
+      const bf = Object.assign(p, {
+        __abortController: ac,
+        __staleWhileFetching: v,
+        __returned: undefined
+      });
       if (index === undefined) {
-        this.set(k, p, { ...fetchOpts.options, status: undefined });
-        index = this.keyMap.get(k);
+        this.set(k, bf, { ...fetchOpts.options, status: undefined });
+        index = this.#keyMap.get(k);
       } else {
-        this.valList[index] = p;
+        this.#valList[index] = bf;
       }
-      return p;
+      return bf;
     }
-    isBackgroundFetch(p) {
-      return p && typeof p === "object" && typeof p.then === "function" && Object.prototype.hasOwnProperty.call(p, "__staleWhileFetching") && Object.prototype.hasOwnProperty.call(p, "__returned") && (p.__returned === p || p.__returned === null);
+    #isBackgroundFetch(p) {
+      if (!this.#hasFetchMethod)
+        return false;
+      const b = p;
+      return !!b && b instanceof Promise && b.hasOwnProperty("__staleWhileFetching") && b.__abortController instanceof AC;
     }
-    async fetch(k, {
-      allowStale = this.allowStale,
-      updateAgeOnGet = this.updateAgeOnGet,
-      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
-      ttl = this.ttl,
-      noDisposeOnSet = this.noDisposeOnSet,
-      size = 0,
-      sizeCalculation = this.sizeCalculation,
-      noUpdateTTL = this.noUpdateTTL,
-      noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
-      allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
-      ignoreFetchAbort = this.ignoreFetchAbort,
-      allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
-      fetchContext = this.fetchContext,
-      forceRefresh = false,
-      status,
-      signal
-    } = {}) {
-      if (!this.fetchMethod) {
+    async fetch(k, fetchOptions = {}) {
+      const {
+        allowStale = this.allowStale,
+        updateAgeOnGet = this.updateAgeOnGet,
+        noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+        ttl = this.ttl,
+        noDisposeOnSet = this.noDisposeOnSet,
+        size = 0,
+        sizeCalculation = this.sizeCalculation,
+        noUpdateTTL = this.noUpdateTTL,
+        noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
+        allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
+        ignoreFetchAbort = this.ignoreFetchAbort,
+        allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
+        context,
+        forceRefresh = false,
+        status,
+        signal
+      } = fetchOptions;
+      if (!this.#hasFetchMethod) {
         if (status)
           status.fetch = "get";
         return this.get(k, {
@@ -18994,15 +22256,15 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         status,
         signal
       };
-      let index = this.keyMap.get(k);
+      let index = this.#keyMap.get(k);
       if (index === undefined) {
         if (status)
           status.fetch = "miss";
-        const p = this.backgroundFetch(k, index, options, fetchContext);
+        const p = this.#backgroundFetch(k, index, options, context);
         return p.__returned = p;
       } else {
-        const v = this.valList[index];
-        if (this.isBackgroundFetch(v)) {
+        const v = this.#valList[index];
+        if (this.#isBackgroundFetch(v)) {
           const stale = allowStale && v.__staleWhileFetching !== undefined;
           if (status) {
             status.fetch = "inflight";
@@ -19011,52 +22273,50 @@ var require_lru_cache2 = __commonJS((exports, module) => {
           }
           return stale ? v.__staleWhileFetching : v.__returned = v;
         }
-        const isStale = this.isStale(index);
+        const isStale = this.#isStale(index);
         if (!forceRefresh && !isStale) {
           if (status)
             status.fetch = "hit";
-          this.moveToTail(index);
+          this.#moveToTail(index);
           if (updateAgeOnGet) {
-            this.updateItemAge(index);
+            this.#updateItemAge(index);
           }
-          this.statusTTL(status, index);
+          if (status)
+            this.#statusTTL(status, index);
           return v;
         }
-        const p = this.backgroundFetch(k, index, options, fetchContext);
+        const p = this.#backgroundFetch(k, index, options, context);
         const hasStale = p.__staleWhileFetching !== undefined;
         const staleVal = hasStale && allowStale;
         if (status) {
-          status.fetch = hasStale && isStale ? "stale" : "refresh";
+          status.fetch = isStale ? "stale" : "refresh";
           if (staleVal && isStale)
             status.returnedStale = true;
         }
         return staleVal ? p.__staleWhileFetching : p.__returned = p;
       }
     }
-    get(k, {
-      allowStale = this.allowStale,
-      updateAgeOnGet = this.updateAgeOnGet,
-      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
-      status
-    } = {}) {
-      const index = this.keyMap.get(k);
+    get(k, getOptions = {}) {
+      const { allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, status } = getOptions;
+      const index = this.#keyMap.get(k);
       if (index !== undefined) {
-        const value = this.valList[index];
-        const fetching = this.isBackgroundFetch(value);
-        this.statusTTL(status, index);
-        if (this.isStale(index)) {
+        const value = this.#valList[index];
+        const fetching = this.#isBackgroundFetch(value);
+        if (status)
+          this.#statusTTL(status, index);
+        if (this.#isStale(index)) {
           if (status)
             status.get = "stale";
           if (!fetching) {
             if (!noDeleteOnStaleGet) {
               this.delete(k);
             }
-            if (status)
-              status.returnedStale = allowStale;
+            if (status && allowStale)
+              status.returnedStale = true;
             return allowStale ? value : undefined;
           } else {
-            if (status) {
-              status.returnedStale = allowStale && value.__staleWhileFetching !== undefined;
+            if (status && allowStale && value.__staleWhileFetching !== undefined) {
+              status.returnedStale = true;
             }
             return allowStale ? value.__staleWhileFetching : undefined;
           }
@@ -19066,9 +22326,9 @@ var require_lru_cache2 = __commonJS((exports, module) => {
           if (fetching) {
             return value.__staleWhileFetching;
           }
-          this.moveToTail(index);
+          this.#moveToTail(index);
           if (updateAgeOnGet) {
-            this.updateItemAge(index);
+            this.#updateItemAge(index);
           }
           return value;
         }
@@ -19076,2020 +22336,107 @@ var require_lru_cache2 = __commonJS((exports, module) => {
         status.get = "miss";
       }
     }
-    connect(p, n) {
-      this.prev[n] = p;
-      this.next[p] = n;
+    #connect(p, n) {
+      this.#prev[n] = p;
+      this.#next[p] = n;
     }
-    moveToTail(index) {
-      if (index !== this.tail) {
-        if (index === this.head) {
-          this.head = this.next[index];
+    #moveToTail(index) {
+      if (index !== this.#tail) {
+        if (index === this.#head) {
+          this.#head = this.#next[index];
         } else {
-          this.connect(this.prev[index], this.next[index]);
+          this.#connect(this.#prev[index], this.#next[index]);
         }
-        this.connect(this.tail, index);
-        this.tail = index;
+        this.#connect(this.#tail, index);
+        this.#tail = index;
       }
-    }
-    get del() {
-      deprecatedMethod("del", "delete");
-      return this.delete;
     }
     delete(k) {
       let deleted = false;
-      if (this.size !== 0) {
-        const index = this.keyMap.get(k);
+      if (this.#size !== 0) {
+        const index = this.#keyMap.get(k);
         if (index !== undefined) {
           deleted = true;
-          if (this.size === 1) {
+          if (this.#size === 1) {
             this.clear();
           } else {
-            this.removeItemSize(index);
-            const v = this.valList[index];
-            if (this.isBackgroundFetch(v)) {
+            this.#removeItemSize(index);
+            const v = this.#valList[index];
+            if (this.#isBackgroundFetch(v)) {
               v.__abortController.abort(new Error("deleted"));
-            } else {
-              this.dispose(v, k, "delete");
-              if (this.disposeAfter) {
-                this.disposed.push([v, k, "delete"]);
+            } else if (this.#hasDispose || this.#hasDisposeAfter) {
+              if (this.#hasDispose) {
+                this.#dispose?.(v, k, "delete");
+              }
+              if (this.#hasDisposeAfter) {
+                this.#disposed?.push([v, k, "delete"]);
               }
             }
-            this.keyMap.delete(k);
-            this.keyList[index] = null;
-            this.valList[index] = null;
-            if (index === this.tail) {
-              this.tail = this.prev[index];
-            } else if (index === this.head) {
-              this.head = this.next[index];
+            this.#keyMap.delete(k);
+            this.#keyList[index] = undefined;
+            this.#valList[index] = undefined;
+            if (index === this.#tail) {
+              this.#tail = this.#prev[index];
+            } else if (index === this.#head) {
+              this.#head = this.#next[index];
             } else {
-              this.next[this.prev[index]] = this.next[index];
-              this.prev[this.next[index]] = this.prev[index];
+              this.#next[this.#prev[index]] = this.#next[index];
+              this.#prev[this.#next[index]] = this.#prev[index];
             }
-            this.size--;
-            this.free.push(index);
+            this.#size--;
+            this.#free.push(index);
           }
         }
       }
-      if (this.disposed) {
-        while (this.disposed.length) {
-          this.disposeAfter(...this.disposed.shift());
+      if (this.#hasDisposeAfter && this.#disposed?.length) {
+        const dt = this.#disposed;
+        let task;
+        while (task = dt?.shift()) {
+          this.#disposeAfter?.(...task);
         }
       }
       return deleted;
     }
     clear() {
-      for (const index of this.rindexes({ allowStale: true })) {
-        const v = this.valList[index];
-        if (this.isBackgroundFetch(v)) {
+      for (const index of this.#rindexes({ allowStale: true })) {
+        const v = this.#valList[index];
+        if (this.#isBackgroundFetch(v)) {
           v.__abortController.abort(new Error("deleted"));
         } else {
-          const k = this.keyList[index];
-          this.dispose(v, k, "delete");
-          if (this.disposeAfter) {
-            this.disposed.push([v, k, "delete"]);
+          const k = this.#keyList[index];
+          if (this.#hasDispose) {
+            this.#dispose?.(v, k, "delete");
+          }
+          if (this.#hasDisposeAfter) {
+            this.#disposed?.push([v, k, "delete"]);
           }
         }
       }
-      this.keyMap.clear();
-      this.valList.fill(null);
-      this.keyList.fill(null);
-      if (this.ttls) {
-        this.ttls.fill(0);
-        this.starts.fill(0);
+      this.#keyMap.clear();
+      this.#valList.fill(undefined);
+      this.#keyList.fill(undefined);
+      if (this.#ttls && this.#starts) {
+        this.#ttls.fill(0);
+        this.#starts.fill(0);
       }
-      if (this.sizes) {
-        this.sizes.fill(0);
+      if (this.#sizes) {
+        this.#sizes.fill(0);
       }
-      this.head = 0;
-      this.tail = 0;
-      this.initialFill = 1;
-      this.free.length = 0;
-      this.calculatedSize = 0;
-      this.size = 0;
-      if (this.disposed) {
-        while (this.disposed.length) {
-          this.disposeAfter(...this.disposed.shift());
+      this.#head = 0;
+      this.#tail = 0;
+      this.#free.length = 0;
+      this.#calculatedSize = 0;
+      this.#size = 0;
+      if (this.#hasDisposeAfter && this.#disposed) {
+        const dt = this.#disposed;
+        let task;
+        while (task = dt?.shift()) {
+          this.#disposeAfter?.(...task);
         }
       }
-    }
-    get reset() {
-      deprecatedMethod("reset", "clear");
-      return this.clear;
-    }
-    get length() {
-      deprecatedProperty("length", "size");
-      return this.size;
-    }
-    static get AbortController() {
-      return AC;
-    }
-    static get AbortSignal() {
-      return AS;
     }
   }
-  module.exports = LRUCache;
-});
-
-// node_modules/semver/functions/inc.js
-var require_inc = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var inc = (version, release, options, identifier, identifierBase) => {
-    if (typeof options === "string") {
-      identifierBase = identifier;
-      identifier = options;
-      options = undefined;
-    }
-    try {
-      return new SemVer(version instanceof SemVer ? version.version : version, options).inc(release, identifier, identifierBase).version;
-    } catch (er) {
-      return null;
-    }
-  };
-  module.exports = inc;
-});
-
-// node_modules/semver/functions/diff.js
-var require_diff = __commonJS((exports, module) => {
-  var parse = require_parse2();
-  var diff = (version1, version2) => {
-    const v1 = parse(version1, null, true);
-    const v2 = parse(version2, null, true);
-    const comparison = v1.compare(v2);
-    if (comparison === 0) {
-      return null;
-    }
-    const v1Higher = comparison > 0;
-    const highVersion = v1Higher ? v1 : v2;
-    const lowVersion = v1Higher ? v2 : v1;
-    const highHasPre = !!highVersion.prerelease.length;
-    const lowHasPre = !!lowVersion.prerelease.length;
-    if (lowHasPre && !highHasPre) {
-      if (!lowVersion.patch && !lowVersion.minor) {
-        return "major";
-      }
-      if (highVersion.patch) {
-        return "patch";
-      }
-      if (highVersion.minor) {
-        return "minor";
-      }
-      return "major";
-    }
-    const prefix = highHasPre ? "pre" : "";
-    if (v1.major !== v2.major) {
-      return prefix + "major";
-    }
-    if (v1.minor !== v2.minor) {
-      return prefix + "minor";
-    }
-    if (v1.patch !== v2.patch) {
-      return prefix + "patch";
-    }
-    return "prerelease";
-  };
-  module.exports = diff;
-});
-
-// node_modules/semver/functions/major.js
-var require_major = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var major = (a, loose) => new SemVer(a, loose).major;
-  module.exports = major;
-});
-
-// node_modules/semver/functions/minor.js
-var require_minor = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var minor = (a, loose) => new SemVer(a, loose).minor;
-  module.exports = minor;
-});
-
-// node_modules/semver/functions/patch.js
-var require_patch = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var patch = (a, loose) => new SemVer(a, loose).patch;
-  module.exports = patch;
-});
-
-// node_modules/semver/functions/prerelease.js
-var require_prerelease = __commonJS((exports, module) => {
-  var parse = require_parse2();
-  var prerelease = (version, options) => {
-    const parsed = parse(version, options);
-    return parsed && parsed.prerelease.length ? parsed.prerelease : null;
-  };
-  module.exports = prerelease;
-});
-
-// node_modules/semver/functions/compare.js
-var require_compare = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var compare = (a, b, loose) => new SemVer(a, loose).compare(new SemVer(b, loose));
-  module.exports = compare;
-});
-
-// node_modules/semver/functions/rcompare.js
-var require_rcompare = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var rcompare = (a, b, loose) => compare(b, a, loose);
-  module.exports = rcompare;
-});
-
-// node_modules/semver/functions/compare-loose.js
-var require_compare_loose = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var compareLoose = (a, b) => compare(a, b, true);
-  module.exports = compareLoose;
-});
-
-// node_modules/semver/functions/compare-build.js
-var require_compare_build = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var compareBuild = (a, b, loose) => {
-    const versionA = new SemVer(a, loose);
-    const versionB = new SemVer(b, loose);
-    return versionA.compare(versionB) || versionA.compareBuild(versionB);
-  };
-  module.exports = compareBuild;
-});
-
-// node_modules/semver/functions/sort.js
-var require_sort = __commonJS((exports, module) => {
-  var compareBuild = require_compare_build();
-  var sort = (list, loose) => list.sort((a, b) => compareBuild(a, b, loose));
-  module.exports = sort;
-});
-
-// node_modules/semver/functions/rsort.js
-var require_rsort = __commonJS((exports, module) => {
-  var compareBuild = require_compare_build();
-  var rsort = (list, loose) => list.sort((a, b) => compareBuild(b, a, loose));
-  module.exports = rsort;
-});
-
-// node_modules/semver/functions/gt.js
-var require_gt = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var gt = (a, b, loose) => compare(a, b, loose) > 0;
-  module.exports = gt;
-});
-
-// node_modules/semver/functions/lt.js
-var require_lt = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var lt = (a, b, loose) => compare(a, b, loose) < 0;
-  module.exports = lt;
-});
-
-// node_modules/semver/functions/eq.js
-var require_eq = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var eq = (a, b, loose) => compare(a, b, loose) === 0;
-  module.exports = eq;
-});
-
-// node_modules/semver/functions/neq.js
-var require_neq = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var neq = (a, b, loose) => compare(a, b, loose) !== 0;
-  module.exports = neq;
-});
-
-// node_modules/semver/functions/gte.js
-var require_gte = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var gte = (a, b, loose) => compare(a, b, loose) >= 0;
-  module.exports = gte;
-});
-
-// node_modules/semver/functions/lte.js
-var require_lte = __commonJS((exports, module) => {
-  var compare = require_compare();
-  var lte = (a, b, loose) => compare(a, b, loose) <= 0;
-  module.exports = lte;
-});
-
-// node_modules/semver/functions/cmp.js
-var require_cmp = __commonJS((exports, module) => {
-  var eq = require_eq();
-  var neq = require_neq();
-  var gt = require_gt();
-  var gte = require_gte();
-  var lt = require_lt();
-  var lte = require_lte();
-  var cmp = (a, op, b, loose) => {
-    switch (op) {
-      case "===":
-        if (typeof a === "object") {
-          a = a.version;
-        }
-        if (typeof b === "object") {
-          b = b.version;
-        }
-        return a === b;
-      case "!==":
-        if (typeof a === "object") {
-          a = a.version;
-        }
-        if (typeof b === "object") {
-          b = b.version;
-        }
-        return a !== b;
-      case "":
-      case "=":
-      case "==":
-        return eq(a, b, loose);
-      case "!=":
-        return neq(a, b, loose);
-      case ">":
-        return gt(a, b, loose);
-      case ">=":
-        return gte(a, b, loose);
-      case "<":
-        return lt(a, b, loose);
-      case "<=":
-        return lte(a, b, loose);
-      default:
-        throw new TypeError(`Invalid operator: ${op}`);
-    }
-  };
-  module.exports = cmp;
-});
-
-// node_modules/semver/functions/coerce.js
-var require_coerce = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var parse = require_parse2();
-  var { safeRe: re, t } = require_re();
-  var coerce = (version, options) => {
-    if (version instanceof SemVer) {
-      return version;
-    }
-    if (typeof version === "number") {
-      version = String(version);
-    }
-    if (typeof version !== "string") {
-      return null;
-    }
-    options = options || {};
-    let match = null;
-    if (!options.rtl) {
-      match = version.match(re[t.COERCE]);
-    } else {
-      let next;
-      while ((next = re[t.COERCERTL].exec(version)) && (!match || match.index + match[0].length !== version.length)) {
-        if (!match || next.index + next[0].length !== match.index + match[0].length) {
-          match = next;
-        }
-        re[t.COERCERTL].lastIndex = next.index + next[1].length + next[2].length;
-      }
-      re[t.COERCERTL].lastIndex = -1;
-    }
-    if (match === null) {
-      return null;
-    }
-    return parse(`${match[2]}.${match[3] || "0"}.${match[4] || "0"}`, options);
-  };
-  module.exports = coerce;
-});
-
-// node_modules/yallist/iterator.js
-var require_iterator = __commonJS((exports, module) => {
-  module.exports = function(Yallist) {
-    Yallist.prototype[Symbol.iterator] = function* () {
-      for (let walker = this.head;walker; walker = walker.next) {
-        yield walker.value;
-      }
-    };
-  };
-});
-
-// node_modules/yallist/yallist.js
-var require_yallist = __commonJS((exports, module) => {
-  var Yallist = function(list) {
-    var self = this;
-    if (!(self instanceof Yallist)) {
-      self = new Yallist;
-    }
-    self.tail = null;
-    self.head = null;
-    self.length = 0;
-    if (list && typeof list.forEach === "function") {
-      list.forEach(function(item) {
-        self.push(item);
-      });
-    } else if (arguments.length > 0) {
-      for (var i = 0, l = arguments.length;i < l; i++) {
-        self.push(arguments[i]);
-      }
-    }
-    return self;
-  };
-  var insert = function(self, node, value) {
-    var inserted = node === self.head ? new Node(value, null, node, self) : new Node(value, node, node.next, self);
-    if (inserted.next === null) {
-      self.tail = inserted;
-    }
-    if (inserted.prev === null) {
-      self.head = inserted;
-    }
-    self.length++;
-    return inserted;
-  };
-  var push = function(self, item) {
-    self.tail = new Node(item, self.tail, null, self);
-    if (!self.head) {
-      self.head = self.tail;
-    }
-    self.length++;
-  };
-  var unshift = function(self, item) {
-    self.head = new Node(item, null, self.head, self);
-    if (!self.tail) {
-      self.tail = self.head;
-    }
-    self.length++;
-  };
-  var Node = function(value, prev, next, list) {
-    if (!(this instanceof Node)) {
-      return new Node(value, prev, next, list);
-    }
-    this.list = list;
-    this.value = value;
-    if (prev) {
-      prev.next = this;
-      this.prev = prev;
-    } else {
-      this.prev = null;
-    }
-    if (next) {
-      next.prev = this;
-      this.next = next;
-    } else {
-      this.next = null;
-    }
-  };
-  module.exports = Yallist;
-  Yallist.Node = Node;
-  Yallist.create = Yallist;
-  Yallist.prototype.removeNode = function(node) {
-    if (node.list !== this) {
-      throw new Error("removing node which does not belong to this list");
-    }
-    var next = node.next;
-    var prev = node.prev;
-    if (next) {
-      next.prev = prev;
-    }
-    if (prev) {
-      prev.next = next;
-    }
-    if (node === this.head) {
-      this.head = next;
-    }
-    if (node === this.tail) {
-      this.tail = prev;
-    }
-    node.list.length--;
-    node.next = null;
-    node.prev = null;
-    node.list = null;
-    return next;
-  };
-  Yallist.prototype.unshiftNode = function(node) {
-    if (node === this.head) {
-      return;
-    }
-    if (node.list) {
-      node.list.removeNode(node);
-    }
-    var head = this.head;
-    node.list = this;
-    node.next = head;
-    if (head) {
-      head.prev = node;
-    }
-    this.head = node;
-    if (!this.tail) {
-      this.tail = node;
-    }
-    this.length++;
-  };
-  Yallist.prototype.pushNode = function(node) {
-    if (node === this.tail) {
-      return;
-    }
-    if (node.list) {
-      node.list.removeNode(node);
-    }
-    var tail = this.tail;
-    node.list = this;
-    node.prev = tail;
-    if (tail) {
-      tail.next = node;
-    }
-    this.tail = node;
-    if (!this.head) {
-      this.head = node;
-    }
-    this.length++;
-  };
-  Yallist.prototype.push = function() {
-    for (var i = 0, l = arguments.length;i < l; i++) {
-      push(this, arguments[i]);
-    }
-    return this.length;
-  };
-  Yallist.prototype.unshift = function() {
-    for (var i = 0, l = arguments.length;i < l; i++) {
-      unshift(this, arguments[i]);
-    }
-    return this.length;
-  };
-  Yallist.prototype.pop = function() {
-    if (!this.tail) {
-      return;
-    }
-    var res = this.tail.value;
-    this.tail = this.tail.prev;
-    if (this.tail) {
-      this.tail.next = null;
-    } else {
-      this.head = null;
-    }
-    this.length--;
-    return res;
-  };
-  Yallist.prototype.shift = function() {
-    if (!this.head) {
-      return;
-    }
-    var res = this.head.value;
-    this.head = this.head.next;
-    if (this.head) {
-      this.head.prev = null;
-    } else {
-      this.tail = null;
-    }
-    this.length--;
-    return res;
-  };
-  Yallist.prototype.forEach = function(fn, thisp) {
-    thisp = thisp || this;
-    for (var walker = this.head, i = 0;walker !== null; i++) {
-      fn.call(thisp, walker.value, i, this);
-      walker = walker.next;
-    }
-  };
-  Yallist.prototype.forEachReverse = function(fn, thisp) {
-    thisp = thisp || this;
-    for (var walker = this.tail, i = this.length - 1;walker !== null; i--) {
-      fn.call(thisp, walker.value, i, this);
-      walker = walker.prev;
-    }
-  };
-  Yallist.prototype.get = function(n) {
-    for (var i = 0, walker = this.head;walker !== null && i < n; i++) {
-      walker = walker.next;
-    }
-    if (i === n && walker !== null) {
-      return walker.value;
-    }
-  };
-  Yallist.prototype.getReverse = function(n) {
-    for (var i = 0, walker = this.tail;walker !== null && i < n; i++) {
-      walker = walker.prev;
-    }
-    if (i === n && walker !== null) {
-      return walker.value;
-    }
-  };
-  Yallist.prototype.map = function(fn, thisp) {
-    thisp = thisp || this;
-    var res = new Yallist;
-    for (var walker = this.head;walker !== null; ) {
-      res.push(fn.call(thisp, walker.value, this));
-      walker = walker.next;
-    }
-    return res;
-  };
-  Yallist.prototype.mapReverse = function(fn, thisp) {
-    thisp = thisp || this;
-    var res = new Yallist;
-    for (var walker = this.tail;walker !== null; ) {
-      res.push(fn.call(thisp, walker.value, this));
-      walker = walker.prev;
-    }
-    return res;
-  };
-  Yallist.prototype.reduce = function(fn, initial) {
-    var acc;
-    var walker = this.head;
-    if (arguments.length > 1) {
-      acc = initial;
-    } else if (this.head) {
-      walker = this.head.next;
-      acc = this.head.value;
-    } else {
-      throw new TypeError("Reduce of empty list with no initial value");
-    }
-    for (var i = 0;walker !== null; i++) {
-      acc = fn(acc, walker.value, i);
-      walker = walker.next;
-    }
-    return acc;
-  };
-  Yallist.prototype.reduceReverse = function(fn, initial) {
-    var acc;
-    var walker = this.tail;
-    if (arguments.length > 1) {
-      acc = initial;
-    } else if (this.tail) {
-      walker = this.tail.prev;
-      acc = this.tail.value;
-    } else {
-      throw new TypeError("Reduce of empty list with no initial value");
-    }
-    for (var i = this.length - 1;walker !== null; i--) {
-      acc = fn(acc, walker.value, i);
-      walker = walker.prev;
-    }
-    return acc;
-  };
-  Yallist.prototype.toArray = function() {
-    var arr = new Array(this.length);
-    for (var i = 0, walker = this.head;walker !== null; i++) {
-      arr[i] = walker.value;
-      walker = walker.next;
-    }
-    return arr;
-  };
-  Yallist.prototype.toArrayReverse = function() {
-    var arr = new Array(this.length);
-    for (var i = 0, walker = this.tail;walker !== null; i++) {
-      arr[i] = walker.value;
-      walker = walker.prev;
-    }
-    return arr;
-  };
-  Yallist.prototype.slice = function(from, to) {
-    to = to || this.length;
-    if (to < 0) {
-      to += this.length;
-    }
-    from = from || 0;
-    if (from < 0) {
-      from += this.length;
-    }
-    var ret = new Yallist;
-    if (to < from || to < 0) {
-      return ret;
-    }
-    if (from < 0) {
-      from = 0;
-    }
-    if (to > this.length) {
-      to = this.length;
-    }
-    for (var i = 0, walker = this.head;walker !== null && i < from; i++) {
-      walker = walker.next;
-    }
-    for (;walker !== null && i < to; i++, walker = walker.next) {
-      ret.push(walker.value);
-    }
-    return ret;
-  };
-  Yallist.prototype.sliceReverse = function(from, to) {
-    to = to || this.length;
-    if (to < 0) {
-      to += this.length;
-    }
-    from = from || 0;
-    if (from < 0) {
-      from += this.length;
-    }
-    var ret = new Yallist;
-    if (to < from || to < 0) {
-      return ret;
-    }
-    if (from < 0) {
-      from = 0;
-    }
-    if (to > this.length) {
-      to = this.length;
-    }
-    for (var i = this.length, walker = this.tail;walker !== null && i > to; i--) {
-      walker = walker.prev;
-    }
-    for (;walker !== null && i > from; i--, walker = walker.prev) {
-      ret.push(walker.value);
-    }
-    return ret;
-  };
-  Yallist.prototype.splice = function(start, deleteCount, ...nodes) {
-    if (start > this.length) {
-      start = this.length - 1;
-    }
-    if (start < 0) {
-      start = this.length + start;
-    }
-    for (var i = 0, walker = this.head;walker !== null && i < start; i++) {
-      walker = walker.next;
-    }
-    var ret = [];
-    for (var i = 0;walker && i < deleteCount; i++) {
-      ret.push(walker.value);
-      walker = this.removeNode(walker);
-    }
-    if (walker === null) {
-      walker = this.tail;
-    }
-    if (walker !== this.head && walker !== this.tail) {
-      walker = walker.prev;
-    }
-    for (var i = 0;i < nodes.length; i++) {
-      walker = insert(this, walker, nodes[i]);
-    }
-    return ret;
-  };
-  Yallist.prototype.reverse = function() {
-    var head = this.head;
-    var tail = this.tail;
-    for (var walker = head;walker !== null; walker = walker.prev) {
-      var p = walker.prev;
-      walker.prev = walker.next;
-      walker.next = p;
-    }
-    this.head = tail;
-    this.tail = head;
-    return this;
-  };
-  try {
-    require_iterator()(Yallist);
-  } catch (er) {
-  }
-});
-
-// node_modules/lru-cache/index.js
-var require_lru_cache3 = __commonJS((exports, module) => {
-  var Yallist = require_yallist();
-  var MAX = Symbol("max");
-  var LENGTH = Symbol("length");
-  var LENGTH_CALCULATOR = Symbol("lengthCalculator");
-  var ALLOW_STALE = Symbol("allowStale");
-  var MAX_AGE = Symbol("maxAge");
-  var DISPOSE = Symbol("dispose");
-  var NO_DISPOSE_ON_SET = Symbol("noDisposeOnSet");
-  var LRU_LIST = Symbol("lruList");
-  var CACHE = Symbol("cache");
-  var UPDATE_AGE_ON_GET = Symbol("updateAgeOnGet");
-  var naiveLength = () => 1;
-
-  class LRUCache {
-    constructor(options) {
-      if (typeof options === "number")
-        options = { max: options };
-      if (!options)
-        options = {};
-      if (options.max && (typeof options.max !== "number" || options.max < 0))
-        throw new TypeError("max must be a non-negative number");
-      const max = this[MAX] = options.max || Infinity;
-      const lc = options.length || naiveLength;
-      this[LENGTH_CALCULATOR] = typeof lc !== "function" ? naiveLength : lc;
-      this[ALLOW_STALE] = options.stale || false;
-      if (options.maxAge && typeof options.maxAge !== "number")
-        throw new TypeError("maxAge must be a number");
-      this[MAX_AGE] = options.maxAge || 0;
-      this[DISPOSE] = options.dispose;
-      this[NO_DISPOSE_ON_SET] = options.noDisposeOnSet || false;
-      this[UPDATE_AGE_ON_GET] = options.updateAgeOnGet || false;
-      this.reset();
-    }
-    set max(mL) {
-      if (typeof mL !== "number" || mL < 0)
-        throw new TypeError("max must be a non-negative number");
-      this[MAX] = mL || Infinity;
-      trim(this);
-    }
-    get max() {
-      return this[MAX];
-    }
-    set allowStale(allowStale) {
-      this[ALLOW_STALE] = !!allowStale;
-    }
-    get allowStale() {
-      return this[ALLOW_STALE];
-    }
-    set maxAge(mA) {
-      if (typeof mA !== "number")
-        throw new TypeError("maxAge must be a non-negative number");
-      this[MAX_AGE] = mA;
-      trim(this);
-    }
-    get maxAge() {
-      return this[MAX_AGE];
-    }
-    set lengthCalculator(lC) {
-      if (typeof lC !== "function")
-        lC = naiveLength;
-      if (lC !== this[LENGTH_CALCULATOR]) {
-        this[LENGTH_CALCULATOR] = lC;
-        this[LENGTH] = 0;
-        this[LRU_LIST].forEach((hit) => {
-          hit.length = this[LENGTH_CALCULATOR](hit.value, hit.key);
-          this[LENGTH] += hit.length;
-        });
-      }
-      trim(this);
-    }
-    get lengthCalculator() {
-      return this[LENGTH_CALCULATOR];
-    }
-    get length() {
-      return this[LENGTH];
-    }
-    get itemCount() {
-      return this[LRU_LIST].length;
-    }
-    rforEach(fn, thisp) {
-      thisp = thisp || this;
-      for (let walker = this[LRU_LIST].tail;walker !== null; ) {
-        const prev = walker.prev;
-        forEachStep(this, fn, walker, thisp);
-        walker = prev;
-      }
-    }
-    forEach(fn, thisp) {
-      thisp = thisp || this;
-      for (let walker = this[LRU_LIST].head;walker !== null; ) {
-        const next = walker.next;
-        forEachStep(this, fn, walker, thisp);
-        walker = next;
-      }
-    }
-    keys() {
-      return this[LRU_LIST].toArray().map((k) => k.key);
-    }
-    values() {
-      return this[LRU_LIST].toArray().map((k) => k.value);
-    }
-    reset() {
-      if (this[DISPOSE] && this[LRU_LIST] && this[LRU_LIST].length) {
-        this[LRU_LIST].forEach((hit) => this[DISPOSE](hit.key, hit.value));
-      }
-      this[CACHE] = new Map;
-      this[LRU_LIST] = new Yallist;
-      this[LENGTH] = 0;
-    }
-    dump() {
-      return this[LRU_LIST].map((hit) => isStale(this, hit) ? false : {
-        k: hit.key,
-        v: hit.value,
-        e: hit.now + (hit.maxAge || 0)
-      }).toArray().filter((h) => h);
-    }
-    dumpLru() {
-      return this[LRU_LIST];
-    }
-    set(key, value, maxAge) {
-      maxAge = maxAge || this[MAX_AGE];
-      if (maxAge && typeof maxAge !== "number")
-        throw new TypeError("maxAge must be a number");
-      const now = maxAge ? Date.now() : 0;
-      const len = this[LENGTH_CALCULATOR](value, key);
-      if (this[CACHE].has(key)) {
-        if (len > this[MAX]) {
-          del(this, this[CACHE].get(key));
-          return false;
-        }
-        const node = this[CACHE].get(key);
-        const item = node.value;
-        if (this[DISPOSE]) {
-          if (!this[NO_DISPOSE_ON_SET])
-            this[DISPOSE](key, item.value);
-        }
-        item.now = now;
-        item.maxAge = maxAge;
-        item.value = value;
-        this[LENGTH] += len - item.length;
-        item.length = len;
-        this.get(key);
-        trim(this);
-        return true;
-      }
-      const hit = new Entry(key, value, len, now, maxAge);
-      if (hit.length > this[MAX]) {
-        if (this[DISPOSE])
-          this[DISPOSE](key, value);
-        return false;
-      }
-      this[LENGTH] += hit.length;
-      this[LRU_LIST].unshift(hit);
-      this[CACHE].set(key, this[LRU_LIST].head);
-      trim(this);
-      return true;
-    }
-    has(key) {
-      if (!this[CACHE].has(key))
-        return false;
-      const hit = this[CACHE].get(key).value;
-      return !isStale(this, hit);
-    }
-    get(key) {
-      return get(this, key, true);
-    }
-    peek(key) {
-      return get(this, key, false);
-    }
-    pop() {
-      const node = this[LRU_LIST].tail;
-      if (!node)
-        return null;
-      del(this, node);
-      return node.value;
-    }
-    del(key) {
-      del(this, this[CACHE].get(key));
-    }
-    load(arr) {
-      this.reset();
-      const now = Date.now();
-      for (let l = arr.length - 1;l >= 0; l--) {
-        const hit = arr[l];
-        const expiresAt = hit.e || 0;
-        if (expiresAt === 0)
-          this.set(hit.k, hit.v);
-        else {
-          const maxAge = expiresAt - now;
-          if (maxAge > 0) {
-            this.set(hit.k, hit.v, maxAge);
-          }
-        }
-      }
-    }
-    prune() {
-      this[CACHE].forEach((value, key) => get(this, key, false));
-    }
-  }
-  var get = (self, key, doUse) => {
-    const node = self[CACHE].get(key);
-    if (node) {
-      const hit = node.value;
-      if (isStale(self, hit)) {
-        del(self, node);
-        if (!self[ALLOW_STALE])
-          return;
-      } else {
-        if (doUse) {
-          if (self[UPDATE_AGE_ON_GET])
-            node.value.now = Date.now();
-          self[LRU_LIST].unshiftNode(node);
-        }
-      }
-      return hit.value;
-    }
-  };
-  var isStale = (self, hit) => {
-    if (!hit || !hit.maxAge && !self[MAX_AGE])
-      return false;
-    const diff = Date.now() - hit.now;
-    return hit.maxAge ? diff > hit.maxAge : self[MAX_AGE] && diff > self[MAX_AGE];
-  };
-  var trim = (self) => {
-    if (self[LENGTH] > self[MAX]) {
-      for (let walker = self[LRU_LIST].tail;self[LENGTH] > self[MAX] && walker !== null; ) {
-        const prev = walker.prev;
-        del(self, walker);
-        walker = prev;
-      }
-    }
-  };
-  var del = (self, node) => {
-    if (node) {
-      const hit = node.value;
-      if (self[DISPOSE])
-        self[DISPOSE](hit.key, hit.value);
-      self[LENGTH] -= hit.length;
-      self[CACHE].delete(hit.key);
-      self[LRU_LIST].removeNode(node);
-    }
-  };
-
-  class Entry {
-    constructor(key, value, length, now, maxAge) {
-      this.key = key;
-      this.value = value;
-      this.length = length;
-      this.now = now;
-      this.maxAge = maxAge || 0;
-    }
-  }
-  var forEachStep = (self, fn, node, thisp) => {
-    let hit = node.value;
-    if (isStale(self, hit)) {
-      del(self, node);
-      if (!self[ALLOW_STALE])
-        hit = undefined;
-    }
-    if (hit)
-      fn.call(thisp, hit.value, hit.key, self);
-  };
-  module.exports = LRUCache;
-});
-
-// node_modules/semver/classes/range.js
-var require_range = __commonJS((exports, module) => {
-  class Range {
-    constructor(range, options) {
-      options = parseOptions(options);
-      if (range instanceof Range) {
-        if (range.loose === !!options.loose && range.includePrerelease === !!options.includePrerelease) {
-          return range;
-        } else {
-          return new Range(range.raw, options);
-        }
-      }
-      if (range instanceof Comparator) {
-        this.raw = range.value;
-        this.set = [[range]];
-        this.format();
-        return this;
-      }
-      this.options = options;
-      this.loose = !!options.loose;
-      this.includePrerelease = !!options.includePrerelease;
-      this.raw = range.trim().split(/\s+/).join(" ");
-      this.set = this.raw.split("||").map((r) => this.parseRange(r.trim())).filter((c) => c.length);
-      if (!this.set.length) {
-        throw new TypeError(`Invalid SemVer Range: ${this.raw}`);
-      }
-      if (this.set.length > 1) {
-        const first = this.set[0];
-        this.set = this.set.filter((c) => !isNullSet(c[0]));
-        if (this.set.length === 0) {
-          this.set = [first];
-        } else if (this.set.length > 1) {
-          for (const c of this.set) {
-            if (c.length === 1 && isAny(c[0])) {
-              this.set = [c];
-              break;
-            }
-          }
-        }
-      }
-      this.format();
-    }
-    format() {
-      this.range = this.set.map((comps) => comps.join(" ").trim()).join("||").trim();
-      return this.range;
-    }
-    toString() {
-      return this.range;
-    }
-    parseRange(range) {
-      const memoOpts = (this.options.includePrerelease && FLAG_INCLUDE_PRERELEASE) | (this.options.loose && FLAG_LOOSE);
-      const memoKey = memoOpts + ":" + range;
-      const cached = cache.get(memoKey);
-      if (cached) {
-        return cached;
-      }
-      const loose = this.options.loose;
-      const hr = loose ? re[t.HYPHENRANGELOOSE] : re[t.HYPHENRANGE];
-      range = range.replace(hr, hyphenReplace(this.options.includePrerelease));
-      debug("hyphen replace", range);
-      range = range.replace(re[t.COMPARATORTRIM], comparatorTrimReplace);
-      debug("comparator trim", range);
-      range = range.replace(re[t.TILDETRIM], tildeTrimReplace);
-      debug("tilde trim", range);
-      range = range.replace(re[t.CARETTRIM], caretTrimReplace);
-      debug("caret trim", range);
-      let rangeList = range.split(" ").map((comp) => parseComparator(comp, this.options)).join(" ").split(/\s+/).map((comp) => replaceGTE0(comp, this.options));
-      if (loose) {
-        rangeList = rangeList.filter((comp) => {
-          debug("loose invalid filter", comp, this.options);
-          return !!comp.match(re[t.COMPARATORLOOSE]);
-        });
-      }
-      debug("range list", rangeList);
-      const rangeMap = new Map;
-      const comparators = rangeList.map((comp) => new Comparator(comp, this.options));
-      for (const comp of comparators) {
-        if (isNullSet(comp)) {
-          return [comp];
-        }
-        rangeMap.set(comp.value, comp);
-      }
-      if (rangeMap.size > 1 && rangeMap.has("")) {
-        rangeMap.delete("");
-      }
-      const result = [...rangeMap.values()];
-      cache.set(memoKey, result);
-      return result;
-    }
-    intersects(range, options) {
-      if (!(range instanceof Range)) {
-        throw new TypeError("a Range is required");
-      }
-      return this.set.some((thisComparators) => {
-        return isSatisfiable(thisComparators, options) && range.set.some((rangeComparators) => {
-          return isSatisfiable(rangeComparators, options) && thisComparators.every((thisComparator) => {
-            return rangeComparators.every((rangeComparator) => {
-              return thisComparator.intersects(rangeComparator, options);
-            });
-          });
-        });
-      });
-    }
-    test(version) {
-      if (!version) {
-        return false;
-      }
-      if (typeof version === "string") {
-        try {
-          version = new SemVer(version, this.options);
-        } catch (er) {
-          return false;
-        }
-      }
-      for (let i = 0;i < this.set.length; i++) {
-        if (testSet(this.set[i], version, this.options)) {
-          return true;
-        }
-      }
-      return false;
-    }
-  }
-  module.exports = Range;
-  var LRU = require_lru_cache3();
-  var cache = new LRU({ max: 1000 });
-  var parseOptions = require_parse_options();
-  var Comparator = require_comparator();
-  var debug = require_debug();
-  var SemVer = require_semver();
-  var {
-    safeRe: re,
-    t,
-    comparatorTrimReplace,
-    tildeTrimReplace,
-    caretTrimReplace
-  } = require_re();
-  var { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = require_constants();
-  var isNullSet = (c) => c.value === "<0.0.0-0";
-  var isAny = (c) => c.value === "";
-  var isSatisfiable = (comparators, options) => {
-    let result = true;
-    const remainingComparators = comparators.slice();
-    let testComparator = remainingComparators.pop();
-    while (result && remainingComparators.length) {
-      result = remainingComparators.every((otherComparator) => {
-        return testComparator.intersects(otherComparator, options);
-      });
-      testComparator = remainingComparators.pop();
-    }
-    return result;
-  };
-  var parseComparator = (comp, options) => {
-    debug("comp", comp, options);
-    comp = replaceCarets(comp, options);
-    debug("caret", comp);
-    comp = replaceTildes(comp, options);
-    debug("tildes", comp);
-    comp = replaceXRanges(comp, options);
-    debug("xrange", comp);
-    comp = replaceStars(comp, options);
-    debug("stars", comp);
-    return comp;
-  };
-  var isX = (id) => !id || id.toLowerCase() === "x" || id === "*";
-  var replaceTildes = (comp, options) => {
-    return comp.trim().split(/\s+/).map((c) => replaceTilde(c, options)).join(" ");
-  };
-  var replaceTilde = (comp, options) => {
-    const r = options.loose ? re[t.TILDELOOSE] : re[t.TILDE];
-    return comp.replace(r, (_, M, m, p, pr) => {
-      debug("tilde", comp, _, M, m, p, pr);
-      let ret;
-      if (isX(M)) {
-        ret = "";
-      } else if (isX(m)) {
-        ret = `>=${M}.0.0 <${+M + 1}.0.0-0`;
-      } else if (isX(p)) {
-        ret = `>=${M}.${m}.0 <${M}.${+m + 1}.0-0`;
-      } else if (pr) {
-        debug("replaceTilde pr", pr);
-        ret = `>=${M}.${m}.${p}-${pr} <${M}.${+m + 1}.0-0`;
-      } else {
-        ret = `>=${M}.${m}.${p} <${M}.${+m + 1}.0-0`;
-      }
-      debug("tilde return", ret);
-      return ret;
-    });
-  };
-  var replaceCarets = (comp, options) => {
-    return comp.trim().split(/\s+/).map((c) => replaceCaret(c, options)).join(" ");
-  };
-  var replaceCaret = (comp, options) => {
-    debug("caret", comp, options);
-    const r = options.loose ? re[t.CARETLOOSE] : re[t.CARET];
-    const z = options.includePrerelease ? "-0" : "";
-    return comp.replace(r, (_, M, m, p, pr) => {
-      debug("caret", comp, _, M, m, p, pr);
-      let ret;
-      if (isX(M)) {
-        ret = "";
-      } else if (isX(m)) {
-        ret = `>=${M}.0.0${z} <${+M + 1}.0.0-0`;
-      } else if (isX(p)) {
-        if (M === "0") {
-          ret = `>=${M}.${m}.0${z} <${M}.${+m + 1}.0-0`;
-        } else {
-          ret = `>=${M}.${m}.0${z} <${+M + 1}.0.0-0`;
-        }
-      } else if (pr) {
-        debug("replaceCaret pr", pr);
-        if (M === "0") {
-          if (m === "0") {
-            ret = `>=${M}.${m}.${p}-${pr} <${M}.${m}.${+p + 1}-0`;
-          } else {
-            ret = `>=${M}.${m}.${p}-${pr} <${M}.${+m + 1}.0-0`;
-          }
-        } else {
-          ret = `>=${M}.${m}.${p}-${pr} <${+M + 1}.0.0-0`;
-        }
-      } else {
-        debug("no pr");
-        if (M === "0") {
-          if (m === "0") {
-            ret = `>=${M}.${m}.${p}${z} <${M}.${m}.${+p + 1}-0`;
-          } else {
-            ret = `>=${M}.${m}.${p}${z} <${M}.${+m + 1}.0-0`;
-          }
-        } else {
-          ret = `>=${M}.${m}.${p} <${+M + 1}.0.0-0`;
-        }
-      }
-      debug("caret return", ret);
-      return ret;
-    });
-  };
-  var replaceXRanges = (comp, options) => {
-    debug("replaceXRanges", comp, options);
-    return comp.split(/\s+/).map((c) => replaceXRange(c, options)).join(" ");
-  };
-  var replaceXRange = (comp, options) => {
-    comp = comp.trim();
-    const r = options.loose ? re[t.XRANGELOOSE] : re[t.XRANGE];
-    return comp.replace(r, (ret, gtlt, M, m, p, pr) => {
-      debug("xRange", comp, ret, gtlt, M, m, p, pr);
-      const xM = isX(M);
-      const xm = xM || isX(m);
-      const xp = xm || isX(p);
-      const anyX = xp;
-      if (gtlt === "=" && anyX) {
-        gtlt = "";
-      }
-      pr = options.includePrerelease ? "-0" : "";
-      if (xM) {
-        if (gtlt === ">" || gtlt === "<") {
-          ret = "<0.0.0-0";
-        } else {
-          ret = "*";
-        }
-      } else if (gtlt && anyX) {
-        if (xm) {
-          m = 0;
-        }
-        p = 0;
-        if (gtlt === ">") {
-          gtlt = ">=";
-          if (xm) {
-            M = +M + 1;
-            m = 0;
-            p = 0;
-          } else {
-            m = +m + 1;
-            p = 0;
-          }
-        } else if (gtlt === "<=") {
-          gtlt = "<";
-          if (xm) {
-            M = +M + 1;
-          } else {
-            m = +m + 1;
-          }
-        }
-        if (gtlt === "<") {
-          pr = "-0";
-        }
-        ret = `${gtlt + M}.${m}.${p}${pr}`;
-      } else if (xm) {
-        ret = `>=${M}.0.0${pr} <${+M + 1}.0.0-0`;
-      } else if (xp) {
-        ret = `>=${M}.${m}.0${pr} <${M}.${+m + 1}.0-0`;
-      }
-      debug("xRange return", ret);
-      return ret;
-    });
-  };
-  var replaceStars = (comp, options) => {
-    debug("replaceStars", comp, options);
-    return comp.trim().replace(re[t.STAR], "");
-  };
-  var replaceGTE0 = (comp, options) => {
-    debug("replaceGTE0", comp, options);
-    return comp.trim().replace(re[options.includePrerelease ? t.GTE0PRE : t.GTE0], "");
-  };
-  var hyphenReplace = (incPr) => ($0, from, fM, fm, fp, fpr, fb, to, tM, tm, tp, tpr, tb) => {
-    if (isX(fM)) {
-      from = "";
-    } else if (isX(fm)) {
-      from = `>=${fM}.0.0${incPr ? "-0" : ""}`;
-    } else if (isX(fp)) {
-      from = `>=${fM}.${fm}.0${incPr ? "-0" : ""}`;
-    } else if (fpr) {
-      from = `>=${from}`;
-    } else {
-      from = `>=${from}${incPr ? "-0" : ""}`;
-    }
-    if (isX(tM)) {
-      to = "";
-    } else if (isX(tm)) {
-      to = `<${+tM + 1}.0.0-0`;
-    } else if (isX(tp)) {
-      to = `<${tM}.${+tm + 1}.0-0`;
-    } else if (tpr) {
-      to = `<=${tM}.${tm}.${tp}-${tpr}`;
-    } else if (incPr) {
-      to = `<${tM}.${tm}.${+tp + 1}-0`;
-    } else {
-      to = `<=${to}`;
-    }
-    return `${from} ${to}`.trim();
-  };
-  var testSet = (set, version, options) => {
-    for (let i = 0;i < set.length; i++) {
-      if (!set[i].test(version)) {
-        return false;
-      }
-    }
-    if (version.prerelease.length && !options.includePrerelease) {
-      for (let i = 0;i < set.length; i++) {
-        debug(set[i].semver);
-        if (set[i].semver === Comparator.ANY) {
-          continue;
-        }
-        if (set[i].semver.prerelease.length > 0) {
-          const allowed = set[i].semver;
-          if (allowed.major === version.major && allowed.minor === version.minor && allowed.patch === version.patch) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-    return true;
-  };
-});
-
-// node_modules/semver/classes/comparator.js
-var require_comparator = __commonJS((exports, module) => {
-  var ANY = Symbol("SemVer ANY");
-
-  class Comparator {
-    static get ANY() {
-      return ANY;
-    }
-    constructor(comp, options) {
-      options = parseOptions(options);
-      if (comp instanceof Comparator) {
-        if (comp.loose === !!options.loose) {
-          return comp;
-        } else {
-          comp = comp.value;
-        }
-      }
-      comp = comp.trim().split(/\s+/).join(" ");
-      debug("comparator", comp, options);
-      this.options = options;
-      this.loose = !!options.loose;
-      this.parse(comp);
-      if (this.semver === ANY) {
-        this.value = "";
-      } else {
-        this.value = this.operator + this.semver.version;
-      }
-      debug("comp", this);
-    }
-    parse(comp) {
-      const r = this.options.loose ? re[t.COMPARATORLOOSE] : re[t.COMPARATOR];
-      const m = comp.match(r);
-      if (!m) {
-        throw new TypeError(`Invalid comparator: ${comp}`);
-      }
-      this.operator = m[1] !== undefined ? m[1] : "";
-      if (this.operator === "=") {
-        this.operator = "";
-      }
-      if (!m[2]) {
-        this.semver = ANY;
-      } else {
-        this.semver = new SemVer(m[2], this.options.loose);
-      }
-    }
-    toString() {
-      return this.value;
-    }
-    test(version) {
-      debug("Comparator.test", version, this.options.loose);
-      if (this.semver === ANY || version === ANY) {
-        return true;
-      }
-      if (typeof version === "string") {
-        try {
-          version = new SemVer(version, this.options);
-        } catch (er) {
-          return false;
-        }
-      }
-      return cmp(version, this.operator, this.semver, this.options);
-    }
-    intersects(comp, options) {
-      if (!(comp instanceof Comparator)) {
-        throw new TypeError("a Comparator is required");
-      }
-      if (this.operator === "") {
-        if (this.value === "") {
-          return true;
-        }
-        return new Range(comp.value, options).test(this.value);
-      } else if (comp.operator === "") {
-        if (comp.value === "") {
-          return true;
-        }
-        return new Range(this.value, options).test(comp.semver);
-      }
-      options = parseOptions(options);
-      if (options.includePrerelease && (this.value === "<0.0.0-0" || comp.value === "<0.0.0-0")) {
-        return false;
-      }
-      if (!options.includePrerelease && (this.value.startsWith("<0.0.0") || comp.value.startsWith("<0.0.0"))) {
-        return false;
-      }
-      if (this.operator.startsWith(">") && comp.operator.startsWith(">")) {
-        return true;
-      }
-      if (this.operator.startsWith("<") && comp.operator.startsWith("<")) {
-        return true;
-      }
-      if (this.semver.version === comp.semver.version && this.operator.includes("=") && comp.operator.includes("=")) {
-        return true;
-      }
-      if (cmp(this.semver, "<", comp.semver, options) && this.operator.startsWith(">") && comp.operator.startsWith("<")) {
-        return true;
-      }
-      if (cmp(this.semver, ">", comp.semver, options) && this.operator.startsWith("<") && comp.operator.startsWith(">")) {
-        return true;
-      }
-      return false;
-    }
-  }
-  module.exports = Comparator;
-  var parseOptions = require_parse_options();
-  var { safeRe: re, t } = require_re();
-  var cmp = require_cmp();
-  var debug = require_debug();
-  var SemVer = require_semver();
-  var Range = require_range();
-});
-
-// node_modules/semver/functions/satisfies.js
-var require_satisfies = __commonJS((exports, module) => {
-  var Range = require_range();
-  var satisfies = (version, range, options) => {
-    try {
-      range = new Range(range, options);
-    } catch (er) {
-      return false;
-    }
-    return range.test(version);
-  };
-  module.exports = satisfies;
-});
-
-// node_modules/semver/ranges/to-comparators.js
-var require_to_comparators = __commonJS((exports, module) => {
-  var Range = require_range();
-  var toComparators = (range, options) => new Range(range, options).set.map((comp) => comp.map((c) => c.value).join(" ").trim().split(" "));
-  module.exports = toComparators;
-});
-
-// node_modules/semver/ranges/max-satisfying.js
-var require_max_satisfying = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var Range = require_range();
-  var maxSatisfying = (versions, range, options) => {
-    let max = null;
-    let maxSV = null;
-    let rangeObj = null;
-    try {
-      rangeObj = new Range(range, options);
-    } catch (er) {
-      return null;
-    }
-    versions.forEach((v) => {
-      if (rangeObj.test(v)) {
-        if (!max || maxSV.compare(v) === -1) {
-          max = v;
-          maxSV = new SemVer(max, options);
-        }
-      }
-    });
-    return max;
-  };
-  module.exports = maxSatisfying;
-});
-
-// node_modules/semver/ranges/min-satisfying.js
-var require_min_satisfying = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var Range = require_range();
-  var minSatisfying = (versions, range, options) => {
-    let min = null;
-    let minSV = null;
-    let rangeObj = null;
-    try {
-      rangeObj = new Range(range, options);
-    } catch (er) {
-      return null;
-    }
-    versions.forEach((v) => {
-      if (rangeObj.test(v)) {
-        if (!min || minSV.compare(v) === 1) {
-          min = v;
-          minSV = new SemVer(min, options);
-        }
-      }
-    });
-    return min;
-  };
-  module.exports = minSatisfying;
-});
-
-// node_modules/semver/ranges/min-version.js
-var require_min_version = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var Range = require_range();
-  var gt = require_gt();
-  var minVersion = (range, loose) => {
-    range = new Range(range, loose);
-    let minver = new SemVer("0.0.0");
-    if (range.test(minver)) {
-      return minver;
-    }
-    minver = new SemVer("0.0.0-0");
-    if (range.test(minver)) {
-      return minver;
-    }
-    minver = null;
-    for (let i = 0;i < range.set.length; ++i) {
-      const comparators = range.set[i];
-      let setMin = null;
-      comparators.forEach((comparator) => {
-        const compver = new SemVer(comparator.semver.version);
-        switch (comparator.operator) {
-          case ">":
-            if (compver.prerelease.length === 0) {
-              compver.patch++;
-            } else {
-              compver.prerelease.push(0);
-            }
-            compver.raw = compver.format();
-          case "":
-          case ">=":
-            if (!setMin || gt(compver, setMin)) {
-              setMin = compver;
-            }
-            break;
-          case "<":
-          case "<=":
-            break;
-          default:
-            throw new Error(`Unexpected operation: ${comparator.operator}`);
-        }
-      });
-      if (setMin && (!minver || gt(minver, setMin))) {
-        minver = setMin;
-      }
-    }
-    if (minver && range.test(minver)) {
-      return minver;
-    }
-    return null;
-  };
-  module.exports = minVersion;
-});
-
-// node_modules/semver/ranges/valid.js
-var require_valid2 = __commonJS((exports, module) => {
-  var Range = require_range();
-  var validRange = (range, options) => {
-    try {
-      return new Range(range, options).range || "*";
-    } catch (er) {
-      return null;
-    }
-  };
-  module.exports = validRange;
-});
-
-// node_modules/semver/ranges/outside.js
-var require_outside = __commonJS((exports, module) => {
-  var SemVer = require_semver();
-  var Comparator = require_comparator();
-  var { ANY } = Comparator;
-  var Range = require_range();
-  var satisfies = require_satisfies();
-  var gt = require_gt();
-  var lt = require_lt();
-  var lte = require_lte();
-  var gte = require_gte();
-  var outside = (version, range, hilo, options) => {
-    version = new SemVer(version, options);
-    range = new Range(range, options);
-    let gtfn, ltefn, ltfn, comp, ecomp;
-    switch (hilo) {
-      case ">":
-        gtfn = gt;
-        ltefn = lte;
-        ltfn = lt;
-        comp = ">";
-        ecomp = ">=";
-        break;
-      case "<":
-        gtfn = lt;
-        ltefn = gte;
-        ltfn = gt;
-        comp = "<";
-        ecomp = "<=";
-        break;
-      default:
-        throw new TypeError('Must provide a hilo val of "<" or ">"');
-    }
-    if (satisfies(version, range, options)) {
-      return false;
-    }
-    for (let i = 0;i < range.set.length; ++i) {
-      const comparators = range.set[i];
-      let high = null;
-      let low = null;
-      comparators.forEach((comparator) => {
-        if (comparator.semver === ANY) {
-          comparator = new Comparator(">=0.0.0");
-        }
-        high = high || comparator;
-        low = low || comparator;
-        if (gtfn(comparator.semver, high.semver, options)) {
-          high = comparator;
-        } else if (ltfn(comparator.semver, low.semver, options)) {
-          low = comparator;
-        }
-      });
-      if (high.operator === comp || high.operator === ecomp) {
-        return false;
-      }
-      if ((!low.operator || low.operator === comp) && ltefn(version, low.semver)) {
-        return false;
-      } else if (low.operator === ecomp && ltfn(version, low.semver)) {
-        return false;
-      }
-    }
-    return true;
-  };
-  module.exports = outside;
-});
-
-// node_modules/semver/ranges/gtr.js
-var require_gtr = __commonJS((exports, module) => {
-  var outside = require_outside();
-  var gtr = (version, range, options) => outside(version, range, ">", options);
-  module.exports = gtr;
-});
-
-// node_modules/semver/ranges/ltr.js
-var require_ltr = __commonJS((exports, module) => {
-  var outside = require_outside();
-  var ltr = (version, range, options) => outside(version, range, "<", options);
-  module.exports = ltr;
-});
-
-// node_modules/semver/ranges/intersects.js
-var require_intersects = __commonJS((exports, module) => {
-  var Range = require_range();
-  var intersects = (r1, r2, options) => {
-    r1 = new Range(r1, options);
-    r2 = new Range(r2, options);
-    return r1.intersects(r2, options);
-  };
-  module.exports = intersects;
-});
-
-// node_modules/semver/ranges/simplify.js
-var require_simplify = __commonJS((exports, module) => {
-  var satisfies = require_satisfies();
-  var compare = require_compare();
-  module.exports = (versions, range, options) => {
-    const set = [];
-    let first = null;
-    let prev = null;
-    const v = versions.sort((a, b) => compare(a, b, options));
-    for (const version of v) {
-      const included = satisfies(version, range, options);
-      if (included) {
-        prev = version;
-        if (!first) {
-          first = version;
-        }
-      } else {
-        if (prev) {
-          set.push([first, prev]);
-        }
-        prev = null;
-        first = null;
-      }
-    }
-    if (first) {
-      set.push([first, null]);
-    }
-    const ranges = [];
-    for (const [min, max] of set) {
-      if (min === max) {
-        ranges.push(min);
-      } else if (!max && min === v[0]) {
-        ranges.push("*");
-      } else if (!max) {
-        ranges.push(`>=${min}`);
-      } else if (min === v[0]) {
-        ranges.push(`<=${max}`);
-      } else {
-        ranges.push(`${min} - ${max}`);
-      }
-    }
-    const simplified = ranges.join(" || ");
-    const original = typeof range.raw === "string" ? range.raw : String(range);
-    return simplified.length < original.length ? simplified : range;
-  };
-});
-
-// node_modules/semver/ranges/subset.js
-var require_subset = __commonJS((exports, module) => {
-  var Range = require_range();
-  var Comparator = require_comparator();
-  var { ANY } = Comparator;
-  var satisfies = require_satisfies();
-  var compare = require_compare();
-  var subset = (sub, dom, options = {}) => {
-    if (sub === dom) {
-      return true;
-    }
-    sub = new Range(sub, options);
-    dom = new Range(dom, options);
-    let sawNonNull = false;
-    OUTER:
-      for (const simpleSub of sub.set) {
-        for (const simpleDom of dom.set) {
-          const isSub = simpleSubset(simpleSub, simpleDom, options);
-          sawNonNull = sawNonNull || isSub !== null;
-          if (isSub) {
-            continue OUTER;
-          }
-        }
-        if (sawNonNull) {
-          return false;
-        }
-      }
-    return true;
-  };
-  var minimumVersionWithPreRelease = [new Comparator(">=0.0.0-0")];
-  var minimumVersion = [new Comparator(">=0.0.0")];
-  var simpleSubset = (sub, dom, options) => {
-    if (sub === dom) {
-      return true;
-    }
-    if (sub.length === 1 && sub[0].semver === ANY) {
-      if (dom.length === 1 && dom[0].semver === ANY) {
-        return true;
-      } else if (options.includePrerelease) {
-        sub = minimumVersionWithPreRelease;
-      } else {
-        sub = minimumVersion;
-      }
-    }
-    if (dom.length === 1 && dom[0].semver === ANY) {
-      if (options.includePrerelease) {
-        return true;
-      } else {
-        dom = minimumVersion;
-      }
-    }
-    const eqSet = new Set;
-    let gt, lt;
-    for (const c of sub) {
-      if (c.operator === ">" || c.operator === ">=") {
-        gt = higherGT(gt, c, options);
-      } else if (c.operator === "<" || c.operator === "<=") {
-        lt = lowerLT(lt, c, options);
-      } else {
-        eqSet.add(c.semver);
-      }
-    }
-    if (eqSet.size > 1) {
-      return null;
-    }
-    let gtltComp;
-    if (gt && lt) {
-      gtltComp = compare(gt.semver, lt.semver, options);
-      if (gtltComp > 0) {
-        return null;
-      } else if (gtltComp === 0 && (gt.operator !== ">=" || lt.operator !== "<=")) {
-        return null;
-      }
-    }
-    for (const eq of eqSet) {
-      if (gt && !satisfies(eq, String(gt), options)) {
-        return null;
-      }
-      if (lt && !satisfies(eq, String(lt), options)) {
-        return null;
-      }
-      for (const c of dom) {
-        if (!satisfies(eq, String(c), options)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    let higher, lower;
-    let hasDomLT, hasDomGT;
-    let needDomLTPre = lt && !options.includePrerelease && lt.semver.prerelease.length ? lt.semver : false;
-    let needDomGTPre = gt && !options.includePrerelease && gt.semver.prerelease.length ? gt.semver : false;
-    if (needDomLTPre && needDomLTPre.prerelease.length === 1 && lt.operator === "<" && needDomLTPre.prerelease[0] === 0) {
-      needDomLTPre = false;
-    }
-    for (const c of dom) {
-      hasDomGT = hasDomGT || c.operator === ">" || c.operator === ">=";
-      hasDomLT = hasDomLT || c.operator === "<" || c.operator === "<=";
-      if (gt) {
-        if (needDomGTPre) {
-          if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomGTPre.major && c.semver.minor === needDomGTPre.minor && c.semver.patch === needDomGTPre.patch) {
-            needDomGTPre = false;
-          }
-        }
-        if (c.operator === ">" || c.operator === ">=") {
-          higher = higherGT(gt, c, options);
-          if (higher === c && higher !== gt) {
-            return false;
-          }
-        } else if (gt.operator === ">=" && !satisfies(gt.semver, String(c), options)) {
-          return false;
-        }
-      }
-      if (lt) {
-        if (needDomLTPre) {
-          if (c.semver.prerelease && c.semver.prerelease.length && c.semver.major === needDomLTPre.major && c.semver.minor === needDomLTPre.minor && c.semver.patch === needDomLTPre.patch) {
-            needDomLTPre = false;
-          }
-        }
-        if (c.operator === "<" || c.operator === "<=") {
-          lower = lowerLT(lt, c, options);
-          if (lower === c && lower !== lt) {
-            return false;
-          }
-        } else if (lt.operator === "<=" && !satisfies(lt.semver, String(c), options)) {
-          return false;
-        }
-      }
-      if (!c.operator && (lt || gt) && gtltComp !== 0) {
-        return false;
-      }
-    }
-    if (gt && hasDomLT && !lt && gtltComp !== 0) {
-      return false;
-    }
-    if (lt && hasDomGT && !gt && gtltComp !== 0) {
-      return false;
-    }
-    if (needDomGTPre || needDomLTPre) {
-      return false;
-    }
-    return true;
-  };
-  var higherGT = (a, b, options) => {
-    if (!a) {
-      return b;
-    }
-    const comp = compare(a.semver, b.semver, options);
-    return comp > 0 ? a : comp < 0 ? b : b.operator === ">" && a.operator === ">=" ? b : a;
-  };
-  var lowerLT = (a, b, options) => {
-    if (!a) {
-      return b;
-    }
-    const comp = compare(a.semver, b.semver, options);
-    return comp < 0 ? a : comp > 0 ? b : b.operator === "<" && a.operator === "<=" ? b : a;
-  };
-  module.exports = subset;
-});
-
-// node_modules/semver/index.js
-var require_semver2 = __commonJS((exports, module) => {
-  var internalRe = require_re();
-  var constants = require_constants();
-  var SemVer = require_semver();
-  var identifiers = require_identifiers();
-  var parse = require_parse2();
-  var valid = require_valid();
-  var clean = require_clean();
-  var inc = require_inc();
-  var diff = require_diff();
-  var major = require_major();
-  var minor = require_minor();
-  var patch = require_patch();
-  var prerelease = require_prerelease();
-  var compare = require_compare();
-  var rcompare = require_rcompare();
-  var compareLoose = require_compare_loose();
-  var compareBuild = require_compare_build();
-  var sort = require_sort();
-  var rsort = require_rsort();
-  var gt = require_gt();
-  var lt = require_lt();
-  var eq = require_eq();
-  var neq = require_neq();
-  var gte = require_gte();
-  var lte = require_lte();
-  var cmp = require_cmp();
-  var coerce = require_coerce();
-  var Comparator = require_comparator();
-  var Range = require_range();
-  var satisfies = require_satisfies();
-  var toComparators = require_to_comparators();
-  var maxSatisfying = require_max_satisfying();
-  var minSatisfying = require_min_satisfying();
-  var minVersion = require_min_version();
-  var validRange = require_valid2();
-  var outside = require_outside();
-  var gtr = require_gtr();
-  var ltr = require_ltr();
-  var intersects = require_intersects();
-  var simplifyRange = require_simplify();
-  var subset = require_subset();
-  module.exports = {
-    parse,
-    valid,
-    clean,
-    inc,
-    diff,
-    major,
-    minor,
-    patch,
-    prerelease,
-    compare,
-    rcompare,
-    compareLoose,
-    compareBuild,
-    sort,
-    rsort,
-    gt,
-    lt,
-    eq,
-    neq,
-    gte,
-    lte,
-    cmp,
-    coerce,
-    Comparator,
-    Range,
-    satisfies,
-    toComparators,
-    maxSatisfying,
-    minSatisfying,
-    minVersion,
-    validRange,
-    outside,
-    gtr,
-    ltr,
-    intersects,
-    simplifyRange,
-    subset,
-    SemVer,
-    re: internalRe.re,
-    src: internalRe.src,
-    tokens: internalRe.t,
-    SEMVER_SPEC_VERSION: constants.SEMVER_SPEC_VERSION,
-    RELEASE_TYPES: constants.RELEASE_TYPES,
-    compareIdentifiers: identifiers.compareIdentifiers,
-    rcompareIdentifiers: identifiers.rcompareIdentifiers
-  };
+  exports.LRUCache = LRUCache;
 });
 
 // node_modules/@npmcli/git/lib/lines-to-revs.js
@@ -21202,8 +22549,8 @@ var require_lines_to_revs = __commonJS((exports, module) => {
 var require_revs = __commonJS((exports, module) => {
   var pinflight = require_inflight();
   var spawn = require_spawn();
-  var LRU = require_lru_cache2();
-  var revsCache = new LRU({
+  var { LRUCache } = require_cjs9();
+  var revsCache = new LRUCache({
     max: 100,
     ttl: 5 * 60 * 1000
   });
@@ -21499,10 +22846,10 @@ var require_npa = __commonJS((exports, module) => {
     this.gitSubdir = opts.gitSubdir;
     this.hosted = opts.hosted;
   };
-  var setGitCommittish = function(res, committish) {
+  var setGitAttrs = function(res, committish) {
     if (!committish) {
       res.gitCommittish = null;
-      return res;
+      return;
     }
     for (const part of committish.split("::")) {
       if (!part.includes(":")) {
@@ -21535,7 +22882,6 @@ var require_npa = __commonJS((exports, module) => {
       }
       log.warn("npm-package-arg", `ignoring unknown key "${name}"`);
     }
-    return res;
   };
   var fromFile = function(res, where) {
     if (!where) {
@@ -21549,10 +22895,10 @@ var require_npa = __commonJS((exports, module) => {
     const rawWithPrefix = prefix + res.rawSpec;
     let rawNoPrefix = rawWithPrefix.replace(/^file:/, "");
     try {
-      resolvedUrl = new url.URL(rawWithPrefix, `file://${path.resolve(where)}/`);
-      specUrl = new url.URL(rawWithPrefix);
+      resolvedUrl = new URL2(rawWithPrefix, `file://${path.resolve(where)}/`);
+      specUrl = new URL2(rawWithPrefix);
     } catch (originalError) {
-      const er = new Error("Invalid file: URL, must comply with RFC 8909");
+      const er = new Error("Invalid file: URL, must comply with RFC 8089");
       throw Object.assign(er, {
         raw: res.rawSpec,
         spec: res,
@@ -21560,26 +22906,17 @@ var require_npa = __commonJS((exports, module) => {
         originalError
       });
     }
-    if (process.env.NPM_PACKAGE_ARG_8909_STRICT !== "1") {
-      if (resolvedUrl.host && resolvedUrl.host !== "localhost") {
-        const rawSpec = res.rawSpec.replace(/^file:\/\//, "file:///");
-        resolvedUrl = new url.URL(rawSpec, `file://${path.resolve(where)}/`);
-        specUrl = new url.URL(rawSpec);
-        rawNoPrefix = rawSpec.replace(/^file:/, "");
-      }
-      if (/^\/{1,3}\.\.?(\/|$)/.test(rawNoPrefix)) {
-        const rawSpec = res.rawSpec.replace(/^file:\/{1,3}/, "file:");
-        resolvedUrl = new url.URL(rawSpec, `file://${path.resolve(where)}/`);
-        specUrl = new url.URL(rawSpec);
-        rawNoPrefix = rawSpec.replace(/^file:/, "");
-      }
-    }
     if (resolvedUrl.host && resolvedUrl.host !== "localhost") {
-      const msg = `Invalid file: URL, must be absolute if // present`;
-      throw Object.assign(new Error(msg), {
-        raw: res.rawSpec,
-        parsed: resolvedUrl
-      });
+      const rawSpec = res.rawSpec.replace(/^file:\/\//, "file:///");
+      resolvedUrl = new URL2(rawSpec, `file://${path.resolve(where)}/`);
+      specUrl = new URL2(rawSpec);
+      rawNoPrefix = rawSpec.replace(/^file:/, "");
+    }
+    if (/^\/{1,3}\.\.?(\/|$)/.test(rawNoPrefix)) {
+      const rawSpec = res.rawSpec.replace(/^file:\/{1,3}/, "file:");
+      resolvedUrl = new URL2(rawSpec, `file://${path.resolve(where)}/`);
+      specUrl = new URL2(rawSpec);
+      rawNoPrefix = rawSpec.replace(/^file:/, "");
     }
     let specPath = decodeURIComponent(specUrl.pathname);
     let resolvedPath = decodeURIComponent(resolvedUrl.pathname);
@@ -21603,55 +22940,56 @@ var require_npa = __commonJS((exports, module) => {
     res.hosted = hosted;
     res.saveSpec = hosted.toString({ noGitPlus: false, noCommittish: false });
     res.fetchSpec = hosted.getDefaultRepresentation() === "shortcut" ? null : hosted.toString();
-    return setGitCommittish(res, hosted.committish);
+    setGitAttrs(res, hosted.committish);
+    return res;
   };
   var unsupportedURLType = function(protocol, spec) {
     const err = new Error(`Unsupported URL Type "${protocol}": ${spec}`);
     err.code = "EUNSUPPORTEDPROTOCOL";
     return err;
   };
-  var matchGitScp = function(spec) {
-    const matched = spec.match(/^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i);
-    return matched && !matched[1].match(/:[0-9]+\/?.*$/i) && {
-      fetchSpec: matched[1],
-      gitCommittish: matched[2] == null ? null : matched[2]
-    };
-  };
   var fromURL = function(res) {
-    const urlparse = url.parse(res.rawSpec);
-    res.saveSpec = res.rawSpec;
-    switch (urlparse.protocol) {
+    let rawSpec = res.rawSpec;
+    res.saveSpec = rawSpec;
+    if (rawSpec.startsWith("git+ssh:")) {
+      const matched = rawSpec.match(/^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i);
+      if (matched && !matched[1].match(/:[0-9]+\/?.*$/i)) {
+        res.type = "git";
+        setGitAttrs(res, matched[2]);
+        res.fetchSpec = matched[1];
+        return res;
+      }
+    } else if (rawSpec.startsWith("git+file://")) {
+      rawSpec = rawSpec.replace(/\\/g, "/");
+    }
+    const parsedUrl = new URL2(rawSpec);
+    switch (parsedUrl.protocol) {
       case "git:":
       case "git+http:":
       case "git+https:":
       case "git+rsync:":
       case "git+ftp:":
       case "git+file:":
-      case "git+ssh:": {
+      case "git+ssh:":
         res.type = "git";
-        const match = urlparse.protocol === "git+ssh:" ? matchGitScp(res.rawSpec) : null;
-        if (match) {
-          setGitCommittish(res, match.gitCommittish);
-          res.fetchSpec = match.fetchSpec;
+        setGitAttrs(res, parsedUrl.hash.slice(1));
+        if (parsedUrl.protocol === "git+file:" && /^git\+file:\/\/[a-z]:/i.test(rawSpec)) {
+          res.fetchSpec = `git+file://${parsedUrl.host.toLowerCase()}:${parsedUrl.pathname}`;
         } else {
-          setGitCommittish(res, urlparse.hash != null ? urlparse.hash.slice(1) : "");
-          urlparse.protocol = urlparse.protocol.replace(/^git[+]/, "");
-          if (urlparse.protocol === "file:" && /^git\+file:\/\/[a-z]:/i.test(res.rawSpec)) {
-            urlparse.host += ":";
-            urlparse.hostname += ":";
-          }
-          delete urlparse.hash;
-          res.fetchSpec = url.format(urlparse);
+          parsedUrl.hash = "";
+          res.fetchSpec = parsedUrl.toString();
+        }
+        if (res.fetchSpec.startsWith("git+")) {
+          res.fetchSpec = res.fetchSpec.slice(4);
         }
         break;
-      }
       case "http:":
       case "https:":
         res.type = "remote";
         res.fetchSpec = res.saveSpec;
         break;
       default:
-        throw unsupportedURLType(urlparse.protocol, res.rawSpec);
+        throw unsupportedURLType(parsedUrl.protocol, rawSpec);
     }
     return res;
   };
@@ -21693,7 +23031,7 @@ var require_npa = __commonJS((exports, module) => {
   module.exports.resolve = resolve;
   module.exports.toPurl = toPurl;
   module.exports.Result = Result;
-  var url = __require("url");
+  var { URL: URL2 } = __require("url");
   var HostedGit = require_lib5();
   var semver = require_semver2();
   var path = global.FAKE_WINDOWS ? __require("path").win32 : __require("path");
@@ -21757,12 +23095,12 @@ var require_lib11 = __commonJS((exports, module) => {
     }
   };
   var isMusl = (file) => file.includes("libc.musl-") || file.includes("ld-musl-");
-  var checkPlatform = (target, force = false) => {
+  var checkPlatform = (target, force = false, environment = {}) => {
     if (force) {
       return;
     }
-    const platform = process.platform;
-    const arch = process.arch;
+    const platform = environment.os || process.platform;
+    const arch = environment.cpu || process.arch;
     const osOk = target.os ? checkList(platform, target.os) : true;
     const cpuOk = target.cpu ? checkList(arch, target.cpu) : true;
     let libcOk = true;
@@ -21826,12 +23164,60 @@ var require_lib11 = __commonJS((exports, module) => {
   };
 });
 
-// node_modules/npm-pick-manifest/lib/index.js
+// node_modules/npm-normalize-package-bin/lib/index.js
 var require_lib12 = __commonJS((exports, module) => {
+  var { join, basename } = __require("path");
+  var normalize = (pkg) => !pkg.bin ? removeBin(pkg) : typeof pkg.bin === "string" ? normalizeString(pkg) : Array.isArray(pkg.bin) ? normalizeArray(pkg) : typeof pkg.bin === "object" ? normalizeObject(pkg) : removeBin(pkg);
+  var normalizeString = (pkg) => {
+    if (!pkg.name) {
+      return removeBin(pkg);
+    }
+    pkg.bin = { [pkg.name]: pkg.bin };
+    return normalizeObject(pkg);
+  };
+  var normalizeArray = (pkg) => {
+    pkg.bin = pkg.bin.reduce((acc, k) => {
+      acc[basename(k)] = k;
+      return acc;
+    }, {});
+    return normalizeObject(pkg);
+  };
+  var removeBin = (pkg) => {
+    delete pkg.bin;
+    return pkg;
+  };
+  var normalizeObject = (pkg) => {
+    const orig = pkg.bin;
+    const clean = {};
+    let hasBins = false;
+    Object.keys(orig).forEach((binKey) => {
+      const base = join("/", basename(binKey.replace(/\\|:/g, "/"))).slice(1);
+      if (typeof orig[binKey] !== "string" || !base) {
+        return;
+      }
+      const binTarget = join("/", orig[binKey].replace(/\\/g, "/")).replace(/\\/g, "/").slice(1);
+      if (!binTarget) {
+        return;
+      }
+      clean[base] = binTarget;
+      hasBins = true;
+    });
+    if (hasBins) {
+      pkg.bin = clean;
+    } else {
+      delete pkg.bin;
+    }
+    return pkg;
+  };
+  module.exports = normalize;
+});
+
+// node_modules/npm-pick-manifest/lib/index.js
+var require_lib13 = __commonJS((exports, module) => {
   var npa = require_npa();
   var semver = require_semver2();
   var { checkEngine } = require_lib11();
-  var normalizeBin = require_lib4();
+  var normalizeBin = require_lib12();
   var engineOk = (manifest, npmVersion, nodeVersion) => {
     try {
       checkEngine(manifest, npmVersion, nodeVersion);
@@ -21969,7 +23355,7 @@ var require_lib12 = __commonJS((exports, module) => {
       code,
       type: npa.resolve(packument.name, wanted).type,
       wanted,
-      versions: Object.keys(packument.versions),
+      versions: Object.keys(packument.versions ?? {}),
       name,
       distTags: packument["dist-tags"],
       defaultTag
@@ -21991,7 +23377,7 @@ var require_clone = __commonJS((exports, module) => {
   var getRevs = require_revs();
   var spawn = require_spawn();
   var { isWindows } = require_utils5();
-  var pickManifest = require_lib12();
+  var pickManifest = require_lib13();
   var fs = __require("fs/promises");
   module.exports = (repo, ref = "HEAD", target = null, opts = {}) => getRevs(repo, opts).then((revs) => clone(repo, revs, ref, resolveRef(revs, ref, opts), target || defaultTarget(repo, opts.cwd), opts));
   var maybeShallow = (repo, opts) => {
@@ -22125,7 +23511,7 @@ var require_is_clean = __commonJS((exports, module) => {
 });
 
 // node_modules/@npmcli/git/lib/index.js
-var require_lib13 = __commonJS((exports, module) => {
+var require_lib14 = __commonJS((exports, module) => {
   module.exports = {
     clone: require_clone(),
     revs: require_revs(),
@@ -22139,14 +23525,77 @@ var require_lib13 = __commonJS((exports, module) => {
 
 // node_modules/@npmcli/package-json/lib/normalize.js
 var require_normalize = __commonJS((exports, module) => {
+  var normalizePackageBin = function(pkg, changes) {
+    if (pkg.bin) {
+      if (typeof pkg.bin === "string" && pkg.name) {
+        changes?.push('"bin" was converted to an object');
+        pkg.bin = { [pkg.name]: pkg.bin };
+      } else if (Array.isArray(pkg.bin)) {
+        changes?.push('"bin" was converted to an object');
+        pkg.bin = pkg.bin.reduce((acc, k) => {
+          acc[path.basename(k)] = k;
+          return acc;
+        }, {});
+      }
+      if (typeof pkg.bin === "object") {
+        for (const binKey in pkg.bin) {
+          if (typeof pkg.bin[binKey] !== "string") {
+            delete pkg.bin[binKey];
+            changes?.push(`removed invalid "bin[${binKey}]"`);
+            continue;
+          }
+          const base = path.join("/", path.basename(binKey.replace(/\\|:/g, "/"))).slice(1);
+          if (!base) {
+            delete pkg.bin[binKey];
+            changes?.push(`removed invalid "bin[${binKey}]"`);
+            continue;
+          }
+          const binTarget = path.join("/", pkg.bin[binKey].replace(/\\/g, "/")).replace(/\\/g, "/").slice(1);
+          if (!binTarget) {
+            delete pkg.bin[binKey];
+            changes?.push(`removed invalid "bin[${binKey}]"`);
+            continue;
+          }
+          if (base !== binKey) {
+            delete pkg.bin[binKey];
+            changes?.push(`"bin[${binKey}]" was renamed to "bin[${base}]"`);
+          }
+          if (binTarget !== pkg.bin[binKey]) {
+            changes?.push(`"bin[${base}]" script name was cleaned`);
+          }
+          pkg.bin[base] = binTarget;
+        }
+        if (Object.keys(pkg.bin).length === 0) {
+          changes?.push('empty "bin" was removed');
+          delete pkg.bin;
+        }
+        return pkg;
+      }
+    }
+    delete pkg.bin;
+  };
+  var isCorrectlyEncodedName = function(spec) {
+    return !spec.match(/[/@\s+%:]/) && spec === encodeURIComponent(spec);
+  };
+  var isValidScopedPackageName = function(spec) {
+    if (spec.charAt(0) !== "@") {
+      return false;
+    }
+    const rest = spec.slice(1).split("/");
+    if (rest.length !== 2) {
+      return false;
+    }
+    return rest[0] && rest[1] && rest[0] === encodeURIComponent(rest[0]) && rest[1] === encodeURIComponent(rest[1]);
+  };
+  var semver = require_semver2();
   var fs = __require("fs/promises");
   var { glob } = require_src();
-  var normalizePackageBin = require_lib4();
   var legacyFixer = require_fixer();
   var legacyMakeWarning = require_make_warning();
   var path = __require("path");
   var log = require_lib6();
-  var git = require_lib13();
+  var git = require_lib14();
+  var hostedGitInfo = require_lib5();
   var normalize = async (pkg, { strict, steps, root, changes, allowLegacyCase }) => {
     if (!pkg.content) {
       throw new Error("Can not normalize without content");
@@ -22154,14 +23603,40 @@ var require_normalize = __commonJS((exports, module) => {
     const data = pkg.content;
     const scripts = data.scripts || {};
     const pkgId = `${data.name ?? ""}@${data.version ?? ""}`;
-    legacyFixer.warn = function() {
-      changes?.push(legacyMakeWarning.apply(null, arguments));
-    };
     if (steps.includes("fixNameField") || steps.includes("normalizeData")) {
-      legacyFixer.fixNameField(data, { strict, allowLegacyCase });
+      if (!data.name && !strict) {
+        changes?.push('Missing "name" field was set to an empty string');
+        data.name = "";
+      } else {
+        if (typeof data.name !== "string") {
+          throw new Error("name field must be a string.");
+        }
+        if (!strict) {
+          const name = data.name.trim();
+          if (data.name !== name) {
+            changes?.push(`Whitespace was trimmed from "name"`);
+            data.name = name;
+          }
+        }
+        if (data.name.startsWith(".") || !(isValidScopedPackageName(data.name) || isCorrectlyEncodedName(data.name)) || strict && !allowLegacyCase && data.name !== data.name.toLowerCase() || data.name.toLowerCase() === "node_modules" || data.name.toLowerCase() === "favicon.ico") {
+          throw new Error("Invalid name: " + JSON.stringify(data.name));
+        }
+      }
     }
     if (steps.includes("fixVersionField") || steps.includes("normalizeData")) {
-      legacyFixer.fixVersionField(data, strict);
+      const loose = !strict;
+      if (!data.version) {
+        data.version = "";
+      } else {
+        if (!semver.valid(data.version, loose)) {
+          throw new Error(`Invalid version: "${data.version}"`);
+        }
+        const version = semver.clean(data.version, loose);
+        if (version !== data.version) {
+          changes?.push(`"version" was cleaned and set to "${version}"`);
+          data.version = version;
+        }
+      }
     }
     if (steps.includes("_attributes")) {
       for (const key in data) {
@@ -22197,7 +23672,7 @@ var require_normalize = __commonJS((exports, module) => {
           changes?.push(`"bundleDependencies" was changed from an object to an array`);
           data.bundleDependencies = Object.keys(bd);
         }
-      } else {
+      } else if ("bundleDependencies" in data) {
         changes?.push(`"bundleDependencies" was removed`);
         delete data.bundleDependencies;
       }
@@ -22205,11 +23680,11 @@ var require_normalize = __commonJS((exports, module) => {
     if (steps.includes("optionalDedupe")) {
       if (data.dependencies && data.optionalDependencies && typeof data.optionalDependencies === "object") {
         for (const name in data.optionalDependencies) {
-          changes?.push(`optionalDependencies entry "${name}" was removed`);
+          changes?.push(`optionalDependencies."${name}" was removed`);
           delete data.dependencies[name];
         }
         if (!Object.keys(data.dependencies).length) {
-          changes?.push(`empty "optionalDependencies" was removed`);
+          changes?.push(`Empty "optionalDependencies" was removed`);
           delete data.dependencies;
         }
       }
@@ -22241,14 +23716,14 @@ var require_normalize = __commonJS((exports, module) => {
         for (const name in data.scripts) {
           if (typeof data.scripts[name] !== "string") {
             delete data.scripts[name];
-            changes?.push(`invalid scripts entry "${name}" was removed`);
-          } else if (steps.includes("scriptpath")) {
+            changes?.push(`Invalid scripts."${name}" was removed`);
+          } else if (steps.includes("scriptpath") && spre.test(data.scripts[name])) {
             data.scripts[name] = data.scripts[name].replace(spre, "");
             changes?.push(`scripts entry "${name}" was fixed to remove node_modules/.bin reference`);
           }
         }
       } else {
-        changes?.push(`removed invalid "scripts"`);
+        changes?.push(`Removed invalid "scripts"`);
         delete data.scripts;
       }
     }
@@ -22263,7 +23738,7 @@ var require_normalize = __commonJS((exports, module) => {
         const authorData = await fs.readFile(path.join(pkg.path, "AUTHORS"), "utf8");
         const authors = authorData.split(/\r?\n/g).map((line) => line.replace(/^\s*#.*$/, "").trim()).filter((line) => line);
         data.contributors = authors;
-        changes.push('"contributors" was auto-populated with the contents of the "AUTHORS" file');
+        changes?.push('"contributors" was auto-populated with the contents of the "AUTHORS" file');
       } catch {
       }
     }
@@ -22300,7 +23775,7 @@ var require_normalize = __commonJS((exports, module) => {
       data.man = files.map((man) => path.relative(pkg.path, path.join(cwd, man)).split(path.sep).join("/"));
     }
     if (steps.includes("bin") || steps.includes("binDir") || steps.includes("binRefs")) {
-      normalizePackageBin(data);
+      normalizePackageBin(data, changes);
     }
     if (steps.includes("binDir") && data.directories?.bin && !data.bin) {
       const binsDir = path.resolve(pkg.path, path.join(".", path.join("/", data.directories.bin)));
@@ -22312,7 +23787,7 @@ var require_normalize = __commonJS((exports, module) => {
         }
         return acc;
       }, {});
-      normalizePackageBin(data);
+      normalizePackageBin(data, changes);
     }
     if (steps.includes("gitHead") && !data.gitHead) {
       const gitRoot = await git.find({ cwd: pkg.path, root });
@@ -22375,18 +23850,87 @@ var require_normalize = __commonJS((exports, module) => {
       }
     }
     if (steps.includes("fixRepositoryField") || steps.includes("normalizeData")) {
-      legacyFixer.fixRepositoryField(data);
-    }
-    if (steps.includes("fixBinField") || steps.includes("normalizeData")) {
-      legacyFixer.fixBinField(data);
+      if (data.repositories) {
+        changes?.push(`"repository" was set to the first entry in "repositories" (${data.repository})`);
+        data.repository = data.repositories[0];
+      }
+      if (data.repository) {
+        if (typeof data.repository === "string") {
+          changes?.push('"repository" was changed from a string to an object');
+          data.repository = {
+            type: "git",
+            url: data.repository
+          };
+        }
+        if (data.repository.url) {
+          const hosted = hostedGitInfo.fromUrl(data.repository.url);
+          let r;
+          if (hosted) {
+            if (hosted.getDefaultRepresentation() === "shortcut") {
+              r = hosted.https();
+            } else {
+              r = hosted.toString();
+            }
+            if (r !== data.repository.url) {
+              changes?.push(`"repository.url" was normalized to "${r}"`);
+              data.repository.url = r;
+            }
+          }
+        }
+      }
     }
     if (steps.includes("fixDependencies") || steps.includes("normalizeData")) {
-      legacyFixer.fixDependencies(data, strict);
-    }
-    if (steps.includes("fixScriptsField") || steps.includes("normalizeData")) {
-      legacyFixer.fixScriptsField(data);
+      for (const type of ["dependencies", "devDependencies", "optionalDependencies"]) {
+        if (data[type]) {
+          let secondWarning = true;
+          if (typeof data[type] === "string") {
+            changes?.push(`"${type}" was converted from a string into an object`);
+            data[type] = data[type].trim().split(/[\n\r\s\t ,]+/);
+            secondWarning = false;
+          }
+          if (Array.isArray(data[type])) {
+            if (secondWarning) {
+              changes?.push(`"${type}" was converted from an array into an object`);
+            }
+            const o = {};
+            for (const d of data[type]) {
+              if (typeof d === "string") {
+                const dep = d.trim().split(/(:?[@\s><=])/);
+                const dn = dep.shift();
+                const dv = dep.join("").replace(/^@/, "").trim();
+                o[dn] = dv;
+              }
+            }
+            data[type] = o;
+          }
+        }
+      }
+      for (const deps of ["dependencies", "devDependencies"]) {
+        if (deps in data) {
+          if (!data[deps] || typeof data[deps] !== "object") {
+            changes?.push(`Removed invalid "${deps}"`);
+            delete data[deps];
+          } else {
+            for (const d in data[deps]) {
+              const r = data[deps][d];
+              if (typeof r !== "string") {
+                changes?.push(`Removed invalid "${deps}.${d}"`);
+                delete data[deps][d];
+              }
+              const hosted = hostedGitInfo.fromUrl(data[deps][d])?.toString();
+              if (hosted && hosted !== data[deps][d]) {
+                changes?.push(`Normalized git reference to "${deps}.${d}"`);
+                data[deps][d] = hosted.toString();
+              }
+            }
+          }
+        }
+      }
     }
     if (steps.includes("normalizeData")) {
+      legacyFixer.warn = function() {
+        changes?.push(legacyMakeWarning.apply(null, arguments));
+      };
       const legacySteps = [
         "fixDescriptionField",
         "fixModulesField",
@@ -22419,7 +23963,7 @@ var require_normalize = __commonJS((exports, module) => {
 });
 
 // node_modules/json-parse-even-better-errors/lib/index.js
-var require_lib14 = __commonJS((exports, module) => {
+var require_lib15 = __commonJS((exports, module) => {
   var hexify = (char) => {
     const h = char.charCodeAt(0).toString(16).toUpperCase();
     return "0x" + (h.length % 2 ? "0" : "") + h;
@@ -22508,14 +24052,14 @@ var require_lib14 = __commonJS((exports, module) => {
 });
 
 // node_modules/@npmcli/package-json/lib/index.js
-var require_lib15 = __commonJS((exports, module) => {
+var require_lib16 = __commonJS((exports, module) => {
   var { readFile, writeFile } = __require("fs/promises");
   var { resolve } = __require("path");
   var updateDeps = require_update_dependencies();
   var updateScripts = require_update_scripts();
   var updateWorkspaces = require_update_workspaces();
   var normalize = require_normalize();
-  var parseJSON = require_lib14();
+  var parseJSON = require_lib15();
   var knownSteps = new Set([
     updateDeps,
     updateScripts,
@@ -22545,9 +24089,7 @@ var require_lib15 = __commonJS((exports, module) => {
       "fixNameField",
       "fixVersionField",
       "fixRepositoryField",
-      "fixBinField",
       "fixDependencies",
-      "fixScriptsField",
       "devDependencies",
       "scriptpath"
     ]);
@@ -22735,19 +24277,17 @@ var require_lib15 = __commonJS((exports, module) => {
 
 // src/index.ts
 var core = __toESM(require_core(), 1);
-var plugin_create_or_update_text_file = __toESM(require_dist_node10(), 1);
 var github = __toESM(require_github(), 1);
-var package_json = __toESM(require_lib15(), 1);
+var package_json = __toESM(require_lib16(), 1);
 
 
 
 async function run() {
   let token = core.getInput("GH_TOKEN", { required: true });
   let octokit = github.getOctokit(token);
-  let { createOrUpdateTextFile } = plugin_create_or_update_text_file.createOrUpdateTextFile(octokit);
   let GITHUB_REPOSITORY = core.getInput("GITHUB_REPOSITORY");
   let [owner, repo] = GITHUB_REPOSITORY.split("/");
-  let ignored = core.getInput("IGNORED_DEPENDENCIES", { trimWhitespace: true });
+  let ignored = core.getInput("IGNORED_DEPENDENCIES");
   let deps = ignored.split(",").map((d) => d.trim());
   let packageJsonInput = core.getInput("PACKAGE_JSON_PATH", {
     trimWhitespace: true
@@ -22773,34 +24313,63 @@ async function run() {
       return;
     }
     let branch = `bun-dependabot/${dep}`;
-    let author = {
-      email: "github-actions[bot]@users.noreply.github.com",
-      name: "github-actions[bot]"
-    };
-    let bunContent = external_node_fs_namespaceObject.readFileSync("bun.lock", "utf8");
-    await Promise.all([
-      createOrUpdateTextFile({
+    let bunContent = external_node_fs_namespaceObject.readFileSync(external_node_path_namespaceObject.join(packageJsonInput, "bun.lockb"));
+    let [bunBlob, packageJsonBlob] = await Promise.all([
+      octokit.rest.git.createBlob({
         owner,
         repo,
-        path: "package.json",
-        content: JSON.stringify(json, null, 2),
-        message: `Update ${dep} to latest version`,
-        author,
-        committer: author,
-        branch
+        content: bunContent.toString(),
+        encoding: "utf-8"
       }),
-      createOrUpdateTextFile({
+      octokit.rest.git.createBlob({
         owner,
         repo,
-        path: "bun.lockb",
-        content: bunContent,
-        message: `Update ${dep} to latest version`,
-        author,
-        committer: author,
-        branch
+        content: JSON.stringify(updated.content, null, 2),
+        encoding: "utf-8"
       })
     ]);
-    octokit.rest.pulls.create({
+    let latestCommit = await octokit.rest.git.getRef({
+      owner,
+      repo,
+      ref: "heads/main"
+    });
+    let tree = await octokit.rest.git.createTree({
+      owner,
+      repo,
+      base_tree: latestCommit.data.object.sha,
+      tree: [
+        {
+          sha: bunBlob.data.sha,
+          path: "bun.lockb",
+          mode: "100644",
+          type: "blob"
+        },
+        {
+          sha: packageJsonBlob.data.sha,
+          path: "package.json",
+          mode: "100644",
+          type: "blob"
+        }
+      ]
+    });
+    let commit = await octokit.rest.git.createCommit({
+      owner,
+      repo,
+      message: `Update ${dep} to latest version`,
+      tree: tree.data.sha,
+      parents: [latestCommit.data.object.sha],
+      author: {
+        email: "github-actions[bot]@users.noreply.github.com",
+        name: "github-actions[bot]"
+      }
+    });
+    await octokit.rest.git.updateRef({
+      owner,
+      repo,
+      ref: `heads/${branch}`,
+      sha: commit.data.sha
+    });
+    let pr = await octokit.rest.pulls.create({
       owner,
       repo,
       base: "main",
@@ -22808,6 +24377,7 @@ async function run() {
       title: `Update ${dep} to latest version`,
       body: `This PR updates ${dep} to the latest version.`
     });
+    console.log(`\uD83D\uDCBF Created PR ${pr.data.url}`);
   }));
 }
 var getAllDependencies = function(packageJson) {

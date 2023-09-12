@@ -12,7 +12,7 @@ inputs:
     required: false
     default: ${{ github.repository }}
   GH_TOKEN:
-    description: "The GitHub token to use for interacting with the GitHub API - needed for gh commands"
+    description: "The GitHub token to use for interacting with the GitHub API"
     required: false
     default: ${{ github.token }}
 runs:
