@@ -40,6 +40,8 @@ async function run(): Promise<void> {
 
   for (let dep of depsToCheck) {
     core.debug(`Checking ${dep}`);
+    // reest to HEAD so we don't commit previous changes
+    cp.execSync(`git reset --hard`, { stdio: "inherit" });
     cp.execSync(`bun add ${dep}`, { stdio: "inherit" });
 
     let updated = await NPMCliPackageJson.load(path.resolve(packageJsonInput));

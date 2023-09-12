@@ -31958,6 +31958,8 @@ async function run() {
     core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);
     for (let dep of depsToCheck) {
         core.debug(`Checking ${dep}`);
+        // reest to HEAD so we don't commit previous changes
+        external_node_child_process_namespaceObject.execSync(`git reset --hard`, { stdio: "inherit" });
         external_node_child_process_namespaceObject.execSync(`bun add ${dep}`, { stdio: "inherit" });
         let updated = await lib.load(external_node_path_namespaceObject.resolve(packageJsonInput));
         let updatedDependencies = getAllDependencies(updated);
