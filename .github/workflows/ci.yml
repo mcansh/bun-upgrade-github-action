@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: ⬇️ Checkout repo
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: 🍞 Setup Bun
         uses: oven-sh/setup-bun@v1
