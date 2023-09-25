@@ -73,7 +73,10 @@ async function run(): Promise<void> {
       branch,
     });
 
-    if (lastCommitDeps[dep] === updatedDependencies[dep]) {
+    let currentVersion = dependencies[dep];
+    let updatedVersion = updatedDependencies[dep];
+
+    if (lastCommitDeps[dep] === updatedVersion) {
       core.info(`📦 PR already up to date`);
       continue;
     }
@@ -121,10 +124,13 @@ async function run(): Promise<void> {
       ],
     });
 
+    let message = `chore(deps): bump ${dep} from ${currentVersion} to ${updatedVersion}`;
+    let description = `Bumps ${dep} from ${currentVersion} to ${updatedVersion}.`;
+
     let commit = await octokit.rest.git.createCommit({
       owner,
       repo,
-      message: `Update ${dep} to latest version`,
+      message: message + "\n\n" + description,
       tree: tree.data.sha,
       parents: [latestCommit.data.object.sha],
       author: {
@@ -185,8 +191,8 @@ async function run(): Promise<void> {
       repo,
       base: "main",
       head: FULL_REF,
-      title: `Update ${dep} to latest version`,
-      body: `This PR updates ${dep} to the latest version.`,
+      title: message,
+      body: description,
     });
 
     core.info(`💿 Created PR ${pr.data.html_url}`);
