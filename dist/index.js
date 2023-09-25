@@ -33611,8 +33611,9 @@ async function run() {
     let CWD = external_node_path_namespaceObject.resolve(env.PACKAGE_JSON_PATH);
     let PACKAGE_JSON = "package.json";
     let BUN_LOCK = "bun.lockb";
-    if (CWD.endsWith(PACKAGE_JSON))
+    if (external_node_path_namespaceObject.basename(CWD) === PACKAGE_JSON) {
         CWD = external_node_path_namespaceObject.dirname(CWD);
+    }
     core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
     let json = await lib.load(external_node_path_namespaceObject.resolve(CWD));
     let dependencies = getAllDependencies(json);
