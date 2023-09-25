@@ -34,7 +34,9 @@ async function run(): Promise<void> {
   let PACKAGE_JSON = "package.json" as const;
   let BUN_LOCK = "bun.lockb" as const;
 
-  if (CWD.endsWith(PACKAGE_JSON)) CWD = path.dirname(CWD);
+  if (path.basename(CWD) === PACKAGE_JSON) {
+    CWD = path.dirname(CWD);
+  }
 
   core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
 
