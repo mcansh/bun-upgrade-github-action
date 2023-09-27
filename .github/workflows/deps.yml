@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "*/15 * * * *" # every 15 minutes
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ./package.json
+      - ./bun.lockb
 
 permissions:
   contents: write
