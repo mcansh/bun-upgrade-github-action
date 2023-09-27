@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import cp from "node:child_process";
+import { execa } from "execa";
 import * as core from "@actions/core";
 import { getOctokit } from "@actions/github";
 import NPMCliPackageJson from "@npmcli/package-json";
@@ -53,8 +53,8 @@ async function run(): Promise<void> {
   for (let dep of depsToCheck) {
     core.debug(`Checking ${dep}`);
     // reest to HEAD so we don't commit previous changes
-    cp.execSync(`git reset --hard`, { stdio: "inherit" });
-    cp.execSync(`bun add ${dep}`, { stdio: "inherit" });
+    await execa("git", ["reset", "--hard"], { cwd: CWD, stdio: "inherit" });
+    await execa("bun", ["add", dep], { cwd: CWD, stdio: "inherit" });
 
     let updated = await NPMCliPackageJson.load(path.resolve(CWD));
 
@@ -79,8 +79,14 @@ async function run(): Promise<void> {
     let updatedVersion = updatedDependencies[dep];
 
     if (lastCommitDeps[dep] === updatedVersion) {
-      core.info(`📦 PR already up to date`);
-      continue;
+      // if there are merge conflicts, bun will address them
+      await execa("bun", ["install"], { cwd: CWD, stdio: "inherit" });
+      let result = await execa("git", ["status", "--porcelain"]);
+      let hasChanges = result.stdout.split("\n").length > 1;
+      if (!hasChanges) {
+        core.info(`📦 PR already up to date`);
+        continue;
+      }
     }
 
     let bunContent = fs.readFileSync(path.join(CWD, BUN_LOCK), "base64");
