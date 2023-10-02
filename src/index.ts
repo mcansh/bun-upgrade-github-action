@@ -52,7 +52,7 @@ async function run(): Promise<void> {
 
   for (let dep of depsToCheck) {
     core.debug(`Checking ${dep}`);
-    // reest to HEAD so we don't commit previous changes
+    // reset to HEAD so we don't commit previous changes
     await execa("git", ["reset", "--hard"], { cwd: CWD, stdio: "inherit" });
     await execa("bun", ["add", dep], { cwd: CWD, stdio: "inherit" });
 
@@ -78,6 +78,8 @@ async function run(): Promise<void> {
       repo,
       packageJsonPath: PACKAGE_JSON,
       branch,
+    }).catch(() => {
+      return {}
     });
 
     let currentVersion = dependencies[dep];
