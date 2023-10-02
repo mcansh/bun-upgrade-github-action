@@ -65,7 +65,12 @@ async function run(): Promise<void> {
       continue;
     }
 
-    let branch = `bun-dependabot/${dep}`;
+    let branchPackageName: string = dep;
+    if (dep.startsWith("@")) {
+      let unscoped = branchPackageName.replace("@", "").split("/").join("__");
+      branchPackageName = unscoped;
+    }
+    let branch = `bun-dependabot/${branchPackageName}`;
 
     let lastCommitDeps = await getLastCommitDeps({
       octokit,

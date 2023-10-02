@@ -37121,7 +37121,12 @@ async function run() {
             core.info(`${dep} is up to date`);
             continue;
         }
-        let branch = `bun-dependabot/${dep}`;
+        let branchPackageName = dep;
+        if (dep.startsWith("@")) {
+            let unscoped = branchPackageName.replace("@", "").split("/").join("__");
+            branchPackageName = unscoped;
+        }
+        let branch = `bun-dependabot/${branchPackageName}`;
         let lastCommitDeps = await getLastCommitDeps({
             octokit,
             owner,
