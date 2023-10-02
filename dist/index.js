@@ -37112,7 +37112,7 @@ async function run() {
     core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);
     for (let dep of depsToCheck) {
         core.debug(`Checking ${dep}`);
-        // reest to HEAD so we don't commit previous changes
+        // reset to HEAD so we don't commit previous changes
         await execa("git", ["reset", "--hard"], { cwd: CWD, stdio: "inherit" });
         await execa("bun", ["add", dep], { cwd: CWD, stdio: "inherit" });
         let updated = await lib.load(external_node_path_namespaceObject.resolve(CWD));
@@ -37133,6 +37133,8 @@ async function run() {
             repo,
             packageJsonPath: PACKAGE_JSON,
             branch,
+        }).catch(() => {
+            return {};
         });
         let currentVersion = dependencies[dep];
         let updatedVersion = updatedDependencies[dep];
