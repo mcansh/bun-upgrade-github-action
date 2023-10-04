@@ -37231,14 +37231,26 @@ async function run() {
                 sha: commit.data.sha,
             });
         }
-        let existingPR = await octokit.rest.pulls.list({
+        let existingPRs = await octokit.rest.pulls.list({
             owner,
             repo,
             head: `${owner}:${branch}`,
             base: "main",
             state: "open",
+            sort: "updated",
         });
-        if (existingPR.data.length > 0) {
+        let existingPR = existingPRs.data.at(1);
+        if (existingPR) {
+            if (lastCommitDeps[dep] === updatedVersion) {
+                core.info(`📦 PR is already up to date, we can close this one`);
+                await octokit.rest.pulls.update({
+                    owner,
+                    repo,
+                    pull_number: existingPR.number,
+                    state: "closed",
+                });
+                continue;
+            }
             core.info(`📦 PR already exists for ${dep}`);
             continue;
         }
