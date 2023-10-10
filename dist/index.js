@@ -37252,6 +37252,13 @@ async function run() {
                 continue;
             }
             core.info(`📦 PR already exists for ${dep}`);
+            await octokit.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: existingPR.number,
+                title: message,
+                body: description,
+            });
             continue;
         }
         let pr = await octokit.rest.pulls.create({
