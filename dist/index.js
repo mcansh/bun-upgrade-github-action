@@ -37296,12 +37296,8 @@ async function getLastCommitDeps({ octokit, branch, owner, packageJsonPath, repo
     };
     return lastCommitDeps;
 }
-run().then(() => {
-    process.exit(0);
-}, (error) => {
-    if (error)
-        console.error(error);
-    process.exit(1);
+run().catch((error) => {
+    core.setFailed(error.message);
 });
 //# sourceMappingURL=index.js.map
 })();
