@@ -278,12 +278,6 @@ async function getLastCommitDeps({
   return lastCommitDeps;
 }
 
-run().then(
-  () => {
-    process.exit(0);
-  },
-  (error: unknown) => {
-    if (error) console.error(error);
-    process.exit(1);
-  },
-);
+run().catch((error) => {
+  core.setFailed(error.message);
+});
