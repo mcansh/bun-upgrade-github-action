@@ -11,7 +11,13 @@ async function run(): Promise<void> {
     GITHUB_REPOSITORY: z.string(),
     GH_TOKEN: z.string(),
     PACKAGE_JSON_PATH: z.string().optional().default("./"),
-    IGNORED_DEPENDENCIES: z.string().optional().default(""),
+    IGNORED_DEPENDENCIES: z
+      .string()
+      .optional()
+      .default("")
+      .transform((dep) => {
+        return dep.split(",").map((d) => d.trim());
+      }),
   });
 
   let env = schema.parse({
@@ -25,9 +31,7 @@ async function run(): Promise<void> {
 
   let [owner, repo] = env.GITHUB_REPOSITORY.split("/");
 
-  if (!owner || !repo) throw new Error(`Invalid GITHUB_REPOSITORY`);
-
-  let ignoredDeps = env.IGNORED_DEPENDENCIES.split(",").map((d) => d.trim());
+  if (!owner || !repo) throw new Error("Invalid GITHUB_REPOSITORY");
 
   let CWD = path.resolve(env.PACKAGE_JSON_PATH);
 
@@ -38,14 +42,14 @@ async function run(): Promise<void> {
     CWD = path.dirname(CWD);
   }
 
-  core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
+  core.debug(`Ignoring dependencies: ${env.IGNORED_DEPENDENCIES.join(", ")}`);
 
   let json = await NPMCliPackageJson.load(path.resolve(CWD));
 
   let dependencies = getAllDependencies(json);
 
   let depsToCheck = Object.keys(dependencies).filter((d) => {
-    return !ignoredDeps.includes(d);
+    return !env.IGNORED_DEPENDENCIES.includes(d);
   });
 
   core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);

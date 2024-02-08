@@ -58699,7 +58699,12 @@ async function run() {
         GITHUB_REPOSITORY: z.string(),
         GH_TOKEN: z.string(),
         PACKAGE_JSON_PATH: z.string().optional().default("./"),
-        IGNORED_DEPENDENCIES: z.string().optional().default(""),
+        IGNORED_DEPENDENCIES: z.string()
+            .optional()
+            .default("")
+            .transform((dep) => {
+            return dep.split(",").map((d) => d.trim());
+        }),
     });
     let env = schema.parse({
         GITHUB_REPOSITORY: core.getInput("GITHUB_REPOSITORY"),
@@ -58710,19 +58715,18 @@ async function run() {
     let octokit = (0,github.getOctokit)(env.GH_TOKEN);
     let [owner, repo] = env.GITHUB_REPOSITORY.split("/");
     if (!owner || !repo)
-        throw new Error(`Invalid GITHUB_REPOSITORY`);
-    let ignoredDeps = env.IGNORED_DEPENDENCIES.split(",").map((d) => d.trim());
+        throw new Error("Invalid GITHUB_REPOSITORY");
     let CWD = external_node_path_namespaceObject.resolve(env.PACKAGE_JSON_PATH);
     let PACKAGE_JSON = "package.json";
     let BUN_LOCK = "bun.lockb";
     if (external_node_path_namespaceObject.basename(CWD) === PACKAGE_JSON) {
         CWD = external_node_path_namespaceObject.dirname(CWD);
     }
-    core.debug(`Ignoring dependencies: ${ignoredDeps.join(", ")}`);
+    core.debug(`Ignoring dependencies: ${env.IGNORED_DEPENDENCIES.join(", ")}`);
     let json = await lib.load(external_node_path_namespaceObject.resolve(CWD));
     let dependencies = getAllDependencies(json);
     let depsToCheck = Object.keys(dependencies).filter((d) => {
-        return !ignoredDeps.includes(d);
+        return !env.IGNORED_DEPENDENCIES.includes(d);
     });
     core.debug(`Dependencies to check: ${depsToCheck.join(", ")}`);
     for (let dep of depsToCheck) {
