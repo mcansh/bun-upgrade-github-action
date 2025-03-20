@@ -170,7 +170,7 @@ async function run(): Promise<void> {
 
       if (existingRef.status === 200) {
         core.info(`📦 Updating branch ${branch}`);
-        await octokit.rest.git.createRef({
+        await octokit.rest.git.updateRef({
           owner,
           repo,
           ref: REF,
