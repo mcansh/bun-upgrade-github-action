@@ -58828,7 +58828,7 @@ async function run() {
             });
             if (existingRef.status === 200) {
                 core.info(`📦 Updating branch ${branch}`);
-                await octokit.rest.git.updateRef({
+                await octokit.rest.git.createRef({
                     owner,
                     repo,
                     ref: REF,
