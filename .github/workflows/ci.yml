@@ -36,6 +36,13 @@ jobs:
       - name: 📦 Build
         run: bun run build
 
+      - name: 📝 Generate docs
+        uses: stephansama/actions/generate-md-action-inputs@v1
+        with:
+          commit_message: "chore(docs): update inputs table"
+          committer_username: github-actions[bot]
+          committer_email: github-actions[bot]@users.noreply.github.com
+
       - name: 📝 Commit and push changes
         run: |
           git config --local user.name "github-actions[bot]"
